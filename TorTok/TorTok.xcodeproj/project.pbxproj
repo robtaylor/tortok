@@ -25,7 +25,18 @@
 		2AC9BE8871714A95B3D60938 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = D7006A64692244B3A0E24996 /* Kingfisher */; };
 		0806B43177644D6E9C8F34A3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 4E4E1FF5B2BF4CE99C0B72A7 /* GRDB */; };
 		0AFF4B4BF8764828AF887489 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6F27A4FD579541F9AEA6E871 /* Assets.xcassets */; };
+		54D5AB681C71402090C353DA /* LoginUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6704384932F941FEAF849CBA /* LoginUITests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		9361209B45DC4D7AA0C8ED50 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 96A283AB7759434F82F5B464 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C43F099B50B74DBB91C53EA2;
+			remoteInfo = TorTok;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		88DB2D5759E944B7A47264D1 /* TorrentInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models/TorrentInfo.swift"; sourceTree = "<group>"; };
@@ -45,6 +56,8 @@
 		6F27A4FD579541F9AEA6E871 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Resources/Assets.xcassets"; sourceTree = "<group>"; };
 		E90F66E225C44A4AB9A9D3D5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		2E925C9EDFB7460FA715FF30 /* TorTok.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TorTok.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6704384932F941FEAF849CBA /* LoginUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginUITests.swift; sourceTree = "<group>"; };
+		5E2B020AE23949CE8E475981 /* TorTokUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TorTokUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -55,6 +68,13 @@
 				B6F0B72230074E9F9D992F79 /* Alamofire in Frameworks */,
 				2AC9BE8871714A95B3D60938 /* Kingfisher in Frameworks */,
 				0806B43177644D6E9C8F34A3 /* GRDB in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EA0A4B2F78784746B7FB5BB7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -81,6 +101,7 @@
 				A535FCF4E5E24BA0BFC8EDB0 /* ProfileView.swift */,
 				6F27A4FD579541F9AEA6E871 /* Assets.xcassets */,
 				16FA1E16105D406EB6E21AC7 /* Products */,
+				86F09B4620B0404A87DB3414 /* TorTokUITests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -88,8 +109,17 @@
 			isa = PBXGroup;
 			children = (
 				2E925C9EDFB7460FA715FF30 /* TorTok.app */,
+				5E2B020AE23949CE8E475981 /* TorTokUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		86F09B4620B0404A87DB3414 /* TorTokUITests */ = {
+			isa = PBXGroup;
+			children = (
+				6704384932F941FEAF849CBA /* LoginUITests.swift */,
+			);
+			path = TorTokUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -117,6 +147,24 @@
 			productReference = 2E925C9EDFB7460FA715FF30 /* TorTok.app */;
 			productType = "com.apple.product-type.application";
 		};
+		5F4B803680BF4A308937210F /* TorTokUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C527BDEDD43649F0866EE1CF /* Build configuration list for PBXNativeTarget "TorTokUITests" */;
+			buildPhases = (
+				CE5F78ABB44C4862849A6E55 /* Sources */,
+				EA0A4B2F78784746B7FB5BB7 /* Frameworks */,
+				8EE78516A0874F83A397D0B3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C9869E3735B842FC85EC54DE /* PBXTargetDependency */,
+			);
+			name = TorTokUITests;
+			productName = TorTokUITests;
+			productReference = 5E2B020AE23949CE8E475981 /* TorTokUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -129,6 +177,10 @@
 				TargetAttributes = {
 					C43F099B50B74DBB91C53EA2 = {
 						CreatedOnToolsVersion = 15.0;
+					};
+					5F4B803680BF4A308937210F = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = C43F099B50B74DBB91C53EA2;
 					};
 				};
 			};
@@ -151,6 +203,7 @@
 			projectRoot = "";
 			targets = (
 				C43F099B50B74DBB91C53EA2 /* TorTok */,
+				5F4B803680BF4A308937210F /* TorTokUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -161,6 +214,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				0AFF4B4BF8764828AF887489 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8EE78516A0874F83A397D0B3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -188,7 +248,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CE5F78ABB44C4862849A6E55 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				54D5AB681C71402090C353DA /* LoginUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C9869E3735B842FC85EC54DE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C43F099B50B74DBB91C53EA2 /* TorTok */;
+			targetProxy = 9361209B45DC4D7AA0C8ED50 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		2D4CB64D15B24A3CBAD24E77 /* Debug */ = {
@@ -291,6 +367,52 @@
 			};
 			name = Release;
 		};
+		4DDC983C3CC6491AA8AAAF35 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tortok.TorTokUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = TorTok;
+			};
+			name = Debug;
+		};
+		418F139FBA394C7C92490BEE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tortok.TorTokUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = TorTok;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -308,6 +430,15 @@
 			buildConfigurations = (
 				FD0FB42C09DC4A89A7079F27 /* Debug */,
 				299CB2FE63F84196A1F57591 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C527BDEDD43649F0866EE1CF /* Build configuration list for PBXNativeTarget "TorTokUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4DDC983C3CC6491AA8AAAF35 /* Debug */,
+				418F139FBA394C7C92490BEE /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

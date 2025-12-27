@@ -22,11 +22,13 @@ struct VideoFeedView: View {
                     Text("No videos yet")
                         .font(.title2)
                         .foregroundColor(.white)
+                        .accessibilityIdentifier("emptyFeedTitle")
 
                     Text("Start by recording your first video!")
                         .font(.body)
                         .foregroundColor(.white.opacity(0.7))
                 }
+                .accessibilityIdentifier("emptyFeedView")
             } else {
                 // Swipeable vertical video feed
                 TabView(selection: $viewModel.currentIndex) {

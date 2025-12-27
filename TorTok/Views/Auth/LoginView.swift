@@ -56,14 +56,17 @@ struct LoginView: View {
                         .textFieldStyle(RoundedTextFieldStyle())
                         .textInputAutocapitalization(.never)
                         .keyboardType(.emailAddress)
+                        .accessibilityIdentifier("emailTextField")
 
                     SecureField("Password", text: $password)
                         .textFieldStyle(RoundedTextFieldStyle())
+                        .accessibilityIdentifier("passwordTextField")
 
                     if let error = errorMessage {
                         Text(error)
                             .font(.caption)
                             .foregroundColor(.red)
+                            .accessibilityIdentifier("errorMessage")
                     }
 
                     Button {
@@ -92,6 +95,7 @@ struct LoginView: View {
                         .cornerRadius(12)
                     }
                     .disabled(isLoading)
+                    .accessibilityIdentifier("signInButton")
                 }
                 .padding(.horizontal, 32)
 
@@ -102,6 +106,7 @@ struct LoginView: View {
                     Text("Don't have an account? **Sign up**")
                         .foregroundColor(.white)
                 }
+                .accessibilityIdentifier("signUpButton")
 
                 Spacer()
             }
@@ -171,24 +176,30 @@ struct RegisterView: View {
                         .textFieldStyle(RoundedTextFieldStyle())
                         .textInputAutocapitalization(.never)
                         .keyboardType(.emailAddress)
+                        .accessibilityIdentifier("registerEmailTextField")
 
                     TextField("Username", text: $username)
                         .textFieldStyle(RoundedTextFieldStyle())
                         .textInputAutocapitalization(.never)
+                        .accessibilityIdentifier("registerUsernameTextField")
 
                     TextField("Display Name", text: $displayName)
                         .textFieldStyle(RoundedTextFieldStyle())
+                        .accessibilityIdentifier("registerDisplayNameTextField")
 
                     SecureField("Password", text: $password)
                         .textFieldStyle(RoundedTextFieldStyle())
+                        .accessibilityIdentifier("registerPasswordTextField")
 
                     SecureField("Confirm Password", text: $confirmPassword)
                         .textFieldStyle(RoundedTextFieldStyle())
+                        .accessibilityIdentifier("registerConfirmPasswordTextField")
 
                     if let error = errorMessage {
                         Text(error)
                             .font(.caption)
                             .foregroundColor(.red)
+                            .accessibilityIdentifier("registerErrorMessage")
                     }
 
                     Button {
@@ -217,6 +228,7 @@ struct RegisterView: View {
                         .cornerRadius(12)
                     }
                     .disabled(isLoading)
+                    .accessibilityIdentifier("createAccountButton")
 
                     Spacer()
                 }
