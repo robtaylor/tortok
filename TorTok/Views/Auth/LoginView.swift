@@ -171,42 +171,43 @@ struct RegisterView: View {
                 )
                 .ignoresSafeArea()
 
-                VStack(spacing: 20) {
-                    TextField("Email", text: $email)
-                        .textFieldStyle(RoundedTextFieldStyle())
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.emailAddress)
-                        .accessibilityIdentifier("registerEmailTextField")
+                ScrollView {
+                    VStack(spacing: 20) {
+                        TextField("Email", text: $email)
+                            .textFieldStyle(RoundedTextFieldStyle())
+                            .textInputAutocapitalization(.never)
+                            .keyboardType(.emailAddress)
+                            .accessibilityIdentifier("registerEmailTextField")
 
-                    TextField("Username", text: $username)
-                        .textFieldStyle(RoundedTextFieldStyle())
-                        .textInputAutocapitalization(.never)
-                        .accessibilityIdentifier("registerUsernameTextField")
+                        TextField("Username", text: $username)
+                            .textFieldStyle(RoundedTextFieldStyle())
+                            .textInputAutocapitalization(.never)
+                            .accessibilityIdentifier("registerUsernameTextField")
 
-                    TextField("Display Name", text: $displayName)
-                        .textFieldStyle(RoundedTextFieldStyle())
-                        .accessibilityIdentifier("registerDisplayNameTextField")
+                        TextField("Display Name", text: $displayName)
+                            .textFieldStyle(RoundedTextFieldStyle())
+                            .accessibilityIdentifier("registerDisplayNameTextField")
 
-                    SecureField("Password", text: $password)
-                        .textFieldStyle(RoundedTextFieldStyle())
-                        .accessibilityIdentifier("registerPasswordTextField")
+                        SecureField("Password", text: $password)
+                            .textFieldStyle(RoundedTextFieldStyle())
+                            .accessibilityIdentifier("registerPasswordTextField")
 
-                    SecureField("Confirm Password", text: $confirmPassword)
-                        .textFieldStyle(RoundedTextFieldStyle())
-                        .accessibilityIdentifier("registerConfirmPasswordTextField")
+                        SecureField("Confirm Password", text: $confirmPassword)
+                            .textFieldStyle(RoundedTextFieldStyle())
+                            .accessibilityIdentifier("registerConfirmPasswordTextField")
 
-                    if let error = errorMessage {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundColor(.red)
-                            .accessibilityIdentifier("registerErrorMessage")
-                    }
-
-                    Button {
-                        Task {
-                            await register()
+                        if let error = errorMessage {
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .accessibilityIdentifier("registerErrorMessage")
                         }
-                    } label: {
+
+                        Button {
+                            Task {
+                                await register()
+                            }
+                        } label: {
                         HStack {
                             if isLoading {
                                 ProgressView()
@@ -227,13 +228,12 @@ struct RegisterView: View {
                         .foregroundColor(.white)
                         .cornerRadius(12)
                     }
-                    .disabled(isLoading)
-                    .accessibilityIdentifier("createAccountButton")
-
-                    Spacer()
+                        .disabled(isLoading)
+                        .accessibilityIdentifier("createAccountButton")
+                    }
+                    .padding(.horizontal, 32)
+                    .padding(.top, 40)
                 }
-                .padding(.horizontal, 32)
-                .padding(.top, 40)
             }
             .navigationTitle("Sign Up")
             .navigationBarTitleDisplayMode(.inline)
