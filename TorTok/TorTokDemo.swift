@@ -2,17 +2,20 @@
 //  TorTokDemo.swift
 //  Standalone demo that runs without any dependencies
 //
-//  To run:
-//  1. Open Xcode
-//  2. File > New > Project > iOS > App
-//  3. Name: TorTokDemo, Interface: SwiftUI
-//  4. Replace ContentView.swift with this file
-//  5. Press ⌘R to run
+//  NOTE: This file is NOT used in the main TorTok app.
+//  It's a standalone demo for testing without dependencies.
+//
+//  To use this as a standalone app:
+//  1. Create a new Xcode project
+//  2. Replace ContentView.swift with this entire file
+//  3. Uncomment the @main line below
+//  4. Press ⌘R to run
 //
 
 import SwiftUI
 
-@main
+// Uncomment this line to use as standalone demo:
+// @main
 struct TorTokDemoApp: App {
     var body: some Scene {
         WindowGroup {
