@@ -17,18 +17,7 @@ struct User: Identifiable, Codable {
     let videoCount: Int
     let createdAt: Date
 
-    enum CodingKeys: String, CodingKey {
-        case id
-        case username
-        case displayName = "display_name"
-        case email
-        case avatarURL = "avatar_url"
-        case bio
-        case followerCount = "follower_count"
-        case followingCount = "following_count"
-        case videoCount = "video_count"
-        case createdAt = "created_at"
-    }
+    // No CodingKeys needed - backend sends camelCase which matches property names
 }
 
 // MARK: - Auth Response
@@ -38,11 +27,7 @@ struct AuthResponse: Codable {
     let refreshToken: String
     let user: User
 
-    enum CodingKeys: String, CodingKey {
-        case token
-        case refreshToken = "refresh_token"
-        case user
-    }
+    // No CodingKeys needed - backend sends camelCase which matches property names
 }
 
 // MARK: - Login/Register Requests
@@ -58,10 +43,5 @@ struct RegisterRequest: Codable {
     let username: String
     let displayName: String
 
-    enum CodingKeys: String, CodingKey {
-        case email
-        case password
-        case username
-        case displayName = "display_name"
-    }
+    // No CodingKeys needed - backend expects camelCase which matches property names
 }

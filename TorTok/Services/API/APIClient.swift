@@ -63,17 +63,17 @@ class APIClient: ObservableObject {
         let dataRequest: DataRequest
 
         if let body = body {
+            // Encode body to JSON data and upload
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(body)
+            let jsonData = try encoder.encode(body)
 
-            dataRequest = session.request(
-                url,
-                method: method,
-                parameters: parameters,
-                encoding: JSONEncoding.default,
-                headers: headers
-            )
+            var request = URLRequest(url: URL(string: url)!)
+            request.httpMethod = method.rawValue
+            request.httpBody = jsonData
+            headers.forEach { request.headers.add($0) }
+
+            dataRequest = session.request(request)
         } else {
             dataRequest = session.request(
                 url,
@@ -91,12 +91,28 @@ class APIClient: ObservableObject {
         switch response.result {
         case .success(let data):
             let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
+            // Use custom date formatter to handle ISO8601 with fractional seconds
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            decoder.dateDecodingStrategy = .custom { decoder in
+                let container = try decoder.singleValueContainer()
+                let dateString = try container.decode(String.self)
+                if let date = formatter.date(from: dateString) {
+                    return date
+                }
+                // Fallback for dates without fractional seconds
+                formatter.formatOptions = [.withInternetDateTime]
+                if let date = formatter.date(from: dateString) {
+                    return date
+                }
+                throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot decode date: \(dateString)")
+            }
 
             do {
                 return try decoder.decode(T.self, from: data)
             } catch {
                 print("Decoding error: \(error)")
+                print("Raw data: \(String(data: data, encoding: .utf8) ?? "nil")")
                 throw APIError.decodingError(error)
             }
 

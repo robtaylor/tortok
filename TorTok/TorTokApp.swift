@@ -13,7 +13,16 @@ struct TorTokApp: App {
     // Shared services
     @StateObject private var torrentEngine = TorrentEngine()
     @StateObject private var apiClient = APIClient()
-    @StateObject private var authManager = AuthManager()
+    @StateObject private var authManager: AuthManager
+
+    init() {
+        // Check for UI test arguments
+        if CommandLine.arguments.contains("-clearAuth") {
+            UserDefaults.standard.removeObject(forKey: "tortok.auth.token")
+            UserDefaults.standard.removeObject(forKey: "tortok.auth.refresh_token")
+        }
+        _authManager = StateObject(wrappedValue: AuthManager())
+    }
 
     var body: some Scene {
         WindowGroup {

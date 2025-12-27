@@ -12,6 +12,8 @@ final class LoginUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
+        // Clear any saved auth state before each test
+        app.launchArguments = ["-clearAuth"]
         app.launch()
     }
 
@@ -83,8 +85,6 @@ final class LoginUITests: XCTestCase {
     func testSuccessfulLogin() throws {
         // NOTE: This test requires a valid test user in the backend
         // Test user: test@example.com / testpass123
-        // Skip in CI without backend - uncomment to run locally with live backend
-        throw XCTSkip("Requires live backend with test user - run manually")
 
         // Enter valid test credentials
         let emailTextField = app.textFields["emailTextField"]
@@ -99,20 +99,25 @@ final class LoginUITests: XCTestCase {
         // Tap sign in
         app.buttons["signInButton"].tap()
 
-        // Wait for network response and navigation
-        // After successful login, we should see the feed view (empty state or videos)
-        // Check for empty feed title which appears on successful login with no videos
-        let emptyFeedTitle = app.staticTexts["emptyFeedTitle"]
-        let feedAppeared = emptyFeedTitle.waitForExistence(timeout: 20)
+        // Wait for network response
+        sleep(5)
 
-        // If feed didn't appear, check if there's an error message (login failed)
+        // Check for successful navigation - look for Home tab or feed content
+        let homeTab = app.buttons["Home"]
+        let feedAppeared = homeTab.waitForExistence(timeout: 10)
+
         if !feedAppeared {
+            // Check for error message
             let errorMessage = app.staticTexts["errorMessage"]
             if errorMessage.exists {
                 XCTFail("Login failed with error: \(errorMessage.label)")
-            } else {
-                XCTFail("Navigation to feed did not occur within timeout")
+                return
             }
+
+            // Print all visible elements for debugging
+            let allButtons = app.buttons.allElementsBoundByIndex.map { $0.label }
+            let allTexts = app.staticTexts.allElementsBoundByIndex.map { $0.label }
+            XCTFail("Navigation to feed did not occur. Buttons: \(allButtons), Texts: \(allTexts)")
         }
     }
 
