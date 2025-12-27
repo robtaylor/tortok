@@ -32,7 +32,11 @@ let package = Package(
                 .product(name: "GRDB", package: "GRDB.swift"),
                 "LibTorrentBridge"
             ],
-            path: "TorTok"
+            path: "TorTok",
+            resources: [
+                .process("Resources/webtorrent-bridge.html"),
+                .process("Resources/Assets.xcassets")
+            ]
         ),
 
         // LibTorrent Objective-C++ Bridge

@@ -15,6 +15,8 @@
 		AFE1F695FDED4A4CB0087839 /* P2PResourceLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D8D5ACE2DCC462E97232E51 /* P2PResourceLoader.swift */; };
 		EFE6F5B5CC7F47D884574A83 /* VideoPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCDAEF1BACAB41EB8C57821B /* VideoPlayer.swift */; };
 		7055098DFE554E059FD9E2FF /* TorrentEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D43D431FCA4299A81A4544 /* TorrentEngine.swift */; };
+		A1B2C3D4E5F64781A2B3C4D5 /* WebTorrentBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E2D3C4B5A64781A2B3C4D5 /* WebTorrentBridge.swift */; };
+		B2C3D4E5F6A74892B3C4D5E6 /* webtorrent-bridge.html in Resources */ = {isa = PBXBuildFile; fileRef = G2F3E4D5C6B74892B3C4D5E6 /* webtorrent-bridge.html */; };
 		D65408BC517048E1ADBAF1CA /* TorTokApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C2624A2835C4ABF89373FC8 /* TorTokApp.swift */; };
 		D331BF4F386F4265B60B45A2 /* TorTokDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = D808B4311A2F44AF9A176192 /* TorTokDemo.swift */; };
 		88D1A885453748FF9D489CEF /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35CD2B64758F4DB2AC3DE2B4 /* LoginView.swift */; };
@@ -47,6 +49,8 @@
 		8D8D5ACE2DCC462E97232E51 /* P2PResourceLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Services/Player/P2PResourceLoader.swift"; sourceTree = "<group>"; };
 		DCDAEF1BACAB41EB8C57821B /* VideoPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Services/Player/VideoPlayer.swift"; sourceTree = "<group>"; };
 		19D43D431FCA4299A81A4544 /* TorrentEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Services/Torrent/TorrentEngine.swift"; sourceTree = "<group>"; };
+		F1E2D3C4B5A64781A2B3C4D5 /* WebTorrentBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Services/Torrent/WebTorrentBridge.swift"; sourceTree = "<group>"; };
+		G2F3E4D5C6B74892B3C4D5E6 /* webtorrent-bridge.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = "Resources/webtorrent-bridge.html"; sourceTree = "<group>"; };
 		0C2624A2835C4ABF89373FC8 /* TorTokApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TorTokApp.swift"; sourceTree = "<group>"; };
 		D808B4311A2F44AF9A176192 /* TorTokDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TorTokDemo.swift"; sourceTree = "<group>"; };
 		35CD2B64758F4DB2AC3DE2B4 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Auth/LoginView.swift"; sourceTree = "<group>"; };
@@ -93,6 +97,8 @@
 				8D8D5ACE2DCC462E97232E51 /* P2PResourceLoader.swift */,
 				DCDAEF1BACAB41EB8C57821B /* VideoPlayer.swift */,
 				19D43D431FCA4299A81A4544 /* TorrentEngine.swift */,
+				F1E2D3C4B5A64781A2B3C4D5 /* WebTorrentBridge.swift */,
+				G2F3E4D5C6B74892B3C4D5E6 /* webtorrent-bridge.html */,
 				0C2624A2835C4ABF89373FC8 /* TorTokApp.swift */,
 				D808B4311A2F44AF9A176192 /* TorTokDemo.swift */,
 				35CD2B64758F4DB2AC3DE2B4 /* LoginView.swift */,
@@ -214,6 +220,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				0AFF4B4BF8764828AF887489 /* Assets.xcassets in Resources */,
+				B2C3D4E5F6A74892B3C4D5E6 /* webtorrent-bridge.html in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -239,6 +246,7 @@
 				AFE1F695FDED4A4CB0087839 /* P2PResourceLoader.swift in Sources */,
 				EFE6F5B5CC7F47D884574A83 /* VideoPlayer.swift in Sources */,
 				7055098DFE554E059FD9E2FF /* TorrentEngine.swift in Sources */,
+				A1B2C3D4E5F64781A2B3C4D5 /* WebTorrentBridge.swift in Sources */,
 				D65408BC517048E1ADBAF1CA /* TorTokApp.swift in Sources */,
 				D331BF4F386F4265B60B45A2 /* TorTokDemo.swift in Sources */,
 				88D1A885453748FF9D489CEF /* LoginView.swift in Sources */,

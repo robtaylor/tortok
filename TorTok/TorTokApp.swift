@@ -14,6 +14,7 @@ struct TorTokApp: App {
     @StateObject private var torrentEngine = TorrentEngine()
     @StateObject private var apiClient = APIClient()
     @StateObject private var authManager: AuthManager
+    @StateObject private var webTorrentBridge = WebTorrentBridge.shared
 
     init() {
         // Check for UI test arguments
@@ -30,6 +31,7 @@ struct TorTokApp: App {
                 .environmentObject(torrentEngine)
                 .environmentObject(apiClient)
                 .environmentObject(authManager)
+                .environmentObject(webTorrentBridge)
                 .preferredColorScheme(.dark) // TikTok-style dark theme
         }
     }

@@ -2,14 +2,14 @@
 //  P2PResourceLoader.swift
 //  TorTok - P2P Video Resource Loader
 //
-//  Custom AVAssetResourceLoader that downloads HLS segments via BitTorrent
+//  Custom AVAssetResourceLoader that downloads HLS segments via WebTorrent
 //
 
 import Foundation
 import AVFoundation
 import Combine
 
-/// Custom resource loader that fetches HLS segments via P2P
+/// Custom resource loader that fetches HLS segments via P2P (WebTorrent)
 class P2PResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
     // MARK: - Published Properties (for statistics)
 
@@ -24,9 +24,10 @@ class P2PResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
     private let magnetLink: String
     private let httpFallbackURL: URL?
 
-    private var torrentEngine: TorrentEngine?
+    private var torrentInfoHash: String?
     private var cache: VideoSegmentCache
     private var pendingRequests: [AVAssetResourceLoadingRequest] = []
+    private var cancellables = Set<AnyCancellable>()
 
     // Statistics
     private var bytesFromP2P: Int64 = 0
@@ -41,6 +42,9 @@ class P2PResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
         self.cache = VideoSegmentCache()
 
         super.init()
+
+        // Subscribe to WebTorrent bridge stats
+        subscribeToStats()
     }
 
     // MARK: - AVAssetResourceLoaderDelegate
@@ -123,21 +127,20 @@ class P2PResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
     }
 
     private func fetchViaP2P(_ path: String) async throws -> Data {
-        // TODO: Implement actual P2P fetch via LibTorrent
-        // For now, this is stubbed
-
-        guard let torrentEngine = torrentEngine else {
+        guard let infoHash = torrentInfoHash else {
             throw P2PError.torrentEngineNotAvailable
         }
 
-        // In real implementation:
-        // 1. Map HLS segment path to torrent file index
-        // 2. Set piece priorities (prioritize first 5 seconds)
-        // 3. Wait for pieces to download
-        // 4. Return data
+        // Use WebTorrent bridge to fetch the file
+        let bridge = await WebTorrentBridge.shared
 
-        // Stubbed implementation
-        throw P2PError.notImplemented
+        // Normalize path - remove leading slash if present
+        let normalizedPath = path.hasPrefix("/") ? String(path.dropFirst()) : path
+
+        // Request file from WebTorrent
+        let data = try await bridge.getFile(infoHash: infoHash, filePath: normalizedPath)
+
+        return data
     }
 
     private func fetchViaHTTP(_ url: URL) async throws -> Data {
@@ -223,20 +226,63 @@ class P2PResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
         }
     }
 
+    // MARK: - WebTorrent Stats Subscription
+
+    private func subscribeToStats() {
+        Task { @MainActor in
+            let bridge = WebTorrentBridge.shared
+
+            // Subscribe to download/upload speeds and peer count
+            bridge.$totalDownloadSpeed
+                .map { Int64($0) }
+                .assign(to: &$downloadSpeed)
+
+            bridge.$totalUploadSpeed
+                .map { Int64($0) }
+                .assign(to: &$uploadSpeed)
+
+            bridge.$totalPeers
+                .assign(to: &$peerCount)
+        }
+    }
+
     // MARK: - Torrent Engine Integration
 
+    @MainActor
     func startTorrent() async throws {
-        // TODO: Initialize torrent download
-        // torrentEngine = TorrentEngine.shared
-        // try torrentEngine.download(magnetLink: magnetLink)
-
         print("📦 Starting P2P download for video \(videoId)")
+
+        let bridge = WebTorrentBridge.shared
+
+        // Wait for WebTorrent bridge to be ready
+        if !bridge.isReady {
+            print("⏳ Waiting for WebTorrent bridge to initialize...")
+            // Wait up to 5 seconds for bridge to be ready
+            for _ in 0..<50 {
+                try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+                if bridge.isReady { break }
+            }
+        }
+
+        guard bridge.isReady else {
+            throw P2PError.torrentEngineNotAvailable
+        }
+
+        // Add the torrent
+        let torrentInfo = try await bridge.addTorrent(magnetURI: magnetLink)
+        self.torrentInfoHash = torrentInfo.infoHash
+
+        print("✅ Torrent added: \(torrentInfo.name) (\(torrentInfo.files.count) files)")
     }
 
     func stopTorrent() {
-        // TODO: Stop torrent
-        // torrentEngine.remove(infoHash: ...)
+        guard let infoHash = torrentInfoHash else { return }
+
         print("🛑 Stopping P2P download for video \(videoId)")
+
+        Task { @MainActor in
+            try? await WebTorrentBridge.shared.removeTorrent(infoHash: infoHash)
+        }
     }
 }
 

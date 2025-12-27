@@ -119,36 +119,48 @@ class VideoPlayer: ObservableObject {
     // MARK: - Private Methods - P2P Playback
 
     private func loadP2PVideo(_ video: Video) async throws {
-        // Create custom URL scheme for P2P: p2p://video-id/master.m3u8
-        let p2pURL = URL(string: "p2p://\(video.id.uuidString)/master.m3u8")!
-
-        // Create asset with custom resource loader
-        let asset = AVURLAsset(url: p2pURL)
-
         // Set up P2P resource loader
-        p2pResourceLoader = P2PResourceLoader(
+        let resourceLoader = P2PResourceLoader(
             videoId: video.id,
             magnetLink: video.magnetLink,
             httpFallbackURL: video.hlsURL
         )
+        self.p2pResourceLoader = resourceLoader
+
+        // Start the torrent download first
+        do {
+            try await resourceLoader.startTorrent()
+        } catch {
+            print("⚠️ Failed to start P2P: \(error). Falling back to HTTP...")
+            // Fall back to HTTP if P2P fails to initialize
+            if let hlsURL = video.hlsURL {
+                try await loadHTTPVideo(hlsURL)
+                return
+            }
+            throw VideoPlayerError.p2pInitFailed
+        }
+
+        // Create custom URL scheme for P2P: p2p://video-id/playlist.m3u8
+        let p2pURL = URL(string: "p2p://\(video.id.uuidString)/playlist.m3u8")!
+
+        // Create asset with custom resource loader
+        let asset = AVURLAsset(url: p2pURL)
 
         // Register resource loader delegate
-        if let resourceLoader = p2pResourceLoader {
-            asset.resourceLoader.setDelegate(
-                resourceLoader,
-                queue: DispatchQueue(label: "com.tortok.resourceloader")
-            )
+        asset.resourceLoader.setDelegate(
+            resourceLoader,
+            queue: DispatchQueue(label: "com.tortok.resourceloader")
+        )
 
-            // Subscribe to P2P statistics
-            resourceLoader.$downloadSpeed
-                .assign(to: &$downloadSpeed)
-            resourceLoader.$uploadSpeed
-                .assign(to: &$uploadSpeed)
-            resourceLoader.$peerCount
-                .assign(to: &$peerCount)
-            resourceLoader.$p2pRatio
-                .assign(to: &$p2pRatio)
-        }
+        // Subscribe to P2P statistics
+        resourceLoader.$downloadSpeed
+            .assign(to: &$downloadSpeed)
+        resourceLoader.$uploadSpeed
+            .assign(to: &$uploadSpeed)
+        resourceLoader.$peerCount
+            .assign(to: &$peerCount)
+        resourceLoader.$p2pRatio
+            .assign(to: &$p2pRatio)
 
         // Create player item and player
         let playerItem = AVPlayerItem(asset: asset)
@@ -216,7 +228,11 @@ class VideoPlayer: ObservableObject {
         player?.pause()
         player = nil
         playerItem = nil
+
+        // Stop the torrent
+        p2pResourceLoader?.stopTorrent()
         p2pResourceLoader = nil
+
         cancellables.removeAll()
 
         isPlaying = false
