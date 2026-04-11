@@ -1,7 +1,21 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt, { SignOptions } from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'development-secret-change-in-production';
+// JWT_SECRET is mandatory. A missing secret used to fall back to a
+// hard-coded development string, which is an obvious footgun if the
+// env var ever goes missing in production — every token would verify
+// against a value anyone reading the repo already knows (S1 in the
+// Phase 0a punch list). Fail loudly at import time instead.
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error(
+    'JWT_SECRET is not set. Refusing to start with an insecure default. ' +
+      'Set JWT_SECRET in the environment (see .env.example).'
+  );
+}
+// Local non-null alias so the rest of the module doesn't have to
+// re-narrow the type on every use.
+const SECRET: string = JWT_SECRET;
 
 export interface AuthPayload {
   userId: string;
@@ -32,7 +46,7 @@ export function authenticateJWT(req: AuthRequest, res: Response, next: NextFunct
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as AuthPayload;
+    const decoded = jwt.verify(token, SECRET) as AuthPayload;
 
     // Verify token is for this instance
     const instanceDomain = process.env.INSTANCE_DOMAIN || 'localhost';
@@ -52,7 +66,7 @@ export function authenticateJWT(req: AuthRequest, res: Response, next: NextFunct
  * Generate JWT token
  */
 export function generateToken(payload: AuthPayload): string {
-  return jwt.sign(payload, JWT_SECRET, {
+  return jwt.sign(payload, SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   } as SignOptions);
 }
@@ -76,7 +90,7 @@ export function optionalAuth(req: AuthRequest, res: Response, next: NextFunction
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as AuthPayload;
+    const decoded = jwt.verify(token, SECRET) as AuthPayload;
     req.user = decoded;
   } catch (error) {
     // Invalid token, but continue anyway (optional auth)
