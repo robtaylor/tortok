@@ -163,30 +163,37 @@ router.post('/:id/like', authenticateJWT, validate(schemas.likeVideo), async (re
 
     await client.query('BEGIN');
 
+    // Only adjust like_count when the like-row actually changed. Previously
+    // the counter was updated unconditionally, so a double-like (INSERT ON
+    // CONFLICT DO NOTHING → 0 rows, but UPDATE +1) or double-unlike
+    // (DELETE → 0 rows, but UPDATE -1) would drift the counter. This was
+    // B3 in the Phase 0a punch list.
     if (liked) {
-      // Add like
-      await client.query(
+      const insertResult = await client.query(
         `INSERT INTO likes (user_id, video_id)
          VALUES ($1, $2)
          ON CONFLICT (user_id, video_id) DO NOTHING`,
         [userId, videoId]
       );
 
-      await client.query(
-        'UPDATE videos SET like_count = like_count + 1 WHERE id = $1',
-        [videoId]
-      );
+      if (insertResult.rowCount && insertResult.rowCount > 0) {
+        await client.query(
+          'UPDATE videos SET like_count = like_count + 1 WHERE id = $1',
+          [videoId]
+        );
+      }
     } else {
-      // Remove like
-      await client.query(
+      const deleteResult = await client.query(
         'DELETE FROM likes WHERE user_id = $1 AND video_id = $2',
         [userId, videoId]
       );
 
-      await client.query(
-        'UPDATE videos SET like_count = GREATEST(like_count - 1, 0) WHERE id = $1',
-        [videoId]
-      );
+      if (deleteResult.rowCount && deleteResult.rowCount > 0) {
+        await client.query(
+          'UPDATE videos SET like_count = GREATEST(like_count - 1, 0) WHERE id = $1',
+          [videoId]
+        );
+      }
     }
 
     await client.query('COMMIT');
