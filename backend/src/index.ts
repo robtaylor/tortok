@@ -7,7 +7,6 @@ import path from 'path';
 import { initializeDatabase } from './db';
 import authRoutes from './routes/auth';
 import videoRoutes from './routes/videos';
-import { authenticateJWT } from './middleware/auth';
 import { seeder } from './services/seeder';
 
 // Load environment variables
@@ -74,9 +73,6 @@ app.get('/.well-known/tortok', (req, res) => {
 // Routes
 app.use('/auth', authRoutes);
 app.use('/videos', videoRoutes);
-
-// Protect /auth/me endpoint
-app.use('/auth/me', authenticateJWT);
 
 // 404 handler
 app.use((req, res) => {

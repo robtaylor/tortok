@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcrypt';
 import { query } from '../db';
-import { AuthRequest, generateToken } from '../middleware/auth';
+import { AuthRequest, authenticateJWT, generateToken } from '../middleware/auth';
 import { validate, schemas } from '../middleware/validate';
 
 const router = Router();
@@ -143,10 +143,14 @@ router.post('/login', validate(schemas.login), async (req: AuthRequest, res: Res
 
 /**
  * GET /auth/me
- * Get current user
+ * Get current user. authenticateJWT must run at the route level — mounting
+ * it on the parent `app.use('/auth/me', ...)` after `app.use('/auth', ...)`
+ * is a no-op because the sub-router already terminated the request (B1).
  */
-router.get('/me', async (req: AuthRequest, res: Response) => {
+router.get('/me', authenticateJWT, async (req: AuthRequest, res: Response) => {
   try {
+    // authenticateJWT guarantees req.user is set; the explicit null check
+    // below is belt-and-braces.
     if (!req.user) {
       res.status(401).json({ error: 'Not authenticated' });
       return;
