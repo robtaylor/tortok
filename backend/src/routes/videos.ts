@@ -292,4 +292,76 @@ router.get('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
   }
 });
 
+/**
+ * PATCH /videos/:id/urls
+ * Update hls_url / magnet_link on a video. Owner-only.
+ *
+ * There is no admin role yet, so the authorisation answer for v0 is
+ * "only the video's uploader can rewrite its URLs". The old version of
+ * this handler did not check the owner at all, which let any
+ * authenticated user overwrite anyone's URLs — that was B4 in the
+ * Phase 0a punch list.
+ */
+router.patch('/:id/urls', authenticateJWT, async (req: AuthRequest, res: Response) => {
+  try {
+    const videoId = req.params.id;
+    const userId = req.user!.userId;
+    const { hlsUrl, magnetLink } = req.body;
+
+    // Ownership check first: 404 if the video doesn't exist, 403 if it
+    // exists but belongs to someone else. We deliberately use 403 rather
+    // than 404-as-obfuscation here — leaking "this video exists" is fine,
+    // leaking "anyone can rewrite it" is not.
+    const owners = await query<{ user_id: string }>(
+      'SELECT user_id FROM videos WHERE id = $1',
+      [videoId]
+    );
+
+    if (owners.length === 0) {
+      res.status(404).json({ error: 'Video not found' });
+      return;
+    }
+
+    if (owners[0].user_id !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramCount = 1;
+
+    if (hlsUrl !== undefined) {
+      updates.push(`hls_url = $${paramCount++}`);
+      values.push(hlsUrl);
+    }
+
+    if (magnetLink !== undefined) {
+      updates.push(`magnet_link = $${paramCount++}`);
+      values.push(magnetLink);
+    }
+
+    if (updates.length === 0) {
+      res.status(400).json({ error: 'No updates provided' });
+      return;
+    }
+
+    values.push(videoId);
+    const result = await query<any>(
+      `UPDATE videos SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id`,
+      values
+    );
+
+    if (result.length === 0) {
+      res.status(404).json({ error: 'Video not found' });
+      return;
+    }
+
+    res.json({ success: true, videoId });
+  } catch (error) {
+    console.error('Update video URLs error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

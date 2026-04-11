@@ -37,6 +37,9 @@ COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 # Copy database schema (with proper ownership)
 COPY --chown=nodejs:nodejs src/db/schema.sql ./dist/db/
 
+# Copy video content for seeding (with proper ownership)
+COPY --chown=nodejs:nodejs content ./content
+
 USER nodejs
 
 # Expose port
