@@ -24,7 +24,6 @@ struct User: Identifiable, Codable {
 
 struct AuthResponse: Codable {
     let token: String
-    let refreshToken: String
     let user: User
 
     // No CodingKeys needed - backend sends camelCase which matches property names

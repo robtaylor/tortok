@@ -60,7 +60,6 @@ router.post('/register', validate(schemas.register), async (req: AuthRequest, re
 
     res.status(201).json({
       token,
-      refreshToken: token, // TODO: Implement proper refresh tokens
       user: {
         id: user.id,
         username: user.username,
@@ -121,7 +120,6 @@ router.post('/login', validate(schemas.login), async (req: AuthRequest, res: Res
 
     res.json({
       token,
-      refreshToken: token, // TODO: Implement proper refresh tokens
       user: {
         id: user.id,
         username: user.username,
