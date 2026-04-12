@@ -12,7 +12,7 @@ class APIClient: ObservableObject {
     private let baseURL: String
     private let session: Session
 
-    init(baseURL: String = "https://tortok-metadata-server-796842052654.us-central1.run.app") {
+    init(baseURL: String = "https://tortok-api.fly.dev") {
         self.baseURL = baseURL
 
         // Configure session
