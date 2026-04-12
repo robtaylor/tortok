@@ -1,2 +1,8 @@
 *.xcuserstate
 xcuserdata/
+.env*
+node_modules/
+.claude/
+.tldr/
+.tldrignore
+.xcodebuildmcp/
