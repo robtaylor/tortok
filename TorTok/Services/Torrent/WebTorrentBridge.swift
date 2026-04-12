@@ -155,8 +155,7 @@ class WebTorrentBridge: NSObject, ObservableObject {
         return try await withCheckedThrowingContinuation { continuation in
             pendingTorrentRequests[requestId] = continuation
 
-            let escapedMagnet = magnetURI.replacingOccurrences(of: "'", with: "\\'")
-            let js = "addTorrent('\(requestId)', '\(escapedMagnet)')"
+            let js = "addTorrent(\(Self.jsLiteral(requestId)), \(Self.jsLiteral(magnetURI)))"
 
             webView?.evaluateJavaScript(js) { _, error in
                 if let error = error {
@@ -178,7 +177,7 @@ class WebTorrentBridge: NSObject, ObservableObject {
         return try await withCheckedThrowingContinuation { continuation in
             pendingDataRequests[requestId] = continuation
 
-            let js = "getFile('\(requestId)', '\(infoHash)', '\(filePath)')"
+            let js = "getFile(\(Self.jsLiteral(requestId)), \(Self.jsLiteral(infoHash)), \(Self.jsLiteral(filePath)))"
 
             webView?.evaluateJavaScript(js) { _, error in
                 if let error = error {
@@ -194,7 +193,7 @@ class WebTorrentBridge: NSObject, ObservableObject {
         guard isReady else { return }
 
         let requestId = nextRequestId()
-        let js = "removeTorrent('\(requestId)', '\(infoHash)')"
+        let js = "removeTorrent(\(Self.jsLiteral(requestId)), \(Self.jsLiteral(infoHash)))"
         try await webView?.evaluateJavaScript(js)
         activeTorrents.removeValue(forKey: infoHash)
     }
@@ -202,6 +201,29 @@ class WebTorrentBridge: NSObject, ObservableObject {
     private func nextRequestId() -> String {
         requestCounter += 1
         return "req_\(requestCounter)"
+    }
+
+    /// Encode a Swift string as a JavaScript string literal safe to
+    /// interpolate into arbitrary JS source. The previous call sites
+    /// just did `.replacingOccurrences(of: "'", with: "\\'")` on the
+    /// magnet URI, which was B5 in the Phase 0a punch list: a magnet
+    /// URI containing `\`, newlines, or `</script>` would break out of
+    /// the literal and execute arbitrary JS in the WebTorrent bridge
+    /// WebView. JSONSerialization handles `"`, `\`, control chars and
+    /// non-ASCII correctly; we strip the leading `[` / trailing `]` to
+    /// get the inner quoted form.
+    private static func jsLiteral(_ value: String) -> String {
+        guard
+            let data = try? JSONSerialization.data(withJSONObject: [value], options: []),
+            let wrapped = String(data: data, encoding: .utf8),
+            wrapped.count >= 2
+        else {
+            // Fallback: the empty JS string. Callers will surface an
+            // error from the underlying JS function rather than
+            // accidentally interpolating something dangerous.
+            return "\"\""
+        }
+        return String(wrapped.dropFirst().dropLast())
     }
 
     private func handleResponse(_ dict: [String: Any]) {
