@@ -337,6 +337,11 @@ healthy on Fly.
   mentally even if we don't delete it yet.
 - Implement a basic vertical feed with `expo-video` or `react-native-video`.
   Target: visual parity with the current Swift feed, no P2P yet.
+- Add UI automation tests using **Maestro** (YAML-based, cross-platform).
+  Maestro is framework-agnostic (works via accessibility labels), runs on
+  iOS and Android simulators, and works in CI. Covers: registration,
+  login, feed loading, video playback, profile. Phase 0b uses
+  XcodeBuildMCP for manual interactive testing of the Swift app.
 
 **Phase 2 — Cross-platform P2P.**
 - Integrate WebTorrent in the Expo client. This requires verifying that
