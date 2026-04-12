@@ -55,40 +55,32 @@ with a clear message pointing at `.env.example`.
 
 ## iOS build status
 
-**Not verified.** No `xcodebuild` run was attempted because the Xcode
-project file still references three deleted files and a deleted
-target (see next section). The backend changes, the B5 JS-escaping
-fix in `WebTorrentBridge.swift`, and the B6 per-torrent stats fix in
-`P2PResourceLoader.swift` are all source-only and should compile
-once the project file is cleaned up.
+**Not verified via xcodebuild yet.** The pbxproj has been cleaned up
+programmatically (see below), so it should build. Recommend running
+`xcodebuild -scheme TorTok -sdk iphonesimulator build` or opening
+in Xcode to confirm.
 
-## Required human-in-the-loop step (Xcode)
+## pbxproj cleanup (DONE)
 
-`TorTok.xcodeproj/project.pbxproj` still contains references to the
-three files deleted in `63cc808`:
+The three deleted file references (TorrentEngine.swift,
+TorrentInfo.swift, TorTokDemo.swift) have been removed from
+`project.pbxproj` via the `xcode` npm package, targeting the six
+known UUIDs across PBXBuildFile, PBXFileReference, PBXGroup children,
+and PBXSourcesBuildPhase. Validated with `plutil -lint`. Committed
+as `078fa38`.
 
-- `TorTok/Services/Torrent/TorrentEngine.swift`
-- `TorTok/Models/TorrentInfo.swift`
-- `TorTok/TorTokDemo.swift`
+## Xcode MCP servers (configured)
 
-And to the `LibTorrentBridge` target that no longer exists in
-`Package.swift`.
+Two MCP servers have been added to `.claude.json` for this project:
 
-Editing the pbxproj by hand is fragile (sort keys, build phase IDs,
-etc.) and I deliberately did not attempt it. **In Xcode:**
+- **xcodebuild** (`npx xcodebuildmcp@latest`) — ~59 tools: builds,
+  simulator management, test execution, app utilities. By Sentry.
+- **xcode** (`xcrun mcpbridge`) — Apple's native Xcode MCP (20
+  tools). Requires Xcode 26.3+ running with MCP enabled in
+  Settings > Intelligence.
 
-1. Open `TorTok/TorTok.xcodeproj` in Xcode.
-2. In the Project Navigator, find and remove the three red (missing)
-   file references listed above — choose "Remove Reference" (NOT
-   "Move to Trash", the files are already deleted on disk).
-3. Find the `LibTorrentBridge` package product / target reference if
-   it surfaces, and remove it.
-4. Build (⌘B). Resolve any remaining import / symbol errors — expect
-   maybe one or two leftover `TorrentEngine()` / `TorrentInfo`
-   references that the Swift compiler will flag directly (I already
-   cleaned up `TorTokApp.swift`, but there may be a strays I missed).
-5. Commit the pbxproj delta as a follow-up, something like:
-   `chore(ios): remove libtorrent file refs from xcodeproj`.
+Both need Xcode running to connect. They'll be available in new
+Claude sessions automatically.
 
 ## Not done / deliberately out of scope
 
