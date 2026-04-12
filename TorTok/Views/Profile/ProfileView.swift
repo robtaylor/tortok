@@ -39,9 +39,9 @@ struct ProfileView: View {
 
                             // Stats
                             HStack(spacing: 40) {
-                                StatView(count: user.followerCount, label: "Followers")
-                                StatView(count: user.followingCount, label: "Following")
-                                StatView(count: user.videoCount, label: "Videos")
+                                StatView(count: user.followerCount ?? 0, label: "Followers")
+                                StatView(count: user.followingCount ?? 0, label: "Following")
+                                StatView(count: user.videoCount ?? 0, label: "Videos")
                             }
 
                             if let bio = user.bio {

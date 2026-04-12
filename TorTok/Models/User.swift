@@ -12,10 +12,10 @@ struct User: Identifiable, Codable {
     let email: String?
     let avatarURL: URL?
     let bio: String?
-    let followerCount: Int
-    let followingCount: Int
-    let videoCount: Int
-    let createdAt: Date
+    let followerCount: Int?
+    let followingCount: Int?
+    let videoCount: Int?
+    let createdAt: Date?
 
     // No CodingKeys needed - backend sends camelCase which matches property names
 }
