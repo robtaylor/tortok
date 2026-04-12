@@ -1,0 +1,37 @@
+app = "tortok-turn"
+primary_region = "lhr"
+
+[build]
+
+[env]
+  TURN_REALM = "tortok.video"
+  TURN_PORT = "3478"
+  TURN_MIN_PORT = "49152"
+  TURN_MAX_PORT = "49200"
+
+# TURN_SECRET set via `fly secrets set TURN_SECRET=<value>`
+
+# STUN/TURN needs UDP. Fly supports UDP via [[services]].
+[[services]]
+  internal_port = 3478
+  protocol = "udp"
+
+  [[services.ports]]
+    port = 3478
+
+# TCP fallback for firewalled clients
+[[services]]
+  internal_port = 3478
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 3478
+
+  [[services.tcp_checks]]
+    grace_period = "10s"
+    interval = "30s"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
