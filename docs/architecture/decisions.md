@@ -300,20 +300,29 @@ phase, we have a working product; we just have fewer of the features.
 - Keep the Swift app runnable as a reference implementation while the
   rewrite proceeds.
 
-**Phase 0b — Extract and host the seeder infrastructure (per ADR-008).**
+**Phase 0b — Deploy to Fly.io and stand up seeder infrastructure (per ADR-008).**
+
+Step 1 is deploying the current backend monolith (Express + embedded
+seeder) to Fly.io as-is, replacing the Cloud Run deployment. This
+proves the deploy pipeline, gets secrets on Fly, and gives us a
+working production target before we start splitting services. The
+seeder extraction happens as a follow-up once the monolith is
+healthy on Fly.
+
+- Deploy the backend monolith to Fly.io `lhr` (London). Expand to
+  additional regions once traffic justifies it.
+- Server-side seeding policy: **demand-pull caching only** at
+  launch. Pre-warming strategies (most-views, trending,
+  recently-added) are documented for later — see
+  `open-problems/seeding-policy.md`.
 - Extract the WebTorrent seeder from the Express process into a
-  standalone Node/TypeScript service. It is no longer a singleton
-  `seeder.initialize()` call inside `backend/src/index.ts`.
-- Package the extracted seeder as a Docker image with sensible
-  defaults. The same image runs on our production infrastructure and
-  on a user's home server — this is L4 of ADR-008.
-- Deploy the seeder image to Fly.io in four regions (`iad`, `lhr`,
-  `fra`, `nrt`) per L2 of ADR-008.
-- Stand up our own `bittorrent-tracker` instances on Fly.io in two
-  regions per L3 of ADR-008. Update the client's tracker list
-  (`TorTok/Resources/webtorrent-bridge.html` for the reference Swift
-  app) to prefer our trackers, with the community trackers as
-  fallback.
+  standalone Node/TypeScript service. Package as a Docker image with
+  sensible defaults. The same image runs on our production
+  infrastructure and on a user's home server — this is L4 of
+  ADR-008.
+- Stand up our own `bittorrent-tracker` instances on Fly.io per L3
+  of ADR-008. Update the client's tracker list to prefer our
+  trackers, with the community trackers as fallback.
 - Migrate the existing seed content from `backend/content/` to
   Cloudflare R2 per L1 of ADR-008. The backend's `express.static`
   route for `/content` is removed; URLs now point at R2.
@@ -533,11 +542,12 @@ config change rather than a rewrite.
 The webseed URL in every magnet link points at the R2-backed
 Cloudflare endpoint.
 
-**L2 — Seeder compute: Fly.io, four regions at launch.**
+**L2 — Seeder compute: Fly.io, starting with one region.**
 
 The standalone seeder service extracted in Phase 0b is packaged as a
-Docker image and deployed to Fly.io in four regions: `iad` (US East),
-`lhr` (London), `fra` (Frankfurt), and `nrt` (Tokyo). Each region
+Docker image and deployed to Fly.io. Initial deployment is **`lhr`
+(London) only** — we start with Europe/UK where early users are, and
+expand to `iad`, `fra`, `nrt` once traffic justifies it. Each region
 runs one or more seeder instances with a persistent volume for the
 local content cache. Content is pulled from R2 on first request and
 cached locally on the Fly volume, so we don't duplicate the full
@@ -545,8 +555,8 @@ catalog into every region — only what that region's peers actually
 ask for.
 
 Fly's anycast routing means WebTorrent peers connect to the nearest
-seeder without any client-side routing logic. Cost at launch scale:
-roughly $15–20/month for the four regions combined.
+seeder without any client-side routing logic. Cost at initial scale:
+roughly $5/month for a single region.
 
 **L3 — Tracker infrastructure: our own WSS trackers, critical path.**
 

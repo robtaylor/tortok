@@ -1,11 +1,13 @@
 # Open problem: Seeding policy (client and server)
 
-**Status:** Unresolved. Two distinct sub-problems with different
-deadlines.
+**Status:** Server side **resolved** (Phase 0b). Client side
+unresolved.
 **Must resolve by:**
-- **Server pre-warming:** Phase 0b — the standalone L2 seeder we
-  deploy has to pick *some* caching behavior, so the decision can't
-  be later than the container it ships in.
+- **Server pre-warming:** ~~Phase 0b~~ **Resolved.** Ship with
+  demand-pull caching only for initial deploy. All three pre-warming
+  strategies (most-views, trending, recently-added) are documented as
+  a known next step once we have real traffic data; adding them later
+  is a config change, not an architectural shift.
 - **Client seeding:** Phase 2 — the Expo client doesn't actually
   seed until WebTorrent is integrated into the app.
 **Related ADRs:** ADR-001 (WebTorrent), ADR-008 (four-layer infra).
@@ -66,11 +68,17 @@ measurements (see open question #12 in `decisions.md`).
   — might be enough for launch. Ship that, measure, add
   pre-warming if cold-start latency is visibly bad.
 
-### Proposed default for Phase 0b
+### Decision (Phase 0b)
 
-Ship with **demand-pull caching only.** Record the strategies above
-as a known next step. Adding pre-warming later is a config change
-in the seeder, not an architectural shift.
+Ship with **demand-pull caching only.** The three pre-warming
+strategies (most-views, trending, recently-added) are recorded as a
+known next step. Adding pre-warming later is a config change in the
+seeder, not an architectural shift.
+
+All three strategies will be implemented once we have real traffic
+data to calibrate N values and refresh cadences. The concrete
+starting numbers (N=100, 100 GB LRU cap, 30-min/6-hr refresh) are
+still the plan for when we turn pre-warming on.
 
 ## Sub-problem B: Client-side seeding (battery-sensitive)
 
