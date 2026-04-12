@@ -228,21 +228,34 @@ class P2PResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
 
     // MARK: - WebTorrent Stats Subscription
 
+    /// Subscribe to WebTorrent stats *for this loader's torrent only*.
+    ///
+    /// The previous implementation assigned bridge.totalDownloadSpeed /
+    /// totalUploadSpeed / totalPeers directly onto this loader, meaning
+    /// every P2PResourceLoader instance reported the combined stats of
+    /// every active torrent in the bridge (B6). With two videos on
+    /// screen, the per-video overlay for video A would show the traffic
+    /// from A plus B plus any other loader.
+    ///
+    /// Derive the published properties from bridge.activeTorrents
+    /// filtered by torrentInfoHash instead — until this loader's torrent
+    /// has been added we publish zeros.
     private func subscribeToStats() {
         Task { @MainActor in
             let bridge = WebTorrentBridge.shared
 
-            // Subscribe to download/upload speeds and peer count
-            bridge.$totalDownloadSpeed
-                .map { Int64($0) }
-                .assign(to: &$downloadSpeed)
-
-            bridge.$totalUploadSpeed
-                .map { Int64($0) }
-                .assign(to: &$uploadSpeed)
-
-            bridge.$totalPeers
-                .assign(to: &$peerCount)
+            bridge.$activeTorrents
+                .compactMap { [weak self] active -> WebTorrentBridge.TorrentInfo? in
+                    guard let infoHash = self?.torrentInfoHash else { return nil }
+                    return active[infoHash]
+                }
+                .sink { [weak self] info in
+                    guard let self = self else { return }
+                    self.downloadSpeed = Int64(info.downloadSpeed)
+                    self.uploadSpeed = Int64(info.uploadSpeed)
+                    self.peerCount = info.numPeers
+                }
+                .store(in: &cancellables)
         }
     }
 
