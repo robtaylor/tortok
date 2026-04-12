@@ -309,7 +309,7 @@ router.get('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
  * authenticated user overwrite anyone's URLs — that was B4 in the
  * Phase 0a punch list.
  */
-router.patch('/:id/urls', authenticateJWT, async (req: AuthRequest, res: Response) => {
+router.patch('/:id/urls', authenticateJWT, validate(schemas.updateVideoUrls), async (req: AuthRequest, res: Response) => {
   try {
     const videoId = req.params.id;
     const userId = req.user!.userId;

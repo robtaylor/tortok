@@ -45,14 +45,23 @@ export const schemas = {
 
   createVideo: Joi.object({
     caption: Joi.string().max(500).required(),
-    magnetLink: Joi.string().required(),
-    hlsUrl: Joi.string().uri().allow(null, ''),
-    thumbnailUrl: Joi.string().uri().required(),
+    magnetLink: Joi.string().pattern(/^magnet:\?/).required(),
+    // hlsUrl / thumbnailUrl must be https. Joi's default .uri() would
+    // happily accept javascript:, data:, http:, file: — which the
+    // client hands straight to AVPlayer / a WebView, so a non-https
+    // scheme is a direct injection/XSS vector (S2).
+    hlsUrl: Joi.string().uri({ scheme: ['https'] }).allow(null, ''),
+    thumbnailUrl: Joi.string().uri({ scheme: ['https'] }).required(),
     durationSeconds: Joi.number().integer().min(1).max(300).required(),
     width: Joi.number().integer().min(1).required(),
     height: Joi.number().integer().min(1).required(),
     hashtags: Joi.array().items(Joi.string().max(50)).max(10).default([]),
   }),
+
+  updateVideoUrls: Joi.object({
+    hlsUrl: Joi.string().uri({ scheme: ['https'] }),
+    magnetLink: Joi.string().pattern(/^magnet:\?/),
+  }).min(1),
 
   likeVideo: Joi.object({
     liked: Joi.boolean().required(),
