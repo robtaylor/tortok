@@ -73,6 +73,7 @@ class SeederService {
       const options = {
         name,
         announce: [
+          'wss://tortok-tracker.fly.dev',
           'wss://tracker.openwebtorrent.com',
           'wss://tracker.btorrent.xyz',
           'wss://tracker.webtorrent.dev'
