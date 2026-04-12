@@ -302,32 +302,35 @@ phase, we have a working product; we just have fewer of the features.
 
 **Phase 0b — Deploy to Fly.io and stand up seeder infrastructure (per ADR-008).**
 
-Step 1 is deploying the current backend monolith (Express + embedded
-seeder) to Fly.io as-is, replacing the Cloud Run deployment. This
-proves the deploy pipeline, gets secrets on Fly, and gives us a
-working production target before we start splitting services. The
-seeder extraction happens as a follow-up once the monolith is
-healthy on Fly.
+Status: **Complete** — 2026-04-12
 
-- Deploy the backend monolith to Fly.io `lhr` (London). Expand to
-  additional regions once traffic justifies it.
+All four layers of ADR-008 are deployed and verified:
+
+- ✅ **Backend monolith on Fly.io** — `tortok-api.fly.dev` (lhr).
+  Express + embedded seeder, Fly Postgres. Expand to additional
+  regions once traffic justifies it.
+- ✅ **L1 — R2 origin storage.** Cloudflare R2 bucket with public
+  access. Video HLS segments served via R2 CDN URL. Backend
+  `express.static` route for `/content` retained as fallback but
+  new content points at R2.
+- ✅ **L2 — Standalone seeder on Fly.io.** `tortok-seeder.fly.dev`
+  (lhr). Pull-through cache: polls API for videos, downloads HLS
+  from R2, seeds via WebTorrent. Persistent volume for content
+  cache. Same Docker image as L4.
+- ✅ **L3 — Own tracker.** `tortok-tracker.fly.dev` (lhr).
+  `bittorrent-tracker` with WSS. Client and seeder announce lists
+  prefer our tracker, community trackers as fallback.
+- ✅ **L4 — Community seeder.** Same Docker image as L2 with
+  self-hosting guide (`seeder/SELF-HOSTING.md`) covering Docker,
+  Unraid, Synology DSM, TrueNAS SCALE, Umbrel.
+- ✅ **STUN/TURN.** coturn on Fly.io (`tortok-turn.fly.dev`).
+  Time-limited HMAC credentials served via `/turn/credentials`
+  API endpoint. Integrated into iOS WebTorrent bridge and
+  standalone seeder.
 - Server-side seeding policy: **demand-pull caching only** at
   launch. Pre-warming strategies (most-views, trending,
   recently-added) are documented for later — see
   `open-problems/seeding-policy.md`.
-- Extract the WebTorrent seeder from the Express process into a
-  standalone Node/TypeScript service. Package as a Docker image with
-  sensible defaults. The same image runs on our production
-  infrastructure and on a user's home server — this is L4 of
-  ADR-008.
-- Stand up our own `bittorrent-tracker` instances on Fly.io per L3
-  of ADR-008. Update the client's tracker list to prefer our
-  trackers, with the community trackers as fallback.
-- Migrate the existing seed content from `backend/content/` to
-  Cloudflare R2 per L1 of ADR-008. The backend's `express.static`
-  route for `/content` is removed; URLs now point at R2.
-- Publish the Docker image and a self-hosting guide (Docker, Unraid,
-  Synology, TrueNAS, Umbrel) so users can contribute to the swarm.
 
 **Phase 1 — Expo skeleton.**
 - Scaffold the Expo project. Pick a navigation approach (Expo Router) and
