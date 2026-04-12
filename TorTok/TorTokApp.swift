@@ -11,7 +11,6 @@ import SwiftUI
 @main
 struct TorTokApp: App {
     // Shared services
-    @StateObject private var torrentEngine = TorrentEngine()
     @StateObject private var apiClient = APIClient()
     @StateObject private var authManager: AuthManager
     @StateObject private var webTorrentBridge = WebTorrentBridge.shared
@@ -20,7 +19,6 @@ struct TorTokApp: App {
         // Check for UI test arguments
         if CommandLine.arguments.contains("-clearAuth") {
             UserDefaults.standard.removeObject(forKey: "tortok.auth.token")
-            UserDefaults.standard.removeObject(forKey: "tortok.auth.refresh_token")
         }
         _authManager = StateObject(wrappedValue: AuthManager())
     }
@@ -28,7 +26,6 @@ struct TorTokApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(torrentEngine)
                 .environmentObject(apiClient)
                 .environmentObject(authManager)
                 .environmentObject(webTorrentBridge)
@@ -99,7 +96,6 @@ struct MainTabView: View {
 
 #Preview {
     ContentView()
-        .environmentObject(TorrentEngine())
         .environmentObject(APIClient())
         .environmentObject(AuthManager())
 }

@@ -29,32 +29,12 @@ let package = Package(
             dependencies: [
                 "Alamofire",
                 "Kingfisher",
-                .product(name: "GRDB", package: "GRDB.swift"),
-                "LibTorrentBridge"
+                .product(name: "GRDB", package: "GRDB.swift")
             ],
             path: "TorTok",
             resources: [
                 .process("Resources/webtorrent-bridge.html"),
                 .process("Resources/Assets.xcassets")
-            ]
-        ),
-
-        // LibTorrent Objective-C++ Bridge
-        .target(
-            name: "LibTorrentBridge",
-            dependencies: [],
-            path: "TorTok/Services/Torrent/Bridge",
-            publicHeadersPath: "include",
-            cxxSettings: [
-                .headerSearchPath("../../../../../libtorrent/include"),
-                .define("TORRENT_USE_OPENSSL"),
-                .define("TORRENT_USE_I2P", to: "0"),
-                .unsafeFlags(["-std=c++17"])
-            ],
-            linkerSettings: [
-                .linkedLibrary("torrent-rasterbar"),
-                .linkedFramework("Security"),
-                .linkedFramework("SystemConfiguration")
             ]
         ),
 
@@ -64,6 +44,5 @@ let package = Package(
             dependencies: ["TorTok"],
             path: "TorTokTests"
         )
-    ],
-    cxxLanguageStandard: .cxx17
+    ]
 )

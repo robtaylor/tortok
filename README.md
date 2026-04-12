@@ -28,7 +28,7 @@ TorTok combines the best of federated social networks (like Mastodon) with peer-
 - **Zero Hosting Costs**: Peer-to-peer delivery eliminates video bandwidth costs (~90% savings)
 - **Federated Metadata**: User profiles, posts, and social graphs managed by federated metadata nodes
 - **iOS-First MVP**: Native iOS app with foreground seeding and battery optimization
-- **Open Source**: MIT licensed, built on proven technologies (LibTorrent, P2P Media Loader)
+- **Open Source**: MIT licensed, built on proven technologies (WebTorrent, WebRTC, HLS)
 - **Easy Deployment**: Simple deployment of metadata nodes on cloud platforms
 - **Instance Moderation**: Distributed trust model with instance-level controls
 
@@ -98,8 +98,8 @@ See [Research Summary](docs/research-summary.md) for complete findings.
 - **Language**: Swift 5.9+
 - **UI Framework**: SwiftUI
 - **Video**: AVFoundation (recording, encoding, playback)
-- **Torrent**: LibTorrent (C++ with Obj-C++ bridge)
-- **P2P**: P2P Media Loader + WebRTC
+- **Torrent**: WebTorrent (JS in a hidden WKWebView — see ADR-001)
+- **P2P**: WebRTC via WebTorrent
 - **Networking**: Alamofire
 - **Caching**: GRDB.swift (SQLite)
 - **Image Loading**: Kingfisher
