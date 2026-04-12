@@ -20,21 +20,8 @@ struct Video: Identifiable, Codable, Equatable {
     var isLiked: Bool
     let createdAt: Date
 
-    enum CodingKeys: String, CodingKey {
-        case id
-        case user
-        case caption
-        case magnetLink = "magnet_link"
-        case hlsURL = "hls_url"
-        case thumbnailURL = "thumbnail_url"
-        case durationSeconds = "duration_seconds"
-        case width
-        case height
-        case hashtags
-        case likeCount = "like_count"
-        case isLiked = "is_liked"
-        case createdAt = "created_at"
-    }
+    // No CodingKeys needed - backend sends camelCase which matches property names
+    // Backend keys: magnetLink, hlsURL, thumbnailURL, durationSeconds, likeCount, isLiked, createdAt
 
     static func == (lhs: Video, rhs: Video) -> Bool {
         lhs.id == rhs.id
@@ -48,11 +35,7 @@ struct FeedResponse: Codable {
     let nextCursor: String?
     let hasMore: Bool
 
-    enum CodingKeys: String, CodingKey {
-        case videos
-        case nextCursor = "next_cursor"
-        case hasMore = "has_more"
-    }
+    // No CodingKeys needed - backend sends camelCase which matches property names
 }
 
 // MARK: - Create Video Request
