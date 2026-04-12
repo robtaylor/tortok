@@ -18,7 +18,7 @@ const ANNOUNCE_LIST = [
   'wss://tracker.webtorrent.dev'
 ];
 
-const client = new WebTorrent();
+let client = null;
 const seededVideos = new Map(); // videoId -> { infoHash, name }
 
 function log(msg) {
@@ -205,10 +205,10 @@ function startHealthServer() {
   const server = http.createServer((req, res) => {
     if (req.url === '/health' || req.url === '/') {
       const stats = {
-        status: 'ok',
-        torrents: client.torrents.length,
-        peers: client.torrents.reduce((sum, t) => sum + t.numPeers, 0),
-        uploadSpeed: client.torrents.reduce((sum, t) => sum + t.uploadSpeed, 0),
+        status: client ? 'ok' : 'initializing',
+        torrents: client ? client.torrents.length : 0,
+        peers: client ? client.torrents.reduce((sum, t) => sum + t.numPeers, 0) : 0,
+        uploadSpeed: client ? client.torrents.reduce((sum, t) => sum + t.uploadSpeed, 0) : 0,
         seededVideos: seededVideos.size
       };
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -244,6 +244,17 @@ async function main() {
   log(`  Tracker: ${TRACKER_URL}`);
   log(`  Poll interval: ${POLL_INTERVAL_MS}ms`);
 
+  // Fetch TURN credentials for WebRTC NAT traversal
+  let iceServers = [{ urls: 'stun:tortok-turn.fly.dev:3478' }];
+  try {
+    const creds = await fetchJSON(`${API_URL}/turn/credentials`);
+    if (creds.iceServers) iceServers = creds.iceServers;
+    log(`Fetched ${iceServers.length} ICE servers from API`);
+  } catch (e) {
+    log(`Failed to fetch TURN credentials, using STUN only: ${e.message}`);
+  }
+
+  client = new WebTorrent({ tracker: { rtcConfig: { iceServers } } });
   client.on('error', (e) => {
     err(`WebTorrent error: ${e.message}`);
   });

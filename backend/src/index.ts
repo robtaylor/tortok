@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 import path from 'path';
 import { initializeDatabase } from './db';
 import authRoutes from './routes/auth';
@@ -67,6 +68,35 @@ app.get('/.well-known/tortok', (req, res) => {
     registrationOpen: true,
     federationEnabled: false, // TODO: Implement federation
     supportedProtocols: ['tortok-v1'],
+  });
+});
+
+// TURN credential endpoint — returns time-limited HMAC credentials
+// for WebRTC NAT traversal. Uses the same shared secret as coturn.
+app.get('/turn/credentials', (req, res) => {
+  const secret = process.env.TURN_SECRET;
+  if (!secret) {
+    res.json({ iceServers: [{ urls: 'stun:tortok-turn.fly.dev:3478' }] });
+    return;
+  }
+
+  const ttl = 24 * 60 * 60; // 24 hours
+  const expiry = Math.floor(Date.now() / 1000) + ttl;
+  const username = `${expiry}:tortok`;
+  const hmac = crypto.createHmac('sha1', secret);
+  hmac.update(username);
+  const credential = hmac.digest('base64');
+
+  res.json({
+    iceServers: [
+      { urls: 'stun:tortok-turn.fly.dev:3478' },
+      {
+        urls: 'turn:tortok-turn.fly.dev:3478',
+        username,
+        credential,
+      }
+    ],
+    ttl,
   });
 });
 

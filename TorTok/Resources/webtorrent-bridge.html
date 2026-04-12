@@ -12,9 +12,30 @@
 (function() {
     'use strict';
 
-    const client = new WebTorrent();
+    const API_URL = 'https://tortok-api.fly.dev';
+    let client = null;
     const torrents = new Map(); // infoHash -> torrent
     const pendingRequests = new Map(); // requestId -> { resolve, reject }
+
+    // Fetch TURN credentials and initialize WebTorrent with ICE config
+    async function initClient() {
+        let iceServers = [{ urls: 'stun:tortok-turn.fly.dev:3478' }];
+        try {
+            const res = await fetch(API_URL + '/turn/credentials');
+            const data = await res.json();
+            if (data.iceServers) iceServers = data.iceServers;
+        } catch (e) {
+            log('Failed to fetch TURN credentials, using STUN only: ' + e.message);
+        }
+        client = new WebTorrent({
+            tracker: { rtcConfig: { iceServers } }
+        });
+        client.on('error', (err) => {
+            log('Client error: ' + err.message);
+        });
+        log('WebTorrent client initialized with ' + iceServers.length + ' ICE servers');
+        sendEvent('ready', { version: WebTorrent.VERSION });
+    }
 
     // Log to Swift
     function log(message) {
@@ -229,9 +250,13 @@
         });
     };
 
-    // Signal that bridge is ready
-    log('WebTorrent Bridge initialized');
-    sendEvent('ready', { version: WebTorrent.VERSION });
+    // Initialize client with TURN credentials, then signal ready
+    log('WebTorrent Bridge initializing...');
+    initClient().catch(e => {
+        log('Init failed, falling back to default client: ' + e.message);
+        client = new WebTorrent();
+        sendEvent('ready', { version: WebTorrent.VERSION });
+    });
 })();
 </script>
 </body>
