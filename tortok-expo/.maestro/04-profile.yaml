@@ -1,0 +1,23 @@
+appId: com.anonymous.tortokexpo
+---
+# Test: Profile Screen
+# Navigates to profile and verifies user info is displayed
+
+- launchApp
+
+# Login first (if not already)
+- runFlow:
+    when:
+      visible: "Sign in to continue"
+    file: helpers/login.yaml
+
+# Navigate to profile tab
+- tapOn: "Profile"
+
+# Should display profile info
+- assertVisible:
+    text: "Profile"
+    timeout: 3000
+- assertVisible: "Followers"
+- assertVisible: "Following"
+- assertVisible: "Videos"

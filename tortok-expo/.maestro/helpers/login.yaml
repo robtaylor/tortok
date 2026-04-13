@@ -1,0 +1,12 @@
+# Helper: Login with test credentials
+- tapOn:
+    id: "emailTextField"
+- inputText: "maestro-test@example.com"
+- tapOn:
+    id: "passwordTextField"
+- inputText: "TestPass123!"
+- tapOn:
+    id: "signInButton"
+- assertVisible:
+    text: "Home"
+    timeout: 5000

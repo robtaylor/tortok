@@ -1,0 +1,25 @@
+appId: com.anonymous.tortokexpo
+---
+# Test: Logout
+# Verifies logout returns to login screen
+
+- launchApp
+
+# Login first (if not already)
+- runFlow:
+    when:
+      visible: "Sign in to continue"
+    file: helpers/login.yaml
+
+# Navigate to profile
+- tapOn: "Profile"
+
+# Tap logout (sign-out icon)
+- tapOn:
+    point: "90%,6%"
+
+# Should return to login screen
+- assertVisible:
+    text: "TorTok"
+    timeout: 3000
+- assertVisible: "Sign in to continue"
