@@ -70,7 +70,7 @@ export default function RegisterScreen() {
         </View>
 
         {error ? (
-          <Text style={styles.error} accessibilityLabel="registerErrorMessage">
+          <Text style={styles.error} testID="registerErrorMessage">
             {error}
           </Text>
         ) : null}
@@ -83,7 +83,7 @@ export default function RegisterScreen() {
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
-          accessibilityLabel="registerEmailTextField"
+          testID="registerEmailTextField"
         />
 
         <TextInput
@@ -93,7 +93,7 @@ export default function RegisterScreen() {
           value={username}
           onChangeText={setUsername}
           autoCapitalize="none"
-          accessibilityLabel="registerUsernameTextField"
+          testID="registerUsernameTextField"
         />
 
         <TextInput
@@ -102,7 +102,7 @@ export default function RegisterScreen() {
           placeholderTextColor="#888"
           value={displayName}
           onChangeText={setDisplayName}
-          accessibilityLabel="registerDisplayNameTextField"
+          testID="registerDisplayNameTextField"
         />
 
         <TextInput
@@ -112,7 +112,7 @@ export default function RegisterScreen() {
           value={password}
           onChangeText={setPassword}
           secureTextEntry
-          accessibilityLabel="registerPasswordTextField"
+          testID="registerPasswordTextField"
         />
 
         <TextInput
@@ -122,14 +122,14 @@ export default function RegisterScreen() {
           value={confirmPassword}
           onChangeText={setConfirmPassword}
           secureTextEntry
-          accessibilityLabel="registerConfirmPasswordTextField"
+          testID="registerConfirmPasswordTextField"
         />
 
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleRegister}
           disabled={loading}
-          accessibilityLabel="createAccountButton"
+          testID="createAccountButton"
         >
           {loading ? (
             <ActivityIndicator color="#000" />

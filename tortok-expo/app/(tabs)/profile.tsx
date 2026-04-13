@@ -20,7 +20,7 @@ export default function ProfileScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Profile</Text>
-        <TouchableOpacity onPress={signOut} style={styles.logoutButton}>
+        <TouchableOpacity onPress={signOut} style={styles.logoutButton} testID="logoutButton">
           <FontAwesome name="sign-out" size={20} color="#fff" />
         </TouchableOpacity>
       </View>
@@ -31,8 +31,8 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      <Text style={styles.displayName}>{user.displayName}</Text>
-      <Text style={styles.username}>@{user.username}</Text>
+      <Text style={styles.displayName} testID="displayName">{user.displayName}</Text>
+      <Text style={styles.username} testID="username">@{user.username}</Text>
 
       <View style={styles.statsRow}>
         <StatView count={0} label="Followers" />

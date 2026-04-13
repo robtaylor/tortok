@@ -150,8 +150,8 @@ export default function FeedScreen() {
 
   if (videos.length === 0) {
     return (
-      <View style={styles.centered} accessibilityLabel="emptyFeedView">
-        <Text style={styles.emptyTitle} accessibilityLabel="emptyFeedTitle">
+      <View style={styles.centered} testID="emptyFeedView">
+        <Text style={styles.emptyTitle} testID="emptyFeedTitle">
           No videos yet
         </Text>
         <Text style={styles.emptySubtitle}>Be the first to post!</Text>

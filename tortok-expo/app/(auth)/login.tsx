@@ -48,7 +48,7 @@ export default function LoginScreen() {
         <Text style={styles.subtitle}>Sign in to continue</Text>
 
         {error ? (
-          <Text style={styles.error} accessibilityLabel="errorMessage">
+          <Text style={styles.error} testID="errorMessage">
             {error}
           </Text>
         ) : null}
@@ -61,7 +61,7 @@ export default function LoginScreen() {
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
-          accessibilityLabel="emailTextField"
+          testID="emailTextField"
         />
 
         <TextInput
@@ -71,14 +71,14 @@ export default function LoginScreen() {
           value={password}
           onChangeText={setPassword}
           secureTextEntry
-          accessibilityLabel="passwordTextField"
+          testID="passwordTextField"
         />
 
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleLogin}
           disabled={loading}
-          accessibilityLabel="signInButton"
+          testID="signInButton"
         >
           {loading ? (
             <ActivityIndicator color="#000" />
@@ -90,7 +90,7 @@ export default function LoginScreen() {
         <TouchableOpacity
           onPress={() => router.push('/(auth)/register')}
           style={styles.linkButton}
-          accessibilityLabel="signUpButton"
+          testID="signUpButton"
         >
           <Text style={styles.linkText}>
             Don't have an account? <Text style={styles.linkBold}>Sign Up</Text>
