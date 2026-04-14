@@ -44,6 +44,10 @@ export type AuthResponse = {
     displayName: string;
     email: string;
     avatarURL: string | null;
+    bio: string | null;
+    followerCount: number;
+    followingCount: number;
+    videoCount: number;
   };
 };
 

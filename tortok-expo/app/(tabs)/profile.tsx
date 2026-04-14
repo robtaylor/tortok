@@ -34,10 +34,12 @@ export default function ProfileScreen() {
       <Text style={styles.displayName} testID="displayName">{user.displayName}</Text>
       <Text style={styles.username} testID="username">@{user.username}</Text>
 
+      {user.bio ? <Text style={styles.bio} testID="bio">{user.bio}</Text> : null}
+
       <View style={styles.statsRow}>
-        <StatView count={0} label="Followers" />
-        <StatView count={0} label="Following" />
-        <StatView count={0} label="Videos" />
+        <StatView count={user.followerCount} label="Followers" />
+        <StatView count={user.followingCount} label="Following" />
+        <StatView count={user.videoCount} label="Videos" />
       </View>
     </ScrollView>
   );
@@ -90,6 +92,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 24,
+  },
+  bio: {
+    color: '#fff',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 24,
+    paddingHorizontal: 24,
   },
   statsRow: {
     flexDirection: 'row',

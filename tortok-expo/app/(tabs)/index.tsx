@@ -1,15 +1,16 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   FlatList,
   Dimensions,
+  Pressable,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
   ViewToken,
 } from 'react-native';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { useVideoPlayer, VideoView, type VideoPlayerStatus } from 'expo-video';
 import { useQuery } from '@tanstack/react-query';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { getFeed, likeVideo, type Video } from '@/lib/api';
@@ -30,6 +31,9 @@ function VideoItem({
 }) {
   const [liked, setLiked] = useState(video.isLiked);
   const [likeCount, setLikeCount] = useState(video.likeCount);
+  const [status, setStatus] = useState<VideoPlayerStatus>('loading');
+  const [isPaused, setIsPaused] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   const videoUrl = video.hlsURL || '';
   const player = useVideoPlayer(videoUrl, (p) => {
@@ -37,14 +41,34 @@ function VideoItem({
     p.muted = false;
   });
 
+  // Track player status for buffering/error overlays
+  useEffect(() => {
+    if (!player) return;
+    const sub = player.addListener('statusChange', (payload) => {
+      setStatus(payload.status);
+    });
+    return () => sub.remove();
+  }, [player, retryKey]);
+
   // Play/pause based on visibility
   if (player) {
-    if (isActive && videoUrl) {
+    if (isActive && videoUrl && !isPaused) {
       player.play();
     } else {
       player.pause();
     }
   }
+
+  const handleTogglePlay = () => {
+    setIsPaused((p) => !p);
+  };
+
+  const handleRetry = () => {
+    if (!player) return;
+    player.replace(videoUrl);
+    setStatus('loading');
+    setRetryKey((k) => k + 1);
+  };
 
   const handleLike = async () => {
     if (!token) return;
@@ -62,17 +86,48 @@ function VideoItem({
   return (
     <View style={styles.videoContainer}>
       {videoUrl ? (
-        <VideoView
-          player={player}
-          style={styles.video}
-          contentFit="cover"
-          nativeControls={false}
-        />
+        <Pressable style={styles.video} onPress={handleTogglePlay} testID="videoPressable">
+          <VideoView
+            player={player}
+            style={styles.video}
+            contentFit="cover"
+            nativeControls={false}
+          />
+        </Pressable>
       ) : (
         <View style={[styles.video, styles.noVideo]}>
           <Text style={styles.noVideoText}>No video available</Text>
         </View>
       )}
+
+      {/* Buffering indicator */}
+      {videoUrl && status === 'loading' ? (
+        <View style={styles.centerOverlay} pointerEvents="none" testID="videoBuffering">
+          <ActivityIndicator size="large" color="#fff" />
+        </View>
+      ) : null}
+
+      {/* Paused indicator */}
+      {videoUrl && status === 'readyToPlay' && isActive && isPaused ? (
+        <View style={styles.centerOverlay} pointerEvents="none" testID="videoPaused">
+          <FontAwesome name="play" size={60} color="rgba(255,255,255,0.85)" />
+        </View>
+      ) : null}
+
+      {/* Error overlay with retry */}
+      {videoUrl && status === 'error' ? (
+        <View style={styles.centerOverlay} testID="videoError">
+          <FontAwesome name="exclamation-triangle" size={36} color="#ff4444" />
+          <Text style={styles.errorOverlayText}>Failed to load video</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={handleRetry}
+            testID="videoRetryButton"
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {/* Overlay: user info + caption */}
       <View style={styles.bottomOverlay}>
@@ -217,6 +272,29 @@ const styles = StyleSheet.create({
   noVideoText: {
     color: '#888',
     fontSize: 16,
+  },
+  centerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  errorOverlayText: {
+    color: '#fff',
+    fontSize: 16,
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 6,
+    backgroundColor: '#fff',
+  },
+  retryButtonText: {
+    color: '#000',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   bottomOverlay: {
     position: 'absolute',
