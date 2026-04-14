@@ -2,18 +2,18 @@ import WebTorrent from 'webtorrent';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import http from 'http';
+import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const client = new WebTorrent();
-const torrentPath = path.join(__dirname, 'test_video.torrent');
-const hlsDir = path.join(__dirname, 'hls');
+const videoPath = path.join(__dirname, 'test_video.mp4');
 
 console.log('🌱 Starting WebTorrent Seeder...');
-console.log('📁 Seeding from:', hlsDir);
+console.log('📁 Seeding file:', videoPath);
 
 // Seed the content
-client.seed(hlsDir, {
+client.seed(videoPath, {
   name: 'tortok-test-video',
   announce: [
     'wss://tracker.openwebtorrent.com',
@@ -21,6 +21,9 @@ client.seed(hlsDir, {
     'wss://tracker.webtorrent.dev'
   ]
 }, (torrent) => {
+  // Persist the fresh magnet + .torrent so clients can pick them up
+  fs.writeFileSync(path.join(__dirname, 'magnet.txt'), torrent.magnetURI + '\n');
+  fs.writeFileSync(path.join(__dirname, 'test_video.torrent'), torrent.torrentFile);
   console.log('\n✅ Seeding started!');
   console.log('📊 Torrent Info:');
   console.log('   Name:', torrent.name);
@@ -41,16 +44,14 @@ client.seed(hlsDir, {
   }, 10000);
 });
 
-// Also start an HTTP server to serve the files directly (for web seed / fallback)
-const httpPort = 8081;
+// Also start an HTTP server to serve the mp4 directly (BEP-19 webseed fallback)
+const httpPort = 8090;
 const httpServer = http.createServer((req, res) => {
-  const url = new URL(req.url, `http://localhost:${httpPort}`);
-  const filePath = path.join(hlsDir, url.pathname);
-
-  // CORS headers for cross-origin access
+  // Only serve the test video (any path returns it)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Range');
+  res.setHeader('Content-Type', 'video/mp4');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -58,30 +59,20 @@ const httpServer = http.createServer((req, res) => {
     return;
   }
 
-  import('fs').then(fs => {
-    fs.readFile(filePath, (err, data) => {
-      if (err) {
-        res.writeHead(404);
-        res.end('Not found');
-        return;
-      }
-
-      // Set content type
-      if (filePath.endsWith('.m3u8')) {
-        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-      } else if (filePath.endsWith('.ts')) {
-        res.setHeader('Content-Type', 'video/mp2t');
-      }
-
-      res.writeHead(200);
-      res.end(data);
-    });
+  fs.readFile(videoPath, (err, data) => {
+    if (err) {
+      res.writeHead(404);
+      res.end('Not found');
+      return;
+    }
+    res.writeHead(200);
+    res.end(data);
   });
 });
 
 httpServer.listen(httpPort, () => {
   console.log(`\n🌐 HTTP fallback server running at http://localhost:${httpPort}`);
-  console.log(`   HLS URL: http://localhost:${httpPort}/playlist.m3u8`);
+  console.log(`   Video URL: http://localhost:${httpPort}/test_video.mp4`);
 });
 
 // Handle shutdown

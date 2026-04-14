@@ -1,1 +1,1 @@
-magnet:?xt=urn:btih:a27e31b3f6baf0a2f21f65dbbaddfbd0c9cd58f7&dn=tortok-test-video&tr=wss://tracker.openwebtorrent.com&tr=wss://tracker.btorrent.xyz&tr=wss://tracker.webtorrent.dev
+magnet:?xt=urn:btih:1b8cce932a78923cb57428537829a9e688eed938&dn=tortok-test-video&tr=wss%3A%2F%2Ftracker.openwebtorrent.com&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.webtorrent.dev
