@@ -29,7 +29,9 @@ map — tell the user so we can fix it.
 
 ## Phases of development
 
-From ADR-006. Phases 0a, 0b, and 1 are **complete**. We are entering **Phase 2**.
+From ADR-006. Phases 0a, 0b, 1, and 5 are **complete** (Phase 5 was
+executed early since the project was never released — Swift codebase
+deleted 2026-04-14). We are entering **Phase 2**.
 
 | Phase | Name | What it delivers | Blocks |
 |-------|------|------------------|--------|
@@ -39,7 +41,7 @@ From ADR-006. Phases 0a, 0b, and 1 are **complete**. We are entering **Phase 2**
 | **2** | Cross-platform P2P | WebTorrent integrated in Expo client, tested on iOS / Android / web, P2P offload measured, Hermes WebRTC validated | seeding-policy.md (client side); open Q #1, #12 |
 | **3** | PDS standoff | Our own atproto PDS forked from reference impl, `tortok.video.post` Lexicon live, client publishes via `@atproto/api`, legacy users migrated | moderation.md; open Q #6, #8, #9 |
 | **4** | AppView cutover | Own AppView subscribes to own PDS, indexes records, feed endpoint moves off legacy backend | view-counting.md (if ranking on views); open Q #4 |
-| **5** | Retire Swift | Swift codebase archived | — |
+| **5** | Retire Swift | Swift codebase deleted (done early 2026-04-14) | — |
 
 **How to use this table.** Before starting a unit of work, identify
 which phase it belongs to. Before *finishing* a phase, check whether

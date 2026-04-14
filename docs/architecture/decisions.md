@@ -390,7 +390,23 @@ marking the phase complete.
   worker. Each has a clear job.
 
 **Phase 5 — Retire Swift.**
-- Archive the Swift codebase. Any remaining consumers migrate.
+
+Status: **Complete** — 2026-04-14 (executed early).
+
+The Swift codebase was deleted immediately after Phase 1 closeout rather
+than carried as a reference implementation through Phases 2–4. Rationale:
+the project was never released, so there are no "remaining consumers" to
+migrate and no value in a live reference implementation — the Expo app
+reached Swift parity in Phase 1, the Swift prototype's architectural
+intent is captured in the ADRs and `designs/` specs, and keeping a dead
+tree of ~230KB of Swift adds navigation friction for every future
+session. Originally-planned `TorTok/` removal deferred until now so the
+parity audit at Phase 1 closeout had a reference to check against; once
+that audit passed, the Swift tree had no further purpose.
+
+Historical references to specific Swift files in this document and in
+`designs/` are preserved as-is — they document what the Swift prototype
+was, not what still exists.
 
 ---
 
