@@ -735,11 +735,24 @@ not decided here.
    carrier-network behaviour actually matter.
 
 2. **Client seeding policy: scroll-back window (policy 2 from
-   `seeding-policy.md`).** The prototype seeds the last 5 watched
-   videos for 30 minutes post-view, seeds only while the app is in
-   foreground, and stops seeding below 30% battery. Desktop/web
-   clients default to the more aggressive battery-gated policy 3
-   described in the open-problem file.
+   `seeding-policy.md`), Wi-Fi only on mobile.** The prototype
+   seeds the last 5 watched videos for 30 minutes post-view, seeds
+   only while the app is in foreground, stops seeding below 30%
+   battery, and **does not seed over cellular** — only when the
+   device reports a Wi-Fi connection. Desktop/web clients default
+   to the more aggressive battery-gated policy 3 described in the
+   open-problem file (no network-type gate, since they're assumed
+   wired/Wi-Fi).
+
+   The Wi-Fi gate is a preemptive cost control, not a battery
+   concession. WebRTC on mobile requires TURN relay for any peer
+   behind symmetric NAT, which is common on carrier networks.
+   TURN relay bytes cost us money on our coturn box (deployed Phase
+   0b); if 20–40% of cellular peers end up relayed, the ADR-008
+   "~50% P2P offload" envelope collapses because the swarm's
+   "free" bytes become paid relay bytes. Gating seeding to Wi-Fi
+   keeps relay load bounded to home-router NAT (mostly cone NAT,
+   direct-peer connectable) where it belongs.
 
    The starting numbers (N=5, M=30, battery=30%) are guesses
    calibrated against the 2024-era libtorrent battery table in
@@ -784,6 +797,12 @@ not decided here.
   the swarm, but the 15–25%/hour battery cost in the "seed while
   open" mode will drive users away faster than we can apologise.
   Policy 3 is the desktop/web default, not the mobile default.
+- **Allowing mobile seeding over cellular.** Maximises theoretical
+  swarm contribution, but symmetric NAT on cellular networks
+  forces bidirectional TURN relay. That shifts the bytes from
+  "free peer" to "paid coturn," undoing the cost model. Block
+  cellular seeding at the client, lift if future measurements
+  show carrier-NAT behaviour has changed.
 - **Decide the WebTorrent-fails fallback now.** Tempting for
   completeness, but we'd be choosing between two bad options
   without the measurement that tells us which is less bad.

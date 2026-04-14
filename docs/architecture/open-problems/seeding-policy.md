@@ -134,12 +134,18 @@ load, mobile clients contribute opportunistically.
 
 ### Resolved in ADR-009 (2026-04-14)
 
-Mobile ships with **policy 2 (scroll-back window)**: seed the last
-5 videos watched for 30 minutes post-view, foreground only, battery
-> 30%. Desktop/web ship with **policy 3 (battery-gated aggressive)**.
+Mobile ships with **policy 2 (scroll-back window), Wi-Fi only**:
+seed the last 5 videos watched for 30 minutes post-view, foreground
+only, battery > 30%, and **not over cellular**. Desktop/web ship
+with **policy 3 (battery-gated aggressive)**.
+
+The Wi-Fi gate is a cost control, not a battery concession —
+cellular NAT typically forces TURN relay, which costs us money on
+coturn. Home-router Wi-Fi is mostly direct-connectable.
 
 The numbers are starting guesses. The Phase 2 spike measures actual
-battery impact; if policy 2 costs more than ~5%/hour in practice,
+battery impact and TURN relay rate; if policy 2 costs more than
+~5%/hour in practice (or TURN relay rate stays high even on Wi-Fi),
 degrade to policy 1 (on-demand only) in a new ADR that supersedes
 ADR-009's policy clause.
 
