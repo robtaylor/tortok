@@ -809,16 +809,26 @@ not decided here.
   Deliberate "decide later" is cheaper than a premature ADR we
   then supersede.
 
-**Spike implementation notes (Hermes quirks, 2026-04-14).** The
-iOS-simulator half of the spike is now green: two peers handshake
-over WebRTC datachannels and exchange BitTorrent pieces end to
-end. Getting there surfaced eight compatibility issues between
-WebTorrent's Node/browser codepaths and Hermes. They are not
-architectural decisions — they live here rather than in a README
-because anyone re-deriving the stack (Android, future RN upgrade,
-new engine) will hit the same list.
+**Spike implementation notes (Hermes + web quirks, 2026-04-14).**
+All three simulator targets (iOS, Android emulator, Expo web in
+headless Chrome) are now green: peers handshake over WebRTC
+datachannels and exchange BitTorrent protocol traffic end to end.
+On iOS and Android the spike measured `Downloaded > 0` against the
+local seeder; on web the same magnet reaches the seeder, completes
+the metadata exchange, and the browser uploads ~200 KB of bitfield
+/ wire-protocol traffic to the four other peers (seeder + 2 iOS +
+Android). The web client doesn't pull file pieces because no
+consumer (`torrent.files[0].appendTo()` etc.) is wired up in the
+spike — that's a feed-integration concern, not a transport-layer
+one. Getting there surfaced eight Hermes compat gaps and three
+additional web-only ones. They are not architectural decisions —
+they live here rather than in a README because anyone re-deriving
+the stack (future RN upgrade, new engine, web framework swap) will
+hit the same list.
 
-Runtime globals — `tortok-expo/lib/webtorrent/polyfills.ts`:
+Runtime globals — `tortok-expo/lib/webtorrent/polyfills.native.ts`
+on Hermes, `polyfills.web.ts` on web (Metro picks the platform
+extension automatically):
 
 1. **`globalThis.crypto` with `getRandomValues`.** `uint8-util`
    reads `self.crypto.getRandomValues` at module-init time; Hermes
@@ -881,19 +891,54 @@ WebCrypto / WebRTC shim patches — in `polyfills.ts`:
    says algorithm names are case-insensitive — this is a QuickCrypto
    spec-compliance gap we compensate for, not a webtorrent bug).
 
-Open compat debt: the web bundle (Expo static renderer) still
-fails because SSG runs in Node and touches `webrtc-polyfill/lib/Blob.js`
-during module graph analysis. The spike sidesteps this with a
-lazy dynamic import inside the Start handler, so SSG never sees
-WebTorrent. A proper fix (either stub webrtc-polyfill for SSG or
-move WebTorrent behind a client-only guard) is deferred until we
-actually wire the feed up.
+Web-only quirks (resolved 2026-04-14):
+
+9. **Pin `webrtc-polyfill` to its `browser.js` entry on every
+   platform via `resolveRequest`.** Its conditional-export `node`
+   entry pulls in `lib/Blob.js`, which uses top-level await. The
+   Expo static-renderer SSG path runs Node-target bundling whose
+   minifier (SWC) cannot parse TLA, so SSG bundling fails before
+   it ever reaches our lazy `import()`. The browser entry is a
+   thin shim that just reads `RTCPeerConnection` etc. off
+   `globalThis` — exactly what we want, since the polyfill module
+   populates them on Hermes and the browser already has them.
+10. **Per-platform `crypto` resolution.** `extraNodeModules.crypto =
+    react-native-quick-crypto` is the right answer on Hermes but
+    blows up on web because rn-quick-crypto pulls in JSI bindings
+    that don't exist there. Move the alias into `resolveRequest`
+    and only apply it when `platform !== 'web'`. On web, webtorrent's
+    own `"crypto": false` browser-field stub now wins, and uint8-util
+    reads the browser's native `crypto` global.
+11. **Inject a `process` shim into `globalThis` *before* the bundle
+    script tag executes — `app/+html.tsx`.** Metro's web bundle
+    preamble does `var process = globalThis.process || {}`, which
+    captures the empty object at script-load time. Modules like
+    `end-of-stream` then read bare `process.nextTick` from that
+    captured local, so installing `globalThis.process` later from
+    `polyfills.web.ts` is too late — the local var has already
+    snapshotted. The Expo Router custom-HTML hook
+    (`app/+html.tsx`) lets us stick a tiny inline `<script>` in
+    `<head>` that populates `globalThis.process` (with a real
+    `nextTick`, an `env`, `browser=true`, etc.) before the entry
+    bundle ever runs. On Hermes this isn't needed because the RN
+    runtime supplies a `process` global before the bundle loads.
+
+Polyfill split: `polyfills.native.ts` carries the full Hermes
+compat layer (rn-webrtc imports, getStats arity patch, subtle.digest
+case wrapper, QuickCrypto install, Buffer/process/nextTick install).
+`polyfills.web.ts` is a much smaller shim that just installs Buffer
+and re-asserts `process.browser = true` — browsers ship native
+crypto, RTCPeerConnection, etc., so the heavy lifting falls away.
+Metro picks the right file via its platform-extension resolution
+(`.native.ts` / `.web.ts`); TypeScript needs a `polyfills.d.ts`
+declaration to see the platform-less import path.
 
 The simulator-only pass/fail from decision (1) above is the bar
 being chased here, not real-device support. When Phase 2 extends
-to Android and real iOS/Android hardware, expect a second round of
-quirks (most likely around TURN credentials, NetInfo-driven Wi-Fi
-gating, and the `node-datachannel` shared library on Android).
+to real iOS/Android hardware, expect another round of quirks (most
+likely around TURN credentials, NetInfo-driven Wi-Fi gating, and
+NAT traversal across cellular networks — neither simulators nor
+the local-network emulator setup exercise those paths).
 
 ---
 
