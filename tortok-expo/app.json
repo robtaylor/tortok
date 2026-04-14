@@ -33,7 +33,14 @@
     "plugins": [
       "expo-router",
       "expo-video",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access the camera.",
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access the microphone."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
