@@ -29,7 +29,7 @@ map — tell the user so we can fix it.
 
 ## Phases of development
 
-From ADR-006. Phase 0a and 0b are **complete**. We are entering **Phase 1**.
+From ADR-006. Phases 0a, 0b, and 1 are **complete**. We are entering **Phase 2**.
 
 | Phase | Name | What it delivers | Blocks |
 |-------|------|------------------|--------|

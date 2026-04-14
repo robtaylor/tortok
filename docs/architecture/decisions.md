@@ -333,6 +333,9 @@ All four layers of ADR-008 are deployed and verified:
   `open-problems/seeding-policy.md`.
 
 **Phase 1 — Expo skeleton.**
+
+Status: **Complete** — 2026-04-14
+
 - Scaffold the Expo project. Pick a navigation approach (Expo Router) and
   a state approach (React Query + Zustand or similar).
 - Reimplement login against the existing backend API (not atproto yet).
@@ -340,11 +343,19 @@ All four layers of ADR-008 are deployed and verified:
   mentally even if we don't delete it yet.
 - Implement a basic vertical feed with `expo-video` or `react-native-video`.
   Target: visual parity with the current Swift feed, no P2P yet.
-- Add UI automation tests using **Maestro** (YAML-based, cross-platform).
-  Maestro is framework-agnostic (works via accessibility labels), runs on
-  iOS and Android simulators, and works in CI. Covers: registration,
-  login, feed loading, video playback, profile. Phase 0b uses
-  XcodeBuildMCP for manual interactive testing of the Swift app.
+- Add UI automation tests. We switched from the originally-planned Maestro
+  to **Detox** (JS, runs real iOS/Android builds via XCUITest/Espresso,
+  uses `testID` props for element matching). Detox integrates more
+  cleanly with the Expo toolchain and gave us better sync handling for
+  dev builds. Coverage: registration, login, feed, profile, logout, tab
+  navigation, session persistence — 16 tests, all passing.
+
+Phase 1 delivered: Expo app shell (auth/feed/profile/record-stub tabs)
+with feature parity to the Swift prototype minus P2P — the gaps
+identified during the Phase 1 closeout audit (profile follower/following/
+video counts and bio, per-video buffering indicator, per-video error
+overlay with retry, tap-to-toggle play/pause) were all closed before
+marking the phase complete.
 
 **Phase 2 — Cross-platform P2P.**
 - Integrate WebTorrent in the Expo client. This requires verifying that
