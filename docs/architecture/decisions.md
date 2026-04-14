@@ -707,6 +707,91 @@ because it depends on catalog warmth and cache hit rate.
 
 ---
 
+## ADR-009: Phase 2 client seeding scope and policy
+
+**Status:** Accepted — 2026-04-14
+
+**Context.** Phase 2 integrates WebTorrent into the Expo client and
+measures P2P offload for the first time. Two things have to be
+decided before the spike starts: (a) what platforms the spike has
+to work on to count as a pass, and (b) what client seeding
+behaviour ships with the prototype. These were listed in
+`open-problems/seeding-policy.md` (sub-problem B) and as execution
+risks #1 (WebTorrent on Hermes) and #3 (offload ratio) above.
+
+A third related question — what to do if WebTorrent on Hermes
+turns out to be unviable — is deferred until we have spike results,
+not decided here.
+
+**Decision.**
+
+1. **Spike scope: simulators only.** Phase 2 passes when WebTorrent
+   runs in the Expo client on iOS simulator, Android emulator, and
+   Expo web, with measurable P2P traffic between two clients in the
+   same local swarm. Real-device validation is deferred — simulators
+   are sufficient to answer "does WebTorrent run on Hermes and
+   produce measurable offload," which is the risk we're buying down.
+   Real-device testing moves into the phase where battery and
+   carrier-network behaviour actually matter.
+
+2. **Client seeding policy: scroll-back window (policy 2 from
+   `seeding-policy.md`).** The prototype seeds the last 5 watched
+   videos for 30 minutes post-view, seeds only while the app is in
+   foreground, and stops seeding below 30% battery. Desktop/web
+   clients default to the more aggressive battery-gated policy 3
+   described in the open-problem file.
+
+   The starting numbers (N=5, M=30, battery=30%) are guesses
+   calibrated against the 2024-era libtorrent battery table in
+   `seeding-policy.md`. Validate during the spike: if policy 2
+   costs more than ~5%/hour in practice, degrade to policy 1
+   (on-demand only) and record it as a new ADR.
+
+3. **Fallback if WebTorrent on Hermes fails: defer.** We have
+   candidate fallbacks (desktop/web-only P2P with mobile as pure
+   consumers; drop P2P entirely and serve all bytes from R2 +
+   regional seeders). Neither is cheap to commit to blind. If the
+   spike shows Hermes WebRTC is unusable for seeding, we pick a
+   fallback then based on measured cost impact, not now based on
+   guesses.
+
+**Consequences.**
+- Phase 2 has a concrete pass/fail bar: two simulator peers swap
+  bytes through WebTorrent on Hermes, offload ratio measured.
+- The prototype has a defensible default seeding policy users can
+  live with on mobile.
+- ADR-008's "~50% P2P offload" cost-envelope number stays
+  provisional until Phase 2 produces a measurement; nothing in
+  this ADR commits us to hitting that number.
+- `open-problems/seeding-policy.md` sub-problem B is now resolved
+  — the open-problem file can be trimmed to server-side content
+  (or deleted if server-side is also considered resolved).
+- The fallback question is left explicitly deferred rather than
+  silently ignored; a future ADR picks a direction if the spike
+  forces one.
+
+**Alternatives ruled out.**
+- **Spike on real devices from the start.** More thorough, but
+  doubles the setup cost (test devices, fastlane, USB debugging)
+  for a risk (Hermes WebRTC doesn't work at all) that the
+  simulator catches just as well. Revisit once simulators are
+  green.
+- **Policy 1 (on-demand only) as the default.** Lowest battery
+  cost but also lowest P2P contribution — would likely invalidate
+  ADR-008's offload thesis before we even measure it. Keep as the
+  fallback if policy 2 is measurably too expensive.
+- **Policy 3 (battery-gated aggressive) on mobile.** Better for
+  the swarm, but the 15–25%/hour battery cost in the "seed while
+  open" mode will drive users away faster than we can apologise.
+  Policy 3 is the desktop/web default, not the mobile default.
+- **Decide the WebTorrent-fails fallback now.** Tempting for
+  completeness, but we'd be choosing between two bad options
+  without the measurement that tells us which is less bad.
+  Deliberate "decide later" is cheaper than a premature ADR we
+  then supersede.
+
+---
+
 ## Unresolved design problems
 
 Real design problems with candidate approaches live in
@@ -719,9 +804,11 @@ header stating the phase that forces the decision.
   earlier if feed ranking uses view counts. Under the external
   monetization model (see `monetization.md`) this becomes the single
   most important signal TorTok provides to creators.
-- **`seeding-policy.md`** — server side by Phase 0b (the seeder
-  container has to pick a caching behavior), client side by Phase 2
-  (when the Expo client actually seeds).
+- **`seeding-policy.md`** — server side resolved in Phase 0b
+  (demand-pull only), client side resolved in ADR-009 (scroll-back
+  window on mobile, battery-gated aggressive on desktop/web). File
+  is kept as context for the starting numbers; Phase 2 validates
+  them and any policy change supersedes ADR-009.
 - **`monetization.md`** — philosophy is decided (TorTok provides
   signals, not money movement); sub-problems around payout-destination
   lexicons and optional federated pools are the open parts. Resolve

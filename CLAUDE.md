@@ -10,10 +10,11 @@ with the user rather than pushing forward on your own.
 Before doing any non-trivial work, read (in this order):
 
 1. **`docs/architecture/decisions.md`** — The source of truth for
-   every architectural decision. Eight ADRs + a Phase 0 punch list
-   appendix + an "Open questions and risks" section with resolve-by
-   phases. If a decision is recorded here, it is the decision; do
-   not re-litigate it without a reason.
+   every architectural decision. Nine ADRs + a Phase 0 punch list
+   appendix + an "Unresolved design problems" section + an
+   "Execution risks" section, each with resolve-by phases. If a
+   decision is recorded here, it is the decision; do not re-litigate
+   it without a reason.
 2. **`docs/architecture/open-problems/`** — Things we have
    deliberately *not* decided yet. Four files (`moderation.md`,
    `view-counting.md`, `seeding-policy.md`, `monetization.md`), each
@@ -38,7 +39,7 @@ deleted 2026-04-14). We are entering **Phase 2**.
 | **0a** | Clean house | Fix B1–B6, address S1–S4, delete libtorrent stubs, commit WebTorrent seeder wiring with B4 fixed, clean docs | — |
 | **0b** | Extract seeder infra | Standalone seeder Docker image, Fly.io deploy (L2), own trackers (L3), R2 content origin (L1), self-hosting guide (L4) | seeding-policy.md (server side) |
 | **1** | Expo skeleton | Expo app logs in against existing backend, vertical feed with react-native-video, feature parity with Swift prototype minus P2P | — |
-| **2** | Cross-platform P2P | WebTorrent integrated in Expo client, tested on iOS / Android / web, P2P offload measured, Hermes WebRTC validated | seeding-policy.md (client side); open Q #1, #12 |
+| **2** | Cross-platform P2P | WebTorrent integrated in Expo client, tested on iOS / Android / web simulators, P2P offload measured, Hermes WebRTC validated | ~~seeding-policy.md (client side)~~ resolved in ADR-009; execution risks #1 and #3 |
 | **3** | PDS standoff | Our own atproto PDS forked from reference impl, `tortok.video.post` Lexicon live, client publishes via `@atproto/api`, legacy users migrated | moderation.md; open Q #6, #8, #9 |
 | **4** | AppView cutover | Own AppView subscribes to own PDS, indexes records, feed endpoint moves off legacy backend | view-counting.md (if ranking on views); open Q #4 |
 | **5** | Retire Swift | Swift codebase deleted (done early 2026-04-14) | — |

@@ -1,16 +1,23 @@
 # Open problem: Seeding policy (client and server)
 
-**Status:** Server side **resolved** (Phase 0b). Client side
-unresolved.
+**Status:** Server side **resolved** (Phase 0b, demand-pull only).
+Client side **resolved** (ADR-009, scroll-back window on mobile,
+battery-gated aggressive on desktop/web). The concrete battery
+numbers in ADR-009 are starting guesses — the Phase 2 spike
+validates them. This file is kept as context for the starting
+numbers and as the place where any policy change gets re-debated
+before a new ADR supersedes ADR-009.
 **Must resolve by:**
 - **Server pre-warming:** ~~Phase 0b~~ **Resolved.** Ship with
   demand-pull caching only for initial deploy. All three pre-warming
   strategies (most-views, trending, recently-added) are documented as
   a known next step once we have real traffic data; adding them later
   is a config change, not an architectural shift.
-- **Client seeding:** Phase 2 — the Expo client doesn't actually
-  seed until WebTorrent is integrated into the app.
-**Related ADRs:** ADR-001 (WebTorrent), ADR-008 (four-layer infra).
+- **Client seeding:** ~~Phase 2~~ **Resolved (ADR-009).** Mobile
+  default is policy 2 (scroll-back window), desktop/web default is
+  policy 3 (battery-gated aggressive). Validate during Phase 2 spike.
+**Related ADRs:** ADR-001 (WebTorrent), ADR-008 (four-layer infra),
+ADR-009 (Phase 2 client seeding scope and policy).
 
 ## Sub-problem A: Server-side pre-warming
 
@@ -125,16 +132,16 @@ All four can coexist with the self-hosted seeder ecosystem from
 ADR-008 L4 — home-server operators carry most of the sustained
 load, mobile clients contribute opportunistically.
 
-### Proposed default for Phase 2
+### Resolved in ADR-009 (2026-04-14)
 
-Ship with **policy 2 (scroll-back window)** as the mobile default:
-seed the last 5 videos watched for 30 minutes post-view, seed only
-while the app is in foreground and battery > 30%. Desktop/web default
-to policy 3 (battery-gated aggressive).
+Mobile ships with **policy 2 (scroll-back window)**: seed the last
+5 videos watched for 30 minutes post-view, foreground only, battery
+> 30%. Desktop/web ship with **policy 3 (battery-gated aggressive)**.
 
-Validate by measuring actual battery impact during Phase 2
-prototyping. If policy 2 costs more than ~5%/hour in practice,
-degrade to policy 1.
+The numbers are starting guesses. The Phase 2 spike measures actual
+battery impact; if policy 2 costs more than ~5%/hour in practice,
+degrade to policy 1 (on-demand only) in a new ADR that supersedes
+ADR-009's policy clause.
 
 ## Unresolved sub-questions
 
@@ -156,9 +163,13 @@ degrade to policy 1.
 
 ## What a resolved version looks like
 
-- A paragraph added to ADR-001 or a new ADR-009 that picks the
-  client-side policy and states the battery-gate numbers
-- A paragraph added to ADR-008 that picks the server pre-warming
-  strategy (or explicitly commits to demand-pull only at launch)
+- ~~A paragraph added to ADR-001 or a new ADR-009 that picks the
+  client-side policy and states the battery-gate numbers~~ **Done
+  (ADR-009, 2026-04-14).**
+- ~~A paragraph added to ADR-008 that picks the server pre-warming
+  strategy (or explicitly commits to demand-pull only at launch)~~
+  **Done (ADR-008 + Phase 0b commit to demand-pull only).**
 - Real P2P offload measurements from Phase 2, not the 50% guess
-- Per-PDS upload quota defaults documented alongside ADR-005
+  — *still open, the Phase 2 spike produces this.*
+- Per-PDS upload quota defaults documented alongside ADR-005 —
+  *still open, Phase 3.*
