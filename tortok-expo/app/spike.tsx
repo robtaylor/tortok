@@ -25,7 +25,13 @@ type Torrent = {
   uploaded: number;
   downloadSpeed: number;
   progress: number;
-  on: (event: string, cb: () => void) => void;
+  on: (event: string, cb: (arg?: unknown) => void) => void;
+};
+
+type WebTorrentClient = {
+  add: (magnet: string, cb: (torrent: Torrent) => void) => Torrent;
+  destroy: () => void;
+  on: (event: string, cb: (arg: unknown) => void) => void;
 };
 
 const DEFAULT_MAGNET =
@@ -84,8 +90,12 @@ export default function SpikeScreen() {
       // Side-effect import installs Buffer/process/RTCPeerConnection globals.
       await import('@/lib/webtorrent/polyfills');
       // Dynamic require so the Expo static renderer never touches WebTorrent.
+      // webtorrent is ESM (`export default class`); Metro's CJS interop returns
+      // `{ default: WebTorrent, __esModule: true }`, so unwrap `.default`.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      WebTorrent = require('webtorrent') as WebTorrentCtor;
+      const mod = require('webtorrent');
+      WebTorrent = (mod?.default ?? mod) as WebTorrentCtor;
+      appendLog(`webtorrent loaded (typeof=${typeof WebTorrent})`);
     } catch (err) {
       appendLog(`load threw: ${String(err)}`);
       setStats((s) => ({ ...s, status: 'error' }));
@@ -98,7 +108,25 @@ export default function SpikeScreen() {
     try {
       client = new WebTorrent();
     } catch (err) {
-      appendLog(`client ctor threw: ${String(err)}`);
+      // Dump everything we can learn about `err`.
+      appendLog(`typeof=${typeof err} proto=${Object.prototype.toString.call(err)}`);
+      try {
+        appendLog(`String(err)=${String(err)}`);
+      } catch {}
+      try {
+        const e = err as Record<string, unknown>;
+        appendLog(`keys=${Object.getOwnPropertyNames(e ?? {}).join(',')}`);
+        if (e?.message) appendLog(`message=${String(e.message)}`);
+        if (e?.name) appendLog(`name=${String(e.name)}`);
+        if (e?.stack) {
+          const stack = String(e.stack).split('\n').slice(0, 8);
+          for (const line of stack) appendLog(`  ${line.trim()}`);
+        } else {
+          appendLog('no .stack property');
+        }
+      } catch (logErr) {
+        appendLog(`logging threw: ${String(logErr)}`);
+      }
       setStats((s) => ({ ...s, status: 'error' }));
       return;
     }
@@ -111,11 +139,12 @@ export default function SpikeScreen() {
     appendLog('adding magnet');
     setStats((s) => ({ ...s, status: 'adding' }));
 
-    client.add(magnet, (torrent: Torrent) => {
-      appendLog(`torrent added: ${torrent.infoHash}`);
-      setStats((s) => ({ ...s, status: 'connecting', infoHash: torrent.infoHash }));
+    // add() returns the torrent synchronously — wire up events immediately so
+    // we see tracker/warning/error/wire traffic BEFORE metadata arrives.
+    const pending = client.add(magnet, (torrent: Torrent) => {
+      appendLog(`metadata received: ${torrent.infoHash}`);
+      setStats((s) => ({ ...s, status: 'downloading', infoHash: torrent.infoHash }));
 
-      torrent.on('wire', () => appendLog('wire (new peer connected)'));
       torrent.on('download', () => {
         setStats((s) => ({
           ...s,
@@ -132,6 +161,16 @@ export default function SpikeScreen() {
         setStats((s) => ({ ...s, status: 'done', progress: 1 }));
       });
     });
+
+    // Wire pre-metadata events on the synchronously-returned torrent.
+    pending.on('infoHash', () => {
+      appendLog(`infoHash: ${pending.infoHash}`);
+      setStats((s) => ({ ...s, status: 'discovering', infoHash: pending.infoHash }));
+    });
+    pending.on('wire', () => appendLog(`wire (peer connected, total=${pending.numPeers})`));
+    pending.on('warning', (w: unknown) => appendLog(`warning: ${String(w)}`));
+    pending.on('error', (e: unknown) => appendLog(`torrent error: ${String(e)}`));
+    pending.on('noPeers', (announceType: unknown) => appendLog(`noPeers via ${String(announceType)}`));
   };
 
   const handleStop = () => {
