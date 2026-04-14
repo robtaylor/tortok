@@ -809,6 +809,92 @@ not decided here.
   Deliberate "decide later" is cheaper than a premature ADR we
   then supersede.
 
+**Spike implementation notes (Hermes quirks, 2026-04-14).** The
+iOS-simulator half of the spike is now green: two peers handshake
+over WebRTC datachannels and exchange BitTorrent pieces end to
+end. Getting there surfaced eight compatibility issues between
+WebTorrent's Node/browser codepaths and Hermes. They are not
+architectural decisions — they live here rather than in a README
+because anyone re-deriving the stack (Android, future RN upgrade,
+new engine) will hit the same list.
+
+Runtime globals — `tortok-expo/lib/webtorrent/polyfills.ts`:
+
+1. **`globalThis.crypto` with `getRandomValues`.** `uint8-util`
+   reads `self.crypto.getRandomValues` at module-init time; Hermes
+   has no `crypto` global. Install `react-native-quick-crypto` as
+   `globalThis.crypto` before any webtorrent code runs. Metro's
+   `crypto`→quick-crypto alias does **not** cover this — the alias
+   only rewrites `import/require 'crypto'`, not dynamic reads off
+   the global scope.
+2. **`process.browser = true`.** `bittorrent-discovery` and
+   `bittorrent-tracker` branch on `process.browser` to skip
+   Node-only code paths (binding TCP ports, etc.). Hermes isn't a
+   browser but behaviourally matches one — no TCP/UDP sockets
+   available — so set it truthy.
+3. **RTC globals on `globalThis`.** `webrtc-polyfill`'s browser
+   entry reads `RTCPeerConnection`, `RTCSessionDescription`,
+   `RTCIceCandidate`, `MediaStream`, `MediaStreamTrack`,
+   `RTCRtpReceiver`, `RTCRtpSender` off the global scope. Populate
+   them from `react-native-webrtc` before webtorrent loads.
+
+Module-resolution — `tortok-expo/metro.config.js`:
+
+4. **Node-core shims via `extraNodeModules`.** crypto →
+   react-native-quick-crypto, stream → readable-stream, rest
+   (buffer, events, process, path, util, url, os, querystring,
+   assert) → their respective browserify packages. net, dns, tls,
+   fs, http, https are stubbed to an empty module since the
+   WebRTC-only transport never hits them on mobile.
+5. **`unstable_enablePackageExports` + `unstable_conditionNames =
+   ['require', 'browser']`.** Forces Metro to pick `webrtc-polyfill`'s
+   `browser` conditional-export entry, which reads globals from
+   globalThis, instead of its Node entry which imports
+   `node:stream`.
+
+ESM/CJS interop — `tortok-expo/app/spike.tsx` (and any future
+consumer):
+
+6. **Unwrap `require('webtorrent').default`.** webtorrent is
+   `"type": "module"` with `export default class WebTorrent`. Metro's
+   ESM→CJS interop returns `{ default: WebTorrent, __esModule: true }`,
+   so `require('webtorrent')` is not callable as a constructor.
+
+WebCrypto / WebRTC shim patches — in `polyfills.ts`:
+
+7. **`RTCPeerConnection.prototype.getStats` arity patch.**
+   `@thaunknown/simple-peer` branches on `pc.getStats.length` to
+   choose Promise vs. callback style. `react-native-webrtc`
+   declares `getStats(selector?)` — arity 1 — so simple-peer takes
+   the callback branch and passes its callback as the `selector`
+   argument, producing "Invalid selector: could not find matching
+   sender / receiver" on every stats poll. Wrap the prototype to
+   arity 0; the inner call still passes no selector and returns
+   the full Map.
+8. **Case-insensitive `subtle.digest`.** QuickCrypto's SubtleCrypto
+   does **strict uppercase** matching against `SUPPORTED_ALGORITHMS`
+   (`'SHA-1'`), but `uint8-util.hash` and `bittorrent-protocol`
+   pass `'sha-1'` lowercase. BitTorrent piece hashing fails with
+   `NotSupportedError: Unrecognized algorithm name: sha-1` the
+   moment the first piece arrives. Wrap `digest` to uppercase the
+   algorithm name before delegating (the WebCrypto spec explicitly
+   says algorithm names are case-insensitive — this is a QuickCrypto
+   spec-compliance gap we compensate for, not a webtorrent bug).
+
+Open compat debt: the web bundle (Expo static renderer) still
+fails because SSG runs in Node and touches `webrtc-polyfill/lib/Blob.js`
+during module graph analysis. The spike sidesteps this with a
+lazy dynamic import inside the Start handler, so SSG never sees
+WebTorrent. A proper fix (either stub webrtc-polyfill for SSG or
+move WebTorrent behind a client-only guard) is deferred until we
+actually wire the feed up.
+
+The simulator-only pass/fail from decision (1) above is the bar
+being chased here, not real-device support. When Phase 2 extends
+to Android and real iOS/Android hardware, expect a second round of
+quirks (most likely around TURN credentials, NetInfo-driven Wi-Fi
+gating, and the `node-datachannel` shared library on Android).
+
 ---
 
 ## Unresolved design problems
