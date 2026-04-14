@@ -10,6 +10,14 @@ const path = require('path');
 
 const config = getDefaultConfig(__dirname);
 
+// Prefer the `browser` condition when packages (like webrtc-polyfill) expose
+// conditional exports. The Node entry points use `node:`-prefixed imports and
+// assume libdatachannel bindings; the browser entry points just read
+// globalThis.RTCPeerConnection etc., which we populate from
+// react-native-webrtc in lib/webtorrent/polyfills.ts.
+config.resolver.unstable_enablePackageExports = true;
+config.resolver.unstable_conditionNames = ['require', 'browser'];
+
 // Node-core shims. Packages WebTorrent transitively imports like `crypto`,
 // `stream`, `events`, `buffer`, `process` need concrete implementations on
 // Hermes. `net`/`dns`/`tls`/`fs` are stubbed — WebTorrent only exercises the
@@ -21,11 +29,18 @@ config.resolver.extraNodeModules = {
   ...(config.resolver.extraNodeModules ?? {}),
   crypto: require.resolve('react-native-quick-crypto'),
   stream: require.resolve('readable-stream'),
-  // Trailing slash forces Node to resolve the npm package rather than the
-  // built-in of the same name.
+  // For packages whose name collides with a Node built-in,
+  // resolve via package.json to avoid Node's built-in-priority
+  // require.resolve behaviour.
   buffer: path.dirname(require.resolve('buffer/package.json')),
   events: path.dirname(require.resolve('events/package.json')),
   process: path.dirname(require.resolve('process/package.json')),
+  path: path.dirname(require.resolve('path-browserify/package.json')),
+  util: path.dirname(require.resolve('util/package.json')),
+  url: path.dirname(require.resolve('url/package.json')),
+  os: path.dirname(require.resolve('os-browserify/package.json')),
+  querystring: path.dirname(require.resolve('querystring-es3/package.json')),
+  assert: path.dirname(require.resolve('assert/package.json')),
   // Unreachable-on-mobile modules — stub rather than polyfill.
   net: emptyModule,
   dns: emptyModule,

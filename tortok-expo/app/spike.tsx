@@ -6,15 +6,27 @@
 // show `Downloaded > 0` and at least one peer from a second client running
 // on a different simulator or on Expo web.
 
-// Polyfills MUST come first — WebTorrent deps capture globals during
-// module-init, so importing WebTorrent before Buffer/process exist means
-// they latch onto `undefined`.
-import '@/lib/webtorrent/polyfills';
-
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, View, Pressable, ScrollView } from 'react-native';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const WebTorrent = require('webtorrent');
+
+// WebTorrent and polyfills are loaded lazily from within Start handler so
+// the Expo static renderer (which runs in Node) never imports them. The
+// polyfill module installs globals as a side effect; WebTorrent then
+// module-inits after the globals exist.
+type WebTorrentCtor = new () => {
+  add: (magnet: string, cb: (torrent: Torrent) => void) => void;
+  destroy: () => void;
+  on: (event: string, cb: (arg: unknown) => void) => void;
+};
+type Torrent = {
+  infoHash: string;
+  numPeers: number;
+  downloaded: number;
+  uploaded: number;
+  downloadSpeed: number;
+  progress: number;
+  on: (event: string, cb: () => void) => void;
+};
 
 const DEFAULT_MAGNET =
   'magnet:?xt=urn:btih:1b8cce932a78923cb57428537829a9e688eed938&dn=tortok-test-video&tr=wss%3A%2F%2Ftracker.openwebtorrent.com&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.webtorrent.dev';
@@ -44,7 +56,7 @@ const initialStats: Stats = {
 export default function SpikeScreen() {
   const [magnet, setMagnet] = useState(DEFAULT_MAGNET);
   const [stats, setStats] = useState<Stats>(initialStats);
-  const clientRef = useRef<ReturnType<typeof WebTorrent> | null>(null);
+  const clientRef = useRef<InstanceType<WebTorrentCtor> | null>(null);
 
   useEffect(() => {
     return () => {
@@ -59,14 +71,30 @@ export default function SpikeScreen() {
     setStats((s) => ({ ...s, log: [...s.log.slice(-40), `${new Date().toISOString().slice(11, 19)} ${line}`] }));
   };
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (clientRef.current) {
       appendLog('already running — destroy first');
       return;
     }
-    setStats({ ...initialStats, status: 'creating client' });
+    setStats({ ...initialStats, status: 'loading polyfills' });
+    appendLog('loading polyfills + webtorrent');
+
+    let WebTorrent: WebTorrentCtor;
+    try {
+      // Side-effect import installs Buffer/process/RTCPeerConnection globals.
+      await import('@/lib/webtorrent/polyfills');
+      // Dynamic require so the Expo static renderer never touches WebTorrent.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      WebTorrent = require('webtorrent') as WebTorrentCtor;
+    } catch (err) {
+      appendLog(`load threw: ${String(err)}`);
+      setStats((s) => ({ ...s, status: 'error' }));
+      return;
+    }
+
+    setStats((s) => ({ ...s, status: 'creating client' }));
     appendLog('new WebTorrent()');
-    let client: ReturnType<typeof WebTorrent>;
+    let client: InstanceType<WebTorrentCtor>;
     try {
       client = new WebTorrent();
     } catch (err) {
@@ -76,22 +104,14 @@ export default function SpikeScreen() {
     }
     clientRef.current = client;
 
-    client.on('error', (err: Error | string) => {
+    client.on('error', (err: unknown) => {
       appendLog(`client error: ${String(err)}`);
     });
 
     appendLog('adding magnet');
     setStats((s) => ({ ...s, status: 'adding' }));
 
-    client.add(magnet, (torrent: {
-      infoHash: string;
-      numPeers: number;
-      downloaded: number;
-      uploaded: number;
-      downloadSpeed: number;
-      progress: number;
-      on: (event: string, cb: () => void) => void;
-    }) => {
+    client.add(magnet, (torrent: Torrent) => {
       appendLog(`torrent added: ${torrent.infoHash}`);
       setStats((s) => ({ ...s, status: 'connecting', infoHash: torrent.infoHash }));
 
