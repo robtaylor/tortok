@@ -25,9 +25,40 @@ config.resolver.unstable_conditionNames = ['require', 'browser'];
 // unreachable from a mobile runtime anyway.
 const emptyModule = path.resolve(__dirname, 'lib/webtorrent/empty.js');
 
+// Force webrtc-polyfill to its `browser.js` entry on every platform, including
+// the Expo Router static-render Node bundle. Its `node` entry pulls in
+// `lib/Blob.js`, which uses top-level await that the SSG transformer's
+// minifier cannot parse. The browser entry is a thin shim that just reads
+// RTCPeerConnection et al. off globalThis — exactly what we want, since
+// `lib/webtorrent/polyfills.ts` populates those globals from
+// react-native-webrtc on Hermes and the browser already has them on web.
+const webrtcPolyfillBrowser = path.resolve(
+  __dirname,
+  'node_modules/webrtc-polyfill/browser.js',
+);
+// `crypto` aliased to react-native-quick-crypto only makes sense on Hermes —
+// rn-quick-crypto's main entry pulls in JSI bindings that don't exist in the
+// browser. On web we let the request fall through, so webtorrent's own
+// `"crypto": false` browser-field stub takes effect and the browser's
+// native `crypto` global is used at runtime via our polyfills.web shim.
+const rnQuickCrypto = require.resolve('react-native-quick-crypto');
+const baseResolveRequest = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === 'webrtc-polyfill') {
+    return { type: 'sourceFile', filePath: webrtcPolyfillBrowser };
+  }
+  if (moduleName === 'crypto' && platform !== 'web') {
+    return { type: 'sourceFile', filePath: rnQuickCrypto };
+  }
+  if (baseResolveRequest) {
+    return baseResolveRequest(context, moduleName, platform);
+  }
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 config.resolver.extraNodeModules = {
   ...(config.resolver.extraNodeModules ?? {}),
-  crypto: require.resolve('react-native-quick-crypto'),
+  // `crypto` is handled per-platform in the resolveRequest hook above.
   stream: require.resolve('readable-stream'),
   // For packages whose name collides with a Node built-in,
   // resolve via package.json to avoid Node's built-in-priority

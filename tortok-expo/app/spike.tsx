@@ -98,6 +98,14 @@ export default function SpikeScreen() {
       appendLog(`webtorrent loaded (typeof=${typeof WebTorrent})`);
     } catch (err) {
       appendLog(`load threw: ${String(err)}`);
+      const e = err as { stack?: string; message?: string };
+      if (e?.message) appendLog(`  message=${String(e.message)}`);
+      if (e?.stack) {
+        const stack = String(e.stack).split('\n').slice(0, 12);
+        for (const line of stack) appendLog(`  ${line.trim()}`);
+      } else {
+        appendLog('  (no .stack)');
+      }
       setStats((s) => ({ ...s, status: 'error' }));
       return;
     }
