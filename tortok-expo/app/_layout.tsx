@@ -22,8 +22,11 @@ function useProtectedRoute() {
     if (isLoading) return;
 
     const inAuth = segments[0] === '(auth)';
+    // /spike is a dev-only WebTorrent route (ADR-009); bypass auth so it's
+    // reachable on fresh installs (Android emulator especially).
+    const isSpike = segments[0] === 'spike';
 
-    if (!token && !inAuth) {
+    if (!token && !inAuth && !isSpike) {
       router.replace('/(auth)/login');
     } else if (token && inAuth) {
       router.replace('/(tabs)');
