@@ -366,6 +366,11 @@ marking the phase complete.
 - Confirm iOS, Android, and web all play the same video.
 - At this point we have a working cross-platform TorTok with no federation.
   Shippable as an alpha.
+- **Cleanup gate:** delete the ADR-009 WebTorrent spike route
+  (`tortok/app/spike.tsx`) and its auth-guard exemption in
+  `tortok/app/_layout.tsx` once real playback is wired up. The spike
+  exists only to de-risk the engine-compat question; it has no purpose
+  once the production integration lands. Don't carry it into Phase 3.
 
 **Phase 3 — Stand up our own PDS and wire the client to it.**
 - Fork `bluesky-social/atproto`'s reference PDS implementation. Strip
@@ -379,6 +384,12 @@ marking the phase complete.
 - Add `@atproto/api` to the client. Publish a video as a signed
   `tortok.video.post` record (create magnet, upload thumbnail as blob,
   create record). The old video-post endpoint is retired in this phase.
+- **Revisit web token storage.** Phase 2 accepts expo-secure-store's
+  web fallback to `localStorage` (readable by any XSS on the domain) on
+  the basis that the Expo app ships only to iOS/Android for now. Once
+  the PDS owns auth, session cookies with `HttpOnly`/`SameSite` become
+  available and should replace localStorage token storage on the web
+  build. Tracked in `tortok/stores/auth.ts:18`.
 
 **Phase 4 — AppView cutover.**
 - Stand up the AppView as a separate service. It subscribes to our

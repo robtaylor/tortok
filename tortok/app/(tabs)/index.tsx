@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,14 @@ const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 80;
 const VIDEO_HEIGHT = SCREEN_HEIGHT - TAB_BAR_HEIGHT;
 
+// Stable reference so `useVideoPlayer` doesn't see a fresh initializer on
+// every render (which can cause the player to be rebuilt on unrelated state
+// changes like like-count updates).
+function configurePlayer(p: { loop: boolean; muted: boolean }) {
+  p.loop = true;
+  p.muted = false;
+}
+
 function VideoItem({
   video,
   isActive,
@@ -29,17 +37,20 @@ function VideoItem({
   isActive: boolean;
   token: string | null;
 }) {
-  const [liked, setLiked] = useState(video.isLiked);
-  const [likeCount, setLikeCount] = useState(video.likeCount);
+  // Optimistic like: `delta` records the pending change on top of the
+  // server-confirmed `video.isLiked` / `video.likeCount`. Rollback is a
+  // single `setDelta(prev)` — no mirrored arithmetic to keep in sync.
+  const [delta, setDelta] = useState<-1 | 0 | 1>(0);
+  const [likePending, setLikePending] = useState(false);
   const [status, setStatus] = useState<VideoPlayerStatus>('loading');
   const [isPaused, setIsPaused] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
 
-  const videoUrl = video.hlsURL || '';
-  const player = useVideoPlayer(videoUrl, (p) => {
-    p.loop = true;
-    p.muted = false;
-  });
+  const liked = delta === 0 ? video.isLiked : delta === 1;
+  const likeCount = video.likeCount + delta;
+
+  const videoUrl: string | null = video.hlsURL;
+  const player = useVideoPlayer(videoUrl, configurePlayer);
 
   // Track player status for buffering/error overlays
   useEffect(() => {
@@ -50,36 +61,51 @@ function VideoItem({
     return () => sub.remove();
   }, [player, retryKey]);
 
-  // Play/pause based on visibility
-  if (player) {
+  // Play/pause based on visibility.
+  useEffect(() => {
+    if (!player) return;
     if (isActive && videoUrl && !isPaused) {
       player.play();
     } else {
       player.pause();
     }
-  }
+  }, [player, isActive, videoUrl, isPaused]);
+
+  const hashtagLine = useMemo(
+    () => video.hashtags.map((h) => `#${h}`).join(' '),
+    [video.hashtags],
+  );
 
   const handleTogglePlay = () => {
     setIsPaused((p) => !p);
   };
 
   const handleRetry = () => {
-    if (!player) return;
+    if (!player || videoUrl === null) return;
+    // expo-video's `replace()` swaps the internal player; listeners bound to
+    // the old instance stop firing. Bumping retryKey forces the statusChange
+    // useEffect above to re-subscribe. Any future `player.replace()` call
+    // site MUST also bump retryKey.
     player.replace(videoUrl);
     setStatus('loading');
     setRetryKey((k) => k + 1);
   };
 
   const handleLike = async () => {
-    if (!token) return;
-    const newLiked = !liked;
-    setLiked(newLiked);
-    setLikeCount((c) => c + (newLiked ? 1 : -1));
+    if (!token || likePending) return;
+    const nextLiked = !liked;
+    const nextDelta: -1 | 0 | 1 =
+      nextLiked === video.isLiked ? 0 : nextLiked ? 1 : -1;
+    const prevDelta = delta;
+    setDelta(nextDelta);
+    setLikePending(true);
     try {
-      await likeVideo(video.id, newLiked, token);
-    } catch {
-      setLiked(!newLiked);
-      setLikeCount((c) => c + (newLiked ? -1 : 1));
+      await likeVideo(video.id, nextLiked, token);
+    } catch (err) {
+      console.warn('like request failed, rolling back', err);
+      setDelta(prevDelta);
+    } finally {
+      setLikePending(false);
     }
   };
 
@@ -136,15 +162,17 @@ function VideoItem({
           {video.caption}
         </Text>
         {video.hashtags.length > 0 && (
-          <Text style={styles.hashtags}>
-            {video.hashtags.map((h) => `#${h}`).join(' ')}
-          </Text>
+          <Text style={styles.hashtags}>{hashtagLine}</Text>
         )}
       </View>
 
       {/* Overlay: action buttons */}
       <View style={styles.actionsOverlay}>
-        <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={handleLike}
+          disabled={likePending}
+        >
           <FontAwesome
             name={liked ? 'heart' : 'heart-o'}
             size={30}
@@ -170,8 +198,9 @@ export default function FeedScreen() {
   const [activeIndex, setActiveIndex] = useState(0);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['feed'],
+    queryKey: ['feed', token],
     queryFn: () => getFeed(token),
+    enabled: !!token,
   });
 
   const videos = data?.videos || [];

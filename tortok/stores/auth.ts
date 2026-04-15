@@ -1,18 +1,7 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-
-type User = {
-  id: string;
-  username: string;
-  displayName: string;
-  email: string;
-  avatarURL: string | null;
-  bio: string | null;
-  followerCount: number;
-  followingCount: number;
-  videoCount: number;
-};
+import type { User } from '@/lib/api';
 
 type AuthState = {
   token: string | null;
@@ -26,6 +15,10 @@ type AuthState = {
 const TOKEN_KEY = 'tortok_auth_token';
 const USER_KEY = 'tortok_auth_user';
 
+// On web, expo-secure-store falls back to localStorage, which is readable
+// by any XSS on the domain. Tokens stored here are effectively bearer
+// credentials exposed to script injection. See ADR-006 Phase 3 for the
+// planned migration to HttpOnly session cookies.
 async function secureGet(key: string): Promise<string | null> {
   if (Platform.OS === 'web') {
     return localStorage.getItem(key);
@@ -55,27 +48,31 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
 
   signIn: async (token: string, user: User) => {
-    await secureSet(TOKEN_KEY, token);
-    await secureSet(USER_KEY, JSON.stringify(user));
+    await Promise.all([
+      secureSet(TOKEN_KEY, token),
+      secureSet(USER_KEY, JSON.stringify(user)),
+    ]);
     set({ token, user });
   },
 
   signOut: async () => {
-    await secureDelete(TOKEN_KEY);
-    await secureDelete(USER_KEY);
+    await Promise.all([secureDelete(TOKEN_KEY), secureDelete(USER_KEY)]);
     set({ token: null, user: null });
   },
 
   hydrate: async () => {
     try {
-      const token = await secureGet(TOKEN_KEY);
-      const userJson = await secureGet(USER_KEY);
+      const [token, userJson] = await Promise.all([
+        secureGet(TOKEN_KEY),
+        secureGet(USER_KEY),
+      ]);
       if (token && userJson) {
         set({ token, user: JSON.parse(userJson), isLoading: false });
       } else {
         set({ isLoading: false });
       }
-    } catch {
+    } catch (err) {
+      console.warn('auth hydrate failed; starting signed-out', err);
       set({ isLoading: false });
     }
   },

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { register } from '@/lib/api';
+import { authStyles } from '@/lib/styles';
 import { useAuthStore } from '@/stores/auth';
 
 export default function RegisterScreen() {
@@ -49,8 +50,8 @@ export default function RegisterScreen() {
         password,
       });
       await signIn(res.token, res.user);
-    } catch (e: any) {
-      setError(e.message || 'Registration failed');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Registration failed');
     } finally {
       setLoading(false);
     }
@@ -58,7 +59,7 @@ export default function RegisterScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={authStyles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -70,13 +71,13 @@ export default function RegisterScreen() {
         </View>
 
         {error ? (
-          <Text style={styles.error} testID="registerErrorMessage">
+          <Text style={authStyles.error} testID="registerErrorMessage">
             {error}
           </Text>
         ) : null}
 
         <TextInput
-          style={styles.input}
+          style={authStyles.input}
           placeholder="Email"
           placeholderTextColor="#888"
           value={email}
@@ -87,7 +88,7 @@ export default function RegisterScreen() {
         />
 
         <TextInput
-          style={styles.input}
+          style={authStyles.input}
           placeholder="Username"
           placeholderTextColor="#888"
           value={username}
@@ -97,7 +98,7 @@ export default function RegisterScreen() {
         />
 
         <TextInput
-          style={styles.input}
+          style={authStyles.input}
           placeholder="Display Name"
           placeholderTextColor="#888"
           value={displayName}
@@ -106,7 +107,7 @@ export default function RegisterScreen() {
         />
 
         <TextInput
-          style={styles.input}
+          style={authStyles.input}
           placeholder="Password"
           placeholderTextColor="#888"
           value={password}
@@ -116,7 +117,7 @@ export default function RegisterScreen() {
         />
 
         <TextInput
-          style={styles.input}
+          style={authStyles.input}
           placeholder="Confirm Password"
           placeholderTextColor="#888"
           value={confirmPassword}
@@ -126,7 +127,7 @@ export default function RegisterScreen() {
         />
 
         <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
+          style={[authStyles.button, loading && authStyles.buttonDisabled]}
           onPress={handleRegister}
           disabled={loading}
           testID="createAccountButton"
@@ -134,7 +135,7 @@ export default function RegisterScreen() {
           {loading ? (
             <ActivityIndicator color="#000" />
           ) : (
-            <Text style={styles.buttonText}>Create Account</Text>
+            <Text style={authStyles.buttonText}>Create Account</Text>
           )}
         </TouchableOpacity>
       </ScrollView>
@@ -143,10 +144,6 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: 32,
@@ -166,36 +163,5 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     color: '#fff',
-  },
-  error: {
-    color: '#ff4444',
-    textAlign: 'center',
-    marginBottom: 16,
-    fontSize: 14,
-  },
-  input: {
-    backgroundColor: '#1a1a1a',
-    color: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#333',
-  },
-  button: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: '600',
   },
 });

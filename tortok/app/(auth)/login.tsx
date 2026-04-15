@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { login } from '@/lib/api';
+import { authStyles } from '@/lib/styles';
 import { useAuthStore } from '@/stores/auth';
 
 export default function LoginScreen() {
@@ -31,8 +32,8 @@ export default function LoginScreen() {
     try {
       const res = await login(email.trim(), password);
       await signIn(res.token, res.user);
-    } catch (e: any) {
-      setError(e.message || 'Login failed');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -40,7 +41,7 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={authStyles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.inner}>
@@ -48,13 +49,13 @@ export default function LoginScreen() {
         <Text style={styles.subtitle}>Sign in to continue</Text>
 
         {error ? (
-          <Text style={styles.error} testID="errorMessage">
+          <Text style={authStyles.error} testID="errorMessage">
             {error}
           </Text>
         ) : null}
 
         <TextInput
-          style={styles.input}
+          style={authStyles.input}
           placeholder="Email"
           placeholderTextColor="#888"
           value={email}
@@ -65,7 +66,7 @@ export default function LoginScreen() {
         />
 
         <TextInput
-          style={styles.input}
+          style={authStyles.input}
           placeholder="Password"
           placeholderTextColor="#888"
           value={password}
@@ -75,7 +76,7 @@ export default function LoginScreen() {
         />
 
         <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
+          style={[authStyles.button, loading && authStyles.buttonDisabled]}
           onPress={handleLogin}
           disabled={loading}
           testID="signInButton"
@@ -83,7 +84,7 @@ export default function LoginScreen() {
           {loading ? (
             <ActivityIndicator color="#000" />
           ) : (
-            <Text style={styles.buttonText}>Sign In</Text>
+            <Text style={authStyles.buttonText}>Sign In</Text>
           )}
         </TouchableOpacity>
 
@@ -102,10 +103,6 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
   inner: {
     flex: 1,
     justifyContent: 'center',
@@ -123,37 +120,6 @@ const styles = StyleSheet.create({
     color: '#888',
     textAlign: 'center',
     marginBottom: 32,
-  },
-  error: {
-    color: '#ff4444',
-    textAlign: 'center',
-    marginBottom: 16,
-    fontSize: 14,
-  },
-  input: {
-    backgroundColor: '#1a1a1a',
-    color: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#333',
-  },
-  button: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: '600',
   },
   linkButton: {
     marginTop: 24,

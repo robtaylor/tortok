@@ -5,6 +5,10 @@
 // directly during development. Pass/fail bar: the stats panel below has to
 // show `Downloaded > 0` and at least one peer from a second client running
 // on a different simulator or on Expo web.
+//
+// TODO(Phase 2 cleanup gate): delete this file and the auth-guard exemption
+// in `_layout.tsx` once real WebTorrent playback is integrated. See ADR-006
+// Phase 2 section.
 
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, View, Pressable, ScrollView } from 'react-native';

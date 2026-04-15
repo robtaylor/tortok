@@ -1,4 +1,19 @@
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tortok-api.fly.dev';
+// Fail loudly in dev when EXPO_PUBLIC_API_URL is unset — silent fallback to
+// the prod URL during local work causes "why does this mutate prod?" debugging
+// sessions. Prod builds keep the fallback because the env var is baked at
+// build time and we don't want a missing var to brick the app.
+function getApiUrl(): string {
+  const env = process.env.EXPO_PUBLIC_API_URL;
+  if (env) return env;
+  if (__DEV__) {
+    throw new Error(
+      'EXPO_PUBLIC_API_URL is not set. Add it to .env or your shell before starting Expo.',
+    );
+  }
+  return 'https://tortok-api.fly.dev';
+}
+
+const API_URL = getApiUrl();
 
 type RequestOptions = {
   method?: string;
@@ -6,10 +21,20 @@ type RequestOptions = {
   token?: string | null;
 };
 
-class APIError extends Error {
+export class APIError extends Error {
   constructor(public status: number, message: string) {
     super(message);
     this.name = 'APIError';
+  }
+}
+
+// Distinct from APIError so call sites can tell "server said no" from
+// "couldn't reach the server at all" — the latter usually wants a retry
+// affordance, the former usually doesn't.
+export class NetworkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NetworkError';
   }
 }
 
@@ -21,11 +46,16 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     headers['Authorization'] = `Bearer ${opts.token}`;
   }
 
-  const res = await fetch(`${API_URL}${path}`, {
-    method: opts.method || 'GET',
-    headers,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method: opts.method || 'GET',
+      headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+  } catch (e) {
+    throw new NetworkError(e instanceof Error ? e.message : 'Network request failed');
+  }
 
   const data = await res.json();
   if (!res.ok) {
@@ -36,19 +66,21 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
 
 // --- Auth ---
 
+export type User = {
+  id: string;
+  username: string;
+  displayName: string;
+  email: string;
+  avatarURL: string | null;
+  bio: string | null;
+  followerCount: number;
+  followingCount: number;
+  videoCount: number;
+};
+
 export type AuthResponse = {
   token: string;
-  user: {
-    id: string;
-    username: string;
-    displayName: string;
-    email: string;
-    avatarURL: string | null;
-    bio: string | null;
-    followerCount: number;
-    followingCount: number;
-    videoCount: number;
-  };
+  user: User;
 };
 
 export function login(email: string, password: string) {
@@ -129,18 +161,6 @@ export function recordView(
 
 // --- Profile ---
 
-export type UserProfile = {
-  id: string;
-  username: string;
-  displayName: string;
-  email: string;
-  avatarURL: string | null;
-  bio: string | null;
-  followerCount: number;
-  followingCount: number;
-  videoCount: number;
-};
-
 export function getProfile(token: string) {
-  return request<UserProfile>('/auth/me', { token });
+  return request<User>('/auth/me', { token });
 }
