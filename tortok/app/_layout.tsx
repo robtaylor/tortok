@@ -51,11 +51,13 @@ function RootLayoutNav() {
   // flicker / re-entry from imperative router.replace() in an effect.
   if (isLoading) return null;
   const inAuth = rootSegment === '(auth)';
-  // /spike is a dev-only WebTorrent route (ADR-009); bypass auth so it's
-  // reachable on fresh installs (Android emulator especially).
-  // TODO(Phase 2 cleanup gate): remove this branch and the spike route
+  // /spike and /spike-bridge are dev-only WebTorrent routes (ADR-009 + Phase
+  // 2 Unit 1); bypass auth so they're reachable on fresh installs.
+  // TODO(Phase 2 cleanup gate): remove these branches and the spike routes
   // once real WebTorrent playback lands. See ADR-006 Phase 2 section.
-  const isSpike = rootSegment === 'spike';
+  const isSpike =
+    rootSegment === 'spike' ||
+    (rootSegment as string) === 'spike-bridge'; // not in generated route types yet
   if (!token && !inAuth && !isSpike) return <Redirect href="/(auth)/login" />;
   if (token && inAuth) return <Redirect href="/(tabs)" />;
 
