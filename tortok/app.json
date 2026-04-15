@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "tortok-expo",
-    "slug": "tortok-expo",
+    "name": "tortok",
+    "slug": "tortok",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "tortokexpo",
+    "scheme": "tortok",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.tortok-expo",
+      "bundleIdentifier": "com.anonymous.tortok",
       "bitcode": false
     },
     "android": {
@@ -35,7 +35,7 @@
         "android.permission.WAKE_LOCK",
         "android.permission.BLUETOOTH"
       ],
-      "package": "com.anonymous.tortokexpo"
+      "package": "com.anonymous.tortok"
     },
     "web": {
       "bundler": "metro",

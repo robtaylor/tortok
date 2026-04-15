@@ -826,7 +826,7 @@ they live here rather than in a README because anyone re-deriving
 the stack (future RN upgrade, new engine, web framework swap) will
 hit the same list.
 
-Runtime globals — `tortok-expo/lib/webtorrent/polyfills.native.ts`
+Runtime globals — `tortok/lib/webtorrent/polyfills.native.ts`
 on Hermes, `polyfills.web.ts` on web (Metro picks the platform
 extension automatically):
 
@@ -848,7 +848,7 @@ extension automatically):
    `RTCRtpReceiver`, `RTCRtpSender` off the global scope. Populate
    them from `react-native-webrtc` before webtorrent loads.
 
-Module-resolution — `tortok-expo/metro.config.js`:
+Module-resolution — `tortok/metro.config.js`:
 
 4. **Node-core shims via `extraNodeModules`.** crypto →
    react-native-quick-crypto, stream → readable-stream, rest
@@ -862,7 +862,7 @@ Module-resolution — `tortok-expo/metro.config.js`:
    globalThis, instead of its Node entry which imports
    `node:stream`.
 
-ESM/CJS interop — `tortok-expo/app/spike.tsx` (and any future
+ESM/CJS interop — `tortok/app/spike.tsx` (and any future
 consumer):
 
 6. **Unwrap `require('webtorrent').default`.** webtorrent is

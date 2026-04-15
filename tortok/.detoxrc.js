@@ -10,16 +10,16 @@ module.exports = {
     'ios.debug': {
       type: 'ios.app',
       binaryPath:
-        'ios/build/Build/Products/Debug-iphonesimulator/tortokexpo.app',
+        'ios/build/Build/Products/Debug-iphonesimulator/tortok.app',
       build:
-        'cd ios && xcodebuild -workspace tortokexpo.xcworkspace -scheme tortokexpo -configuration Debug -sdk iphonesimulator -derivedDataPath build',
+        'cd ios && xcodebuild -workspace tortok.xcworkspace -scheme tortok -configuration Debug -sdk iphonesimulator -derivedDataPath build',
     },
     'ios.release': {
       type: 'ios.app',
       binaryPath:
-        'ios/build/Build/Products/Release-iphonesimulator/tortokexpo.app',
+        'ios/build/Build/Products/Release-iphonesimulator/tortok.app',
       build:
-        'cd ios && xcodebuild -workspace tortokexpo.xcworkspace -scheme tortokexpo -configuration Release -sdk iphonesimulator -derivedDataPath build',
+        'cd ios && xcodebuild -workspace tortok.xcworkspace -scheme tortok -configuration Release -sdk iphonesimulator -derivedDataPath build',
     },
   },
   devices: {

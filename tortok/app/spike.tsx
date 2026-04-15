@@ -1,7 +1,7 @@
 // Phase 2 WebTorrent spike — see ADR-009 for scope.
 //
 // This route is intentionally not linked from any tab or nav; reach it by
-// typing `tortokexpo://spike` in the Expo dev client, or by navigating
+// typing `tortok://spike` in the Expo dev client, or by navigating
 // directly during development. Pass/fail bar: the stats panel below has to
 // show `Downloaded > 0` and at least one peer from a second client running
 // on a different simulator or on Expo web.
