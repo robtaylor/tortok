@@ -14,7 +14,7 @@ const config = getDefaultConfig(__dirname);
 // conditional exports. The Node entry points use `node:`-prefixed imports and
 // assume libdatachannel bindings; the browser entry points just read
 // globalThis.RTCPeerConnection etc., which we populate from
-// react-native-webrtc in lib/webtorrent/polyfills.ts.
+// react-native-webrtc in lib/webtorrent/polyfills.native.ts.
 config.resolver.unstable_enablePackageExports = true;
 config.resolver.unstable_conditionNames = ['require', 'browser'];
 
@@ -30,7 +30,7 @@ const emptyModule = path.resolve(__dirname, 'lib/webtorrent/empty.js');
 // `lib/Blob.js`, which uses top-level await that the SSG transformer's
 // minifier cannot parse. The browser entry is a thin shim that just reads
 // RTCPeerConnection et al. off globalThis — exactly what we want, since
-// `lib/webtorrent/polyfills.ts` populates those globals from
+// `lib/webtorrent/polyfills.native.ts` populates those globals from
 // react-native-webrtc on Hermes and the browser already has them on web.
 const webrtcPolyfillBrowser = path.resolve(
   __dirname,
