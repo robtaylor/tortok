@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   ViewToken,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView, type VideoPlayerStatus } from 'expo-video';
 import { useQuery } from '@tanstack/react-query';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -28,13 +29,15 @@ function configurePlayer(p: { loop: boolean; muted: boolean }) {
   p.muted = false;
 }
 
-function VideoItem({
+const VideoItem = memo(function VideoItem({
   video,
   isActive,
+  isAdjacent,
   token,
 }: {
   video: Video;
   isActive: boolean;
+  isAdjacent: boolean;
   token: string | null;
 }) {
   // Optimistic like: `delta` records the pending change on top of the
@@ -50,7 +53,15 @@ function VideoItem({
   const likeCount = video.likeCount + delta;
 
   const videoUrl: string | null = video.hlsURL;
-  const player = useVideoPlayer(videoUrl, configurePlayer);
+
+  // Only mount a player for the active cell and its immediate neighbors —
+  // inactive cells that are simply scrolled-past render their poster and
+  // nothing else. Prevents the FlatList window from holding N simultaneous
+  // AVPlayer / ExoPlayer instances that we aren't using.
+  const shouldLoadPlayer = isActive || isAdjacent;
+  const player = useVideoPlayer(shouldLoadPlayer ? videoUrl : null, configurePlayer);
+
+  const videoVisible = isActive && status === 'readyToPlay';
 
   // Track player status for buffering/error overlays
   useEffect(() => {
@@ -111,23 +122,40 @@ function VideoItem({
 
   return (
     <View style={styles.videoContainer}>
-      {videoUrl ? (
+      {/* Poster — always rendered beneath the video layer, hidden only when
+          playback is actually on screen. Decouples scroll feel from playback
+          latency (HLS cold fetch, WebTorrent piece-0 wait in Phase 2). */}
+      {video.thumbnailURL ? (
+        <Image
+          source={{ uri: video.thumbnailURL }}
+          style={styles.video}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={150}
+          testID="videoPoster"
+        />
+      ) : null}
+
+      {videoUrl && shouldLoadPlayer ? (
         <Pressable style={styles.video} onPress={handleTogglePlay} testID="videoPressable">
           <VideoView
             player={player}
-            style={styles.video}
+            style={[styles.video, !videoVisible && styles.invisible]}
             contentFit="cover"
             nativeControls={false}
           />
         </Pressable>
-      ) : (
+      ) : null}
+
+      {!video.thumbnailURL && !videoUrl ? (
         <View style={[styles.video, styles.noVideo]}>
           <Text style={styles.noVideoText}>No video available</Text>
         </View>
-      )}
+      ) : null}
 
-      {/* Buffering indicator */}
-      {videoUrl && status === 'loading' ? (
+      {/* Buffering indicator — only when there's no poster to mask the wait.
+          The poster is the buffering state in the common path. */}
+      {videoUrl && isActive && status === 'loading' && !video.thumbnailURL ? (
         <View style={styles.centerOverlay} pointerEvents="none" testID="videoBuffering">
           <ActivityIndicator size="large" color="#fff" />
         </View>
@@ -191,7 +219,7 @@ function VideoItem({
       </View>
     </View>
   );
-}
+});
 
 export default function FeedScreen() {
   const token = useAuthStore((s) => s.token);
@@ -203,7 +231,7 @@ export default function FeedScreen() {
     enabled: !!token,
   });
 
-  const videos = data?.videos || [];
+  const videos = useMemo(() => data?.videos ?? [], [data]);
 
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
@@ -215,6 +243,15 @@ export default function FeedScreen() {
   );
 
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
+
+  // Warm the native image cache for the neighbors of the active cell so
+  // that swipes land on an already-drawn poster, not on a spinner.
+  useEffect(() => {
+    const urls = [-2, -1, 1, 2]
+      .map((offset) => videos[activeIndex + offset]?.thumbnailURL)
+      .filter((u): u is string => !!u);
+    if (urls.length) Image.prefetch(urls, 'memory-disk');
+  }, [activeIndex, videos]);
 
   if (isLoading) {
     return (
@@ -248,7 +285,12 @@ export default function FeedScreen() {
       data={videos}
       keyExtractor={(item) => item.id}
       renderItem={({ item, index }) => (
-        <VideoItem video={item} isActive={index === activeIndex} token={token} />
+        <VideoItem
+          video={item}
+          isActive={index === activeIndex}
+          isAdjacent={Math.abs(index - activeIndex) === 1}
+          token={token}
+        />
       )}
       pagingEnabled
       snapToInterval={VIDEO_HEIGHT}
@@ -261,6 +303,12 @@ export default function FeedScreen() {
         offset: VIDEO_HEIGHT * index,
         index,
       })}
+      // Narrow the FlatList render window. Defaults mount ~10 screens of
+      // cells; we only need the active cell + its two neighbors (the
+      // preload budget matches `shouldLoadPlayer`'s adjacency rule).
+      initialNumToRender={1}
+      maxToRenderPerBatch={2}
+      windowSize={3}
     />
   );
 }
@@ -293,6 +341,9 @@ const styles = StyleSheet.create({
   },
   video: {
     ...StyleSheet.absoluteFillObject,
+  },
+  invisible: {
+    opacity: 0,
   },
   noVideo: {
     justifyContent: 'center',
