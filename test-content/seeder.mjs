@@ -7,18 +7,18 @@ import fs from 'fs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const client = new WebTorrent();
-const videoPath = path.join(__dirname, 'test_video.mp4');
+const videoPath = path.join(__dirname, 'clips', 'bbb-01.mp4');
 
 console.log('🌱 Starting WebTorrent Seeder...');
 console.log('📁 Seeding file:', videoPath);
 
 // Seed the content
 client.seed(videoPath, {
-  name: 'tortok-test-video',
+  // Do NOT rename via `name:` — webtorrent's fs-chunk-store resolves by the
+  // torrent's logical name, so renaming it causes ENOENT when peers request
+  // pieces (it tries to open `./<name>` instead of the original file).
   announce: [
-    'wss://tracker.openwebtorrent.com',
-    'wss://tracker.btorrent.xyz',
-    'wss://tracker.webtorrent.dev'
+    'ws://localhost:8000'
   ]
 }, (torrent) => {
   // Persist the fresh magnet + .torrent so clients can pick them up
@@ -59,15 +59,27 @@ const httpServer = http.createServer((req, res) => {
     return;
   }
 
-  fs.readFile(videoPath, (err, data) => {
-    if (err) {
-      res.writeHead(404);
-      res.end('Not found');
-      return;
-    }
-    res.writeHead(200);
-    res.end(data);
-  });
+  const stat = fs.statSync(videoPath);
+  const total = stat.size;
+  const range = req.headers.range;
+
+  if (range) {
+    const [startStr, endStr] = range.replace('bytes=', '').split('-');
+    const start = parseInt(startStr, 10);
+    const end = endStr ? parseInt(endStr, 10) : total - 1;
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${total}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': end - start + 1,
+    });
+    fs.createReadStream(videoPath, { start, end }).pipe(res);
+  } else {
+    res.writeHead(200, {
+      'Accept-Ranges': 'bytes',
+      'Content-Length': total,
+    });
+    fs.createReadStream(videoPath).pipe(res);
+  }
 });
 
 httpServer.listen(httpPort, () => {

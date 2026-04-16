@@ -45,11 +45,22 @@ type Torrent = {
   uploaded: number;
   downloadSpeed: number;
   progress: number;
+  pieces: Array<unknown | null>;
   on: (event: string, cb: (arg?: unknown) => void) => void;
 };
 
+// WebTorrent's chunk-store constructor signature. `MemoryChunkStore` and
+// `FSAChunkStore` both accept (chunkLength, opts).
+type ChunkStoreCtor = new (chunkLength: number, opts?: unknown) => unknown;
+
+type AddOpts = { store?: ChunkStoreCtor };
+
 type WebTorrentCtor = new () => {
-  add: (magnet: string, cb: (torrent: Torrent) => void) => Torrent;
+  add: (
+    magnet: string,
+    optsOrCb: AddOpts | ((torrent: Torrent) => void),
+    cb?: (torrent: Torrent) => void,
+  ) => Torrent;
   destroy: () => void;
   on: (event: string, cb: (arg: unknown) => void) => void;
 };
@@ -63,7 +74,7 @@ type Server = {
 // Same default as `spike.tsx` — HLS ladder seeded by the dev seeder. Expect
 // `playlist.m3u8` + segment `.ts` files at the top level.
 const DEFAULT_MAGNET =
-  'magnet:?xt=urn:btih:1b8cce932a78923cb57428537829a9e688eed938&dn=tortok-test-video&tr=wss%3A%2F%2Ftracker.openwebtorrent.com&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.webtorrent.dev';
+  'magnet:?xt=urn:btih:2800ecd68564a29c14561b6d90fbce7d6de95825&dn=bbb-01.mp4&tr=ws%3A%2F%2Flocalhost%3A8000';
 
 type Status =
   | 'idle'
@@ -82,6 +93,8 @@ type Stats = {
   peers: number;
   downloaded: number;
   uploaded: number;
+  verifiedPieces: number;
+  totalPieces: number;
   downloadSpeed: number;
   progress: number;
   firstFrameMs: number | null;
@@ -95,6 +108,8 @@ const initialStats: Stats = {
   peers: 0,
   downloaded: 0,
   uploaded: 0,
+  verifiedPieces: 0,
+  totalPieces: 0,
   downloadSpeed: 0,
   progress: 0,
   firstFrameMs: null,
@@ -255,6 +270,7 @@ export default function SpikeBridgeScreen() {
   const clientRef = useRef<InstanceType<WebTorrentCtor> | null>(null);
   const serverRef = useRef<Server | null>(null);
   const startTsRef = useRef<number | null>(null);
+  const firstFrameRecordedRef = useRef(false);
 
   const appendLog = useCallback((line: string) => {
     setStats((s) => ({
@@ -286,14 +302,16 @@ export default function SpikeBridgeScreen() {
     if (!player) return;
     const sub = player.addListener('statusChange', (payload: { status: VideoPlayerStatus }) => {
       appendLog(`player.status=${payload.status}`);
-      if (payload.status === 'readyToPlay' && stats.firstFrameMs === null && startTsRef.current) {
+      if (payload.status === 'readyToPlay' && !firstFrameRecordedRef.current && startTsRef.current) {
+        firstFrameRecordedRef.current = true;
         const ms = Date.now() - startTsRef.current;
         setStats((s) => ({ ...s, firstFrameMs: ms }));
         appendLog(`firstFrame: ${ms}ms`);
+        player.play();
       }
     });
     return () => sub.remove();
-  }, [player, appendLog, stats.firstFrameMs]);
+  }, [player, appendLog]);
 
   const handleStart = async () => {
     if (clientRef.current) {
@@ -302,14 +320,25 @@ export default function SpikeBridgeScreen() {
     }
     setStats({ ...initialStats, status: 'loading polyfills' });
     startTsRef.current = Date.now();
+    firstFrameRecordedRef.current = false;
 
     let WebTorrent: WebTorrentCtor;
+    let MemoryChunkStore: ChunkStoreCtor;
     try {
       await import('@/lib/webtorrent/polyfills');
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mod = require('webtorrent');
       WebTorrent = (mod?.default ?? mod) as WebTorrentCtor;
-      appendLog('webtorrent loaded');
+      // WebTorrent's `browser` package.json aliases `fs-chunk-store` →
+      // `fsa-chunk-store`, which requires OPFS (`navigator.storage
+      // .getDirectory`). Hermes has no OPFS, so fsa-chunk-store silently
+      // drops writes — pieces never complete, progress stays at 0. Bypass
+      // it with a memory store for the spike. Production will need an
+      // RN-filesystem-backed store (Unit 2a).
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const storeMod = require('memory-chunk-store');
+      MemoryChunkStore = (storeMod?.default ?? storeMod) as ChunkStoreCtor;
+      appendLog('webtorrent loaded (memory-chunk-store)');
     } catch (err) {
       appendLog(`load failed: ${String(err)}`);
       setStats((s) => ({ ...s, status: 'error' }));
@@ -322,9 +351,16 @@ export default function SpikeBridgeScreen() {
 
     appendLog('adding magnet');
     setStats((s) => ({ ...s, status: 'adding' }));
-    const pending = client.add(magnet, async (torrent: Torrent) => {
-      appendLog(`metadata: ${torrent.infoHash} (${torrent.files.length} files)`);
-      setStats((s) => ({ ...s, status: 'starting bridge', infoHash: torrent.infoHash }));
+    const pending = client.add(magnet, { store: MemoryChunkStore }, async (torrent: Torrent) => {
+      appendLog(
+        `metadata: ${torrent.infoHash} (${torrent.files.length} files, ${torrent.pieces.length} pieces)`,
+      );
+      setStats((s) => ({
+        ...s,
+        status: 'starting bridge',
+        infoHash: torrent.infoHash,
+        totalPieces: torrent.pieces.length,
+      }));
 
       try {
         const { server, url } = await startBridge(torrent, appendLog);
@@ -335,6 +371,19 @@ export default function SpikeBridgeScreen() {
         setStats((s) => ({ ...s, status: 'error' }));
         return;
       }
+
+      // Note: `torrent.on('verify')` does NOT fire on Hermes/WebTorrent 2.8.5
+      // even when pieces ARE verified — `torrent.progress` still advances to
+      // 1.0 via the internal bitfield. This counter stays at 0 throughout a
+      // successful run. Leave it for when we dig into that separately.
+      let verifyCount = 0;
+      torrent.on('verify', (pieceIndex: unknown) => {
+        verifyCount++;
+        if (verifyCount <= 3 || verifyCount % 10 === 0) {
+          appendLog(`verify #${verifyCount} piece=${String(pieceIndex)}`);
+        }
+      });
+      torrent.on('done', () => appendLog('torrent.done'));
 
       // WebTorrent fires 'download' per-chunk (100s/sec during active
       // streaming). Unconditional setStats would flood React with re-renders
@@ -350,6 +399,7 @@ export default function SpikeBridgeScreen() {
           peers: torrent.numPeers,
           downloaded: torrent.downloaded,
           uploaded: torrent.uploaded,
+          verifiedPieces: verifyCount,
           downloadSpeed: torrent.downloadSpeed,
           progress: torrent.progress,
         }));
@@ -412,8 +462,10 @@ export default function SpikeBridgeScreen() {
         <Stat label="Bridge" value={stats.bridgeUrl ?? '—'} />
         <Stat label="Info hash" value={stats.infoHash ?? '—'} />
         <Stat label="Peers" value={String(stats.peers)} />
-        <Stat label="Down" value={formatBytes(stats.downloaded)} />
-        <Stat label="Up" value={formatBytes(stats.uploaded)} />
+        {/* always 0/N on Hermes — verify event doesn't fire (see listener comment) */}
+        <Stat label="Verified" value={`${stats.verifiedPieces}/${stats.totalPieces}`} />
+        <Stat label="Downloaded" value={formatBytes(stats.downloaded)} />
+        <Stat label="Uploaded" value={formatBytes(stats.uploaded)} />
         <Stat label="Speed" value={`${formatBytes(stats.downloadSpeed)}/s`} />
         <Stat label="Progress" value={`${(stats.progress * 100).toFixed(1)}%`} />
         <Stat label="First frame" value={stats.firstFrameMs != null ? `${stats.firstFrameMs} ms` : '—'} />
