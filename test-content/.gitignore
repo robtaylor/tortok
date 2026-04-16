@@ -1,0 +1,7 @@
+# Ignore loose .mp4 files at the test-content root. They're typically
+# scratch media with unclear licensing (YouTube downloads, transcodes,
+# etc.). Committed test assets go in `clips/` (Big Buck Bunny derivatives,
+# CC-BY — see clips/CREDITS.md) or are grandfathered in by explicit allow
+# below.
+/*.mp4
+!/test_video.mp4
