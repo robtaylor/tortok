@@ -47,14 +47,14 @@ client.seed(videoPath, {
 // Also start an HTTP server to serve the mp4 directly (BEP-19 webseed fallback)
 const httpPort = 8090;
 const httpServer = http.createServer((req, res) => {
-  // Only serve the test video (any path returns it)
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Range');
-  res.setHeader('Content-Type', 'video/mp4');
+  const cors = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+    'Access-Control-Allow-Headers': 'Range',
+  };
 
   if (req.method === 'OPTIONS') {
-    res.writeHead(204);
+    res.writeHead(204, cors);
     res.end();
     return;
   }
@@ -68,16 +68,22 @@ const httpServer = http.createServer((req, res) => {
     const start = parseInt(startStr, 10);
     const end = endStr ? parseInt(endStr, 10) : total - 1;
     res.writeHead(206, {
+      ...cors,
+      'Content-Type': 'video/mp4',
       'Content-Range': `bytes ${start}-${end}/${total}`,
       'Accept-Ranges': 'bytes',
       'Content-Length': end - start + 1,
     });
+    if (req.method === 'HEAD') { res.end(); return; }
     fs.createReadStream(videoPath, { start, end }).pipe(res);
   } else {
     res.writeHead(200, {
+      ...cors,
+      'Content-Type': 'video/mp4',
       'Accept-Ranges': 'bytes',
       'Content-Length': total,
     });
+    if (req.method === 'HEAD') { res.end(); return; }
     fs.createReadStream(videoPath).pipe(res);
   }
 });
