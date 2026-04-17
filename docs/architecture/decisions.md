@@ -951,6 +951,440 @@ likely around TURN credentials, NetInfo-driven Wi-Fi gating, and
 NAT traversal across cellular networks — neither simulators nor
 the local-network emulator setup exercise those paths).
 
+**Deferred optimizations (identified during Unit 2 integration,
+2026-04-17).**
+
+The production integration confirmed that P2P playback works
+end-to-end on iOS simulator: WebTorrent init → tracker → WebRTC
+handshake → TcpSocket HTTP bridge → expo-video plays via bridge URL.
+HLS fallback also works cleanly when P2P takes too long. Three
+optimizations are deferred until after three-platform validation:
+
+1. **Inline .torrent metadata.** Magnet-only resolution takes ~6s
+   because WebTorrent must do a WebRTC handshake just to fetch the
+   torrent info dict from the seeder. Serving the .torrent file
+   (or its info dict as base64) in the feed API response would let
+   `client.add(torrentBuffer)` resolve instantly — no tracker or
+   peer connection needed for metadata. Requires: `torrent_file_url`
+   column in the DB, .torrent files hosted on R2/CDN, client fetches
+   the buffer and passes it to `client.add()`.
+
+2. **Wider pre-fetch window.** Currently `useP2PUrl` fires for
+   `isActive || isAdjacent` (±1 video). With instant metadata
+   resolution, widen torrent pre-resolution to ±2 or ±3 while
+   keeping player creation at ±1. Adjacent torrents resolve before
+   the user scrolls to them — the `managed` map fast path returns
+   the cached bridge URL immediately.
+
+3. **P2P-primary source selection.** Current behaviour: the video
+   player gets `hlsURL` immediately (while `p2pUrl` is null),
+   then switches to the bridge URL when P2P resolves ~6s later,
+   causing a brief reload. Better: choose the source once when the
+   video becomes active — use the bridge URL if P2P is already
+   resolved, otherwise fall back to HLS. Don't switch mid-playback.
+
+Combined effect: first video in a session may start via HLS (cold
+torrent), but every subsequent scroll uses a pre-resolved P2P bridge
+URL with zero delay. The HLS fallback becomes a rare cold-start
+path rather than the default.
+
+---
+
+## ADR-010: Bridge Bluesky video posts into the tortok feed (inbound federation)
+
+**Status:** Accepted — 2026-04-17
+
+**Context.** The chicken-and-egg problem at launch is severe: a new
+short-form video app shipping with an empty feed dies on day one.
+The release research informing `docs/release-plan.md` is unambiguous
+— TikTok solved the empty feed with the For You Page, Instagram by
+hand-curating supply, Bluesky (badly, late) with Starter Packs. None
+survived showing a new user a blank follow feed. We have no ad
+budget for the TikTok approach and no team to scale the Instagram
+approach beyond its absolute Halo tier.
+
+ADR-002 commits us to AT Protocol. Bluesky added native video posts
+in late 2024 (`app.bsky.embed.video`), and they federate over the
+standard atproto firehose like every other record. The data is open
+by design.
+
+The current ADR-006 phase plan defers all federation work to Phase 3
+(PDS standoff). That ordering is correct for the *outbound* direction
+— publishing signed `tortok.video.post` records requires our own PDS.
+But the *inbound* direction — consuming and rendering existing
+Bluesky video posts in the tortok feed — needs none of that
+infrastructure. It can run as a read-only firehose subscriber,
+parallel to the Phase 2 P2P client work, with no dependencies on
+Phases 3–4.
+
+This ADR pulls inbound federation forward and treats it as the
+cold-start solution for the open beta launch.
+
+**Decision.**
+
+1. **Subscribe to the atproto firehose, filter for video posts.** Use
+   `@atproto/sync` against a public relay to consume `com.atproto.sync.subscribeRepos`,
+   filter commits for `app.bsky.feed.post` records whose embed is
+   `app.bsky.embed.video`, and index matched records in Postgres
+   alongside the existing video schema.
+
+2. **Render bridged posts in the tortok vertical feed alongside
+   native `tortok.video.post` content.** Bridged posts are
+   first-class feed items, not segregated into a separate "explore
+   Bluesky" tab. The federation pitch — "same network, different
+   lens" — only works if the experience is genuinely unified.
+
+3. **Display-only in v1. Engagement stays on Bluesky.** Bridged
+   posts surface a "via Bluesky" affordance and a one-tap link back
+   to the original post. Likes, replies, and follows on bridged
+   content are Bluesky-side actions; we do not mirror or proxy them.
+   This keeps the trust model simple (we are a renderer, not an
+   actor) and avoids duplicating Bluesky's social graph.
+
+4. **Bytes come from Bluesky's video CDN.** v1 does not re-host
+   bridged content on tortok seeders. The P2P story (ADR-008) does
+   not apply to bridged content — it is the lure, not the conversion.
+   Bandwidth for bridged content is Bluesky's cost, not ours.
+
+5. **Honor opt-out signals.** Creators who do not want their posts
+   bridged can opt out via the same self-labeling conventions used
+   by existing atproto bridges (e.g., the Bridgy Fed `!no-bridge`
+   pattern). The bridge filters out posts from authors carrying
+   these labels at index time. Revisit label semantics if atproto
+   formalizes a bridging-consent convention later.
+
+6. **Inherit moderation via labelers.** Subscribe to the same default
+   labeler set Bluesky's first-party app uses, plus any labelers we
+   adopt for our own moderation policy (separate from this ADR;
+   tracked in `open-problems/moderation.md`). Bridged posts carry
+   their labels into the tortok client and are filtered/hidden
+   according to user moderation preferences.
+
+7. **Native upgrade path is the conversion funnel.** Once Phase 3's
+   PDS is live, bridged posts include a creator-facing affordance
+   ("post natively to tortok for P2P-backed durability and
+   portability") that lands them in the native posting flow. Until
+   then, the affordance is a "notify when available" capture.
+
+8. **Phase placement.** This work runs as a parallel track alongside
+   Phase 2 P2P client work. Neither blocks the other. The bridge
+   must be live before the open beta launch in `docs/release-plan.md`
+   Phase A. Treat it as a Phase 2.5 milestone if linearity matters.
+
+**Consequences.**
+
+- The empty-feed problem is solved on day one of open beta. A new
+  user opens tortok and sees real video from real creators, possibly
+  including accounts they already follow on Bluesky.
+- The federation thesis becomes provable, not asserted. "Your
+  followers come with you" is demonstrated by the *content* coming
+  with you, not just claimed on a marketing page.
+- Creator-outreach economics shift. We are not asking creators to
+  *move* — we are showing them their content already plays in tortok,
+  and the ask becomes "post natively when you want the durability
+  upgrade." Smaller commitment, higher expected conversion.
+- We become a downstream consumer of the Bluesky firehose. Bluesky
+  PBC could throttle, block, or change firehose access policies.
+  Mitigation: multiple public relays exist; document a fallback list
+  and confirm we can switch with config, not code.
+- Bandwidth asymmetry. v1 ships Bluesky's bytes through our app
+  without contributing to their costs. This is protocol-allowed
+  behaviour — the firehose and video CDN are public — but it is
+  worth being honest about. If bridged consumption at scale becomes
+  a point of friction, we can offer to mirror bridged content to our
+  seeders (with creator consent) and contribute upload bandwidth
+  back into the swarm.
+- Moderation surface area grows. We are now responsible for filtering
+  bridged content according to our own policy *plus* inheriting
+  Bluesky's labeler signals. The default labeler subscription set
+  becomes a launch-blocking decision, partially covered by
+  `open-problems/moderation.md` but raised in urgency by this ADR.
+- Opt-out must work flawlessly from launch. Creators who self-label
+  as no-bridge and find their content bridged anyway is the kind of
+  trust failure that lights up Bluesky within hours. Opt-out
+  correctness is a launch criterion, not a polish item.
+- ADR-006's Phase 3 ordering is unaffected for *outbound* federation
+  (publishing signed `tortok.video.post` records still requires the
+  PDS). Inbound is decoupled from that timeline. ADR-005's AppView
+  effectively starts here in pull-only mode — Phase 3/4 work then
+  extends it to subscribe to our own PDS as well.
+
+**Alternatives ruled out.**
+
+- **Wait for Phase 3 to do all federation work together.** Cleaner
+  conceptually but leaves the cold-start problem unsolved during the
+  open beta window. The launch dies and Phase 3 ships into a
+  graveyard.
+- **Scrape TikTok / Instagram and rehost.** Legally hostile,
+  creator-hostile, contradicts the wedge. Ruled out in release-plan
+  discussion regardless of ADR-010.
+- **Show bridged content in a separate "explore Bluesky" tab.**
+  Defeats the federation pitch. The whole point is that the network
+  is shared — segregating bridged content into a side surface
+  implies it's a different network.
+- **Bridge bytes as well as records — auto-mirror Bluesky video to
+  tortok seeders.** Higher contribution back to the open web, but
+  consent-fraught (republishing Bluesky's CDN bytes via P2P is a
+  different act from rendering them). v2 feature, gated on creator
+  opt-in, not v1.
+- **Bridge engagement (likes, replies) bidirectionally.** Doubles
+  the trust model, requires write authority on Bluesky (which we
+  don't have without per-user OAuth), and risks fragmenting
+  conversation. Display-only is the right v1 scope.
+- **Build our own atproto relay.** Saves us from depending on
+  Bluesky/third-party relays but is significant infrastructure for
+  a v1 feature. Subscribe to existing relays; reconsider if any
+  prove unreliable or hostile.
+
+**Implementation notes.**
+
+- Add a `source` column on the video records table to distinguish
+  `native` vs `bridged_bluesky`. Bridged records carry the
+  originating DID, post URI, and CDN URL; they do not carry a
+  magnet URI.
+- The player must handle both magnet-URI playback (native) and
+  direct HLS playback from Bluesky CDN (bridged) without UI
+  difference.
+- Firehose subscription is a long-lived process — fits in the
+  AppView service plan from ADR-005, started early in pull-only
+  mode here.
+- Cost: one persistent WebSocket plus a small Postgres write rate.
+  Negligible at v1 scale; revisit if the index outgrows the existing
+  Postgres instance.
+- Opt-out test: include at least one no-bridge-labeled author in
+  CI fixtures. The bridge must filter them out at index time, not
+  just at render time.
+
+---
+
+## ADR-011: Monetization architecture — interface-first payout, first-party pool committed, V1 rail gated on Apple + US-incorporation prerequisites
+
+**Status:** Accepted — 2026-04-17
+
+**Context.** The release-plan discussion forced the monetization
+question earlier than expected. The public wedge settled as "your
+videos, your followers, yours to take anywhere" — creator-and-
+audience-in-control. That framing forecloses platform-extractive
+monetization (no ad-rev share, no take of creator payments, no
+platform-controlled distribution) and sharpens the "what's the
+*positive* fan-facing monetization story?" question.
+
+The answer that emerged: a **pay-what-you-think-it's-worth monthly
+"support open content" subscription**, where fans pool contributions
+and manually allocate their pool across the creators they follow —
+fan-side curation rather than platform-side or formula-side
+distribution. This is the missing product in the creator economy:
+Patreon doesn't scale for fans (nobody runs 50 × $5/mo
+subscriptions), but a single $20/mo pool split across 5–10 creators
+does. It is directly aligned with the wedge ("you control where the
+money goes").
+
+The existing principle in `open-problems/monetization.md` — "TorTok
+does not operate the pool, TorTok does not custody creator money" —
+contradicts a first-party pool. The contradiction is genuine and
+needs resolving here.
+
+Two oracle research passes explored operating mechanisms:
+
+1. **Open Collective / fiscal host.** Surfaced serious blockers:
+   distribution is not automated (expense-per-payout with host
+   approval), policy fit is hostile (OSC rejects non-code, OCF
+   dissolving, SCN UK-only), and the "click to create your own
+   pool" pattern is fundamentally incompatible with how fiscal hosts
+   operate.
+2. **Stripe + USDC-on-Base (Stablecoin Payouts for Connect).**
+   Product exists (private preview). Creators onboard via Stripe
+   Connect Express (KYC required), payouts go to creator-controlled
+   Base wallet addresses. Effective fee ~7.4%. Platform (tortok) must
+   be US-incorporated. Apple App Store Guideline 3.1.1 is a real risk
+   for in-app flows. Chargeback asymmetry requires operational
+   policy.
+
+Neither rail is a drop-in answer. The design question becomes: how
+do we commit to the product without committing to a rail that isn't
+fully knowable yet?
+
+**Decision.**
+
+1. **Architect payout behind an interface, not a rail.** The stable
+   primitive is Sub-problem A's `tortok.payout.destination` Lexicon
+   (creator-owned, multiple destination kinds: Patreon URL, LN
+   address, Base wallet, Stripe Connect link, generic URL). Which
+   backend routes money for a given pool is a per-pool
+   implementation detail. This means no rail decision is load-
+   bearing on the Lexicon or the UX; rails can be added, swapped,
+   or run in parallel without schema changes.
+
+2. **Commit to the first-party "support open content" pool as a
+   product surface.** TorTok publishes it, brands it, onboards fans
+   into it. This contradicts the earlier "TorTok does not operate
+   the pool" principle. That principle is **softened, not
+   abandoned**: TorTok may operate a pool and briefly custody fan
+   funds in transit (e.g., in a Stripe balance between collection
+   and batched distribution), but TorTok does not hold a permanent
+   balance representing creator earnings, and does not take a
+   revenue cut. The amended principle is: **"TorTok does not profit
+   from custody of creator money."**
+
+3. **Fan-allocated distribution is the default mechanic.** Each fan
+   manually allocates their monthly pool across the creators they
+   follow/choose. Fallback when unallocated: split across recently-
+   watched follows (exact rule deferred to implementation). This
+   sidesteps the view-count trust problem — `view-counting.md` is
+   *not* a prerequisite for this pool mechanism, which loosens the
+   sequencing on this ADR.
+
+4. **Leading V1 rail candidate is Stripe + USDC-on-Base,** with
+   explicit acceptance of: creator KYC via Stripe Connect Express
+   (decided 2026-04-17 to be acceptable V1 friction — identical to
+   Patreon/YouTube, does not compromise the wedge), transient fiat
+   custody in Stripe balance, and a documented chargeback policy.
+   Rail commitment is *not final here* — it is gated on the two
+   prerequisites below.
+
+5. **Prerequisite P1 (Apple App Store).** Obtain a written Apple
+   position on Guideline 3.1.1 for a fan-allocated PWYW pool that
+   distributes to third-party creators. Three possible outcomes:
+   (a) Apple confirms the flow is not IAP → ship in native iOS app;
+   (b) Apple requires IAP → pool is web-only on iOS for V1;
+   (c) Ambiguous → default to web-only to avoid review roulette.
+   The pool launching web-only is compatible with the PWA-first
+   shape of Phase A in `docs/release-plan.md` — iOS users tap out to
+   a browser flow to subscribe and allocate. This is friction but
+   not a blocker.
+
+6. **Prerequisite P2 (US incorporation).** Decide whether tortok
+   incorporates in the US. This is a company decision with
+   implications beyond monetization (tax residency, legal exposure,
+   App Store entity requirements). Stripe+USDC requires it;
+   Lightning doesn't. The decision is deferred to its own
+   discussion; this ADR only notes that the leading V1 rail depends
+   on it.
+
+7. **Lightning is a parallel optional rail, not the V1 primary.**
+   Creators who publish a Lightning address destination (Sub-problem
+   A) can receive Lightning tips and, in a later V2, Lightning-based
+   pool distributions. Lightning runs alongside the V1 fiat rail,
+   not instead of it. Strike or Alby are the candidate custodial
+   services; final pick deferred.
+
+8. **"Click to create your own pool" (Sub-problem B) is V2, not
+   V1.** Neither researched rail supports it cleanly — Stripe
+   Connect per pool requires platform-level onboarding per pool;
+   fiscal hosts require per-project approval. The general
+   `tortok.payout.pool` Lexicon ships when there is a rail that
+   supports per-pool instantiation without heavy platform friction.
+   For V1, the first-party pool is the only first-party-surfaced
+   pool; third parties can still self-host pools and publish the
+   Lexicon records once the Lexicon lands, but tortok does not
+   surface or endorse them in the client.
+
+9. **Open Collective is deprioritized.** Automation incompatibility,
+   platform risk (OCF precedent, host dissolution), and policy-fit
+   hostility make it a worse fit than Stripe+USDC even before the
+   "click to create your own pool" mismatch. Not ruled out forever
+   — a favorable fiscal-host relationship or a change in OC's
+   expense primitives could reopen it — but not a V1 path.
+
+10. **Tipping (one-off) ships as a parallel mechanism,** not a
+    replacement for the pool. Per-creator destinations (Sub-problem
+    A) already support it. Tips on Lightning addresses require no
+    tortok custody; tips through the Stripe rail route through the
+    same pool infrastructure with a different distribution formula
+    (1:1 to the tipped creator).
+
+11. **Sequencing.** Sub-problem A (the `tortok.payout.destination`
+    Lexicon) ships first and is not rail-dependent — creators can
+    publish Patreon / Substack / LN / URL destinations on day one
+    of Phase 3. The first-party pool ships after both prerequisites
+    resolve and the chosen rail is wired up. Sub-problem B ships
+    whenever V2 rail availability makes it cheap.
+
+**Consequences.**
+
+- The "TorTok does not custody creator money" principle is amended
+  to "TorTok does not profit from custody of creator money." This
+  is a softening; record it clearly so it is not silently drifted.
+- Monetization is unblocked as a product decision without being
+  locked to a rail. The `tortok.payout.destination` Lexicon can
+  land in Phase 3 alongside the PDS work with no rail commitment.
+- The release-plan Phase C ("App Store/Play 1.0 promotion, triggered
+  by readiness or catalyst") acquires a hard dependency on
+  Prerequisite P1. A native pool flow cannot ship on iOS without
+  Apple's position. If Apple forces web-only, the App Store launch
+  is still possible — the pool simply lives in the PWA surface.
+- Creator KYC becomes a documented V1 requirement for the first-
+  party pool. Creators who want to receive from the pool complete
+  Stripe Connect Express onboarding (identity + tax). Earlier drafts
+  framed this as wedge-breaking; this ADR records that it is not —
+  it is identical friction to Patreon/YouTube, does not compromise
+  the "yours to take anywhere" wedge, and nothing prevents a later
+  non-KYC rail from being added in parallel.
+- TorTok becomes a US entity candidate. Prerequisite P2 is elevated
+  from "at some point" to "before V1 pool launch." If we decide
+  against US incorporation, the V1 rail shifts to Lightning (which
+  has its own much-narrower audience) or another fiat rail yet to
+  be surveyed.
+- Chargeback policy becomes a pre-launch operational item. When a
+  fan chargebacks after USDC has been distributed, the default is
+  tortok absorbs the loss (covered from a small operational reserve
+  taken from *somewhere* — TBD, not from creator distributions).
+- The moderation surface grows. A first-party pool that pays
+  creators creates a stronger "tortok endorses these creators by
+  paying them" signal than a neutral hosting platform creates, even
+  if the distribution is fan-allocated. This increases pressure on
+  `open-problems/moderation.md` but does not block this ADR.
+- Sub-problem B ("click to create your own pool") being V2 softens
+  the federation pitch slightly — third parties can still run pools
+  via the Lexicon, but tortok won't surface them. Revisit when the
+  rail situation allows.
+
+**Alternatives ruled out.**
+
+- **Pick a rail now and write the ADR around it.** Tempting but
+  premature: neither researched rail is fully knowable without
+  Apple's position (P1) and the US-incorporation decision (P2).
+  Writing the ADR around Stripe+USDC today forces commitment to
+  P1 and P2 outcomes that haven't been obtained. Interface-first
+  lets the product commitment land while rail commitment waits.
+- **Fiscal host (Open Collective) as V1.** Ruled out by research
+  findings — distribution automation incompatibility and platform
+  risk are structural, not polish issues.
+- **Lightning as V1 primary.** Too-narrow audience (Lightning-
+  literate creators and fans only). Runs as parallel optional
+  rail, not primary.
+- **Patreon-for-tortok (tortok holds a Patreon, pays creators out
+  of it).** Ruled out by the custody principle — tortok would hold
+  a permanent balance of creator earnings, which the amended
+  principle explicitly rejects.
+- **Smart contract on-chain pool (Ethereum / Solana).** Non-
+  custodial for tortok but forces crypto UX on every fan.
+  Contradicts ADR-007's "frictionless familiar signup."
+- **Abandon the first-party pool and keep only the general
+  primitive.** Possible but the release-plan discussion settled
+  that the first-party pool is the product-market-fit answer to
+  "what's the positive fan monetization story?" Punting it leaves
+  that story unanswered through Phase A and B.
+- **Take a platform revenue cut.** Ruled out by wedge alignment.
+  Tortok's position is creator-and-audience-in-control; a platform
+  cut contradicts the story we're telling. Revisit only if
+  operational costs demand it, and as a separate explicit decision.
+
+**Implementation notes.**
+
+- `tortok.payout.destination` Lexicon design work: Phase 3,
+  independent of rail decision.
+- First-party pool UX design: Phase B of `docs/release-plan.md` or
+  later, gated on P1 + P2 + rail commitment.
+- Chargeback operational reserve: size and funding source TBD.
+  Not from creator distributions.
+- Stripe Connect private-preview application: submit before
+  committing to the rail, as the product may not be generally
+  available when we need it.
+- Apple engagement (P1): written position via App Store Review /
+  DR channel, not forum posts or precedent-hunting. This is the
+  only kind of answer that holds under review.
+
 ---
 
 ## Unresolved design problems
@@ -970,10 +1404,13 @@ header stating the phase that forces the decision.
   window on mobile, battery-gated aggressive on desktop/web). File
   is kept as context for the starting numbers; Phase 2 validates
   them and any policy change supersedes ADR-009.
-- **`monetization.md`** — philosophy is decided (TorTok provides
-  signals, not money movement); sub-problems around payout-destination
-  lexicons and optional federated pools are the open parts. Resolve
-  before announcing any pool→payout support.
+- **`monetization.md`** — philosophy decided; architecture
+  direction set in ADR-011 (interface-first, first-party pool
+  committed, Stripe+USDC-on-Base leading V1 rail candidate). Two
+  prerequisites remain open before V1 rail commitment: Apple App
+  Store Guideline 3.1.1 written position, and the tortok
+  US-incorporation decision. Sub-problem A (payout-destination
+  Lexicon) is unblocked and can ship in Phase 3 independently.
 
 ## Execution risks
 
@@ -1049,15 +1486,24 @@ forces it arrives.
 
 - **Recording / upload UX.** The current `Record` tab is a stub.
   Design and camera capture are a separate concern.
-- **Direct platform monetization.** TorTok does not serve ads, host
-  paid content, or pay creators directly. Creators monetize externally
-  (Patreon, host-read sponsorships, direct deals) using trustworthy
-  engagement signals published by our PDS. See
+- **Direct platform monetization via ads or paid content.** TorTok
+  does not serve ads, host paid content, or take a revenue cut from
+  creator earnings. Creators monetize externally (Patreon, host-read
+  sponsorships, direct deals) using trustworthy engagement signals
+  published by our PDS, *plus* the first-party fan-allocated
+  "support open content" pool (ADR-011). TorTok may transiently
+  custody fan funds in the pool rail (Stripe balance) but does not
+  profit from custody. See ADR-011 and
   `docs/architecture/open-problems/monetization.md` for the full
-  framing and the sub-problems that remain open.
+  framing.
 - **Self-hosted PDS tooling.** Deferred to post-v1 per ADR-005.
-- **Payment processing / KYC / creator payouts.** Out of scope
-  because of the external-monetization choice above.
+- **Payment processing / creator KYC / creator payouts for the V1
+  pool rail.** ADR-011 sets the direction (Stripe+USDC-on-Base
+  leading candidate, creator KYC accepted) but the rail commitment
+  is gated on Apple App Store guidance (P1) and the
+  US-incorporation decision (P2). The external-monetization path
+  (creators linking to their own Patreon/etc.) is unchanged — no
+  tortok-side payment processing needed there.
 - **Native desktop (macOS, Windows, Linux).** Expo web covers desktop
   usage for v1; native desktop shells are a later decision.
 
