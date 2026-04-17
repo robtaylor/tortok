@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { getFeed, likeVideo, type Video } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
+import { useP2PUrl } from '@/lib/webtorrent/useP2PUrl';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 80;
@@ -52,13 +53,13 @@ const VideoItem = memo(function VideoItem({
   const liked = delta === 0 ? video.isLiked : delta === 1;
   const likeCount = video.likeCount + delta;
 
-  const videoUrl: string | null = video.hlsURL;
-
   // Only mount a player for the active cell and its immediate neighbors —
   // inactive cells that are simply scrolled-past render their poster and
   // nothing else. Prevents the FlatList window from holding N simultaneous
   // AVPlayer / ExoPlayer instances that we aren't using.
   const shouldLoadPlayer = isActive || isAdjacent;
+  const p2pUrl = useP2PUrl(shouldLoadPlayer ? video.magnetLink : null);
+  const videoUrl: string | null = p2pUrl ?? video.hlsURL;
   const player = useVideoPlayer(shouldLoadPlayer ? videoUrl : null, configurePlayer);
 
   const videoVisible = isActive && status === 'readyToPlay';

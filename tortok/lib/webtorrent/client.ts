@@ -1,0 +1,181 @@
+// Singleton WebTorrent client with refcounted torrent management.
+//
+// Gated on EXPO_PUBLIC_USE_P2P — when absent/falsy, all exports are no-ops
+// and no WebTorrent code is loaded (zero overhead path).
+
+import type { ChunkStoreCtor, Torrent, WebTorrentClient, WebTorrentCtor } from './types';
+import { destroyBridge, registerTorrent, unregisterTorrent } from './bridge';
+
+const P2P_ENABLED = process.env.EXPO_PUBLIC_USE_P2P === '1';
+
+/** Grace period before removing an unreferenced torrent (prevents scroll thrashing). */
+const RELEASE_GRACE_MS = 5_000;
+
+// ---------------------------------------------------------------------------
+// Lazy singleton
+// ---------------------------------------------------------------------------
+
+let client: WebTorrentClient | null = null;
+let MemoryChunkStore: ChunkStoreCtor | null = null;
+let initPromise: Promise<boolean> | null = null;
+
+/** One-shot init: polyfills → WebTorrent + chunk store. Returns false on failure. */
+function ensureClient(): Promise<boolean> {
+  if (initPromise) return initPromise;
+
+  initPromise = (async () => {
+    try {
+      await import('@/lib/webtorrent/polyfills');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const wtMod = require('webtorrent');
+      const WT = (wtMod?.default ?? wtMod) as WebTorrentCtor;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const storeMod = require('memory-chunk-store');
+      MemoryChunkStore = (storeMod?.default ?? storeMod) as ChunkStoreCtor;
+
+      client = new WT();
+      client.on('error', (e: unknown) => {
+        console.warn('[webtorrent] client error:', e);
+      });
+      return true;
+    } catch (e) {
+      console.warn('[webtorrent] init failed:', e);
+      return false;
+    }
+  })();
+
+  return initPromise;
+}
+
+// ---------------------------------------------------------------------------
+// Torrent refcount map
+// ---------------------------------------------------------------------------
+
+type ManagedTorrent = {
+  torrent: Torrent;
+  bridgeUrl: string;
+  refCount: number;
+  graceTimer: ReturnType<typeof setTimeout> | null;
+};
+
+/** Keyed by magnet link. */
+const managed = new Map<string, ManagedTorrent>();
+
+/** In-flight requestUrl promises — prevents duplicate `client.add()` when two
+ *  VideoItems (active + adjacent) mount simultaneously for the same magnet. */
+const pending = new Map<string, Promise<string | null>>();
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Request a bridge URL for a magnet link. Bumps refcount if the torrent is
+ * already active; otherwise adds it to the client and registers it with the
+ * bridge. Returns `null` if P2P is disabled or any step fails.
+ */
+export async function requestUrl(magnetLink: string): Promise<string | null> {
+  if (!P2P_ENABLED) return null;
+
+  // Fast path: torrent already managed
+  const existing = managed.get(magnetLink);
+  if (existing) {
+    existing.refCount++;
+    if (existing.graceTimer) {
+      clearTimeout(existing.graceTimer);
+      existing.graceTimer = null;
+    }
+    return existing.bridgeUrl;
+  }
+
+  // Dedup: if another caller is already adding this magnet, piggyback on it
+  const inflight = pending.get(magnetLink);
+  if (inflight) {
+    const url = await inflight;
+    // Bump refcount for this additional consumer
+    const entry = managed.get(magnetLink);
+    if (entry) {
+      entry.refCount++;
+      if (entry.graceTimer) {
+        clearTimeout(entry.graceTimer);
+        entry.graceTimer = null;
+      }
+    }
+    return url;
+  }
+
+  const p = doAdd(magnetLink);
+  pending.set(magnetLink, p);
+  p.finally(() => pending.delete(magnetLink));
+  return p;
+}
+
+async function doAdd(magnetLink: string): Promise<string | null> {
+  const ok = await ensureClient();
+  if (!ok || !client || !MemoryChunkStore) return null;
+
+  try {
+    const torrent = await new Promise<Torrent>((resolve, reject) => {
+      const t = client!.add(magnetLink, { store: MemoryChunkStore! }, (torrent: Torrent) => {
+        resolve(torrent);
+      });
+      t.on('error', (e: unknown) => reject(e));
+    });
+
+    const bridgeUrl = await registerTorrent(torrent);
+
+    managed.set(magnetLink, {
+      torrent,
+      bridgeUrl,
+      refCount: 1,
+      graceTimer: null,
+    });
+
+    return bridgeUrl;
+  } catch (e) {
+    console.warn('[webtorrent] requestUrl failed:', e);
+    return null;
+  }
+}
+
+/**
+ * Release a reference to a magnet link. When refcount hits 0, a grace timer
+ * starts — if not re-requested within RELEASE_GRACE_MS, the torrent is
+ * removed from the client and unregistered from the bridge.
+ */
+export function release(magnetLink: string): void {
+  const entry = managed.get(magnetLink);
+  if (!entry) return;
+
+  entry.refCount = Math.max(0, entry.refCount - 1);
+  if (entry.refCount > 0) return;
+
+  entry.graceTimer = setTimeout(() => {
+    // Re-check: might have been re-requested during the grace period
+    if (entry.refCount > 0) return;
+
+    unregisterTorrent(entry.torrent.infoHash);
+    managed.delete(magnetLink);
+
+    if (client) {
+      // destroyStore: true ensures memory-chunk-store releases its piece buffers
+      client.remove(entry.torrent, { destroyStore: true }, (err?: Error) => {
+        if (err) console.warn('[webtorrent] remove error:', err);
+      });
+    }
+  }, RELEASE_GRACE_MS);
+}
+
+/** Tear down everything: all torrents, bridge server, WebTorrent client. */
+export function destroyClient(): void {
+  for (const [magnet, entry] of managed) {
+    if (entry.graceTimer) clearTimeout(entry.graceTimer);
+    managed.delete(magnet);
+  }
+  destroyBridge();
+  if (client) {
+    client.destroy();
+    client = null;
+    initPromise = null;
+  }
+}
