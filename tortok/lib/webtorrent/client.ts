@@ -70,11 +70,19 @@ const pending = new Map<string, Promise<string | null>>();
 // ---------------------------------------------------------------------------
 
 /**
- * Request a bridge URL for a magnet link. Bumps refcount if the torrent is
+ * Request a bridge URL for a torrent. Bumps refcount if the torrent is
  * already active; otherwise adds it to the client and registers it with the
  * bridge. Returns `null` if P2P is disabled or any step fails.
+ *
+ * When `torrentFileUrl` is provided, the .torrent file is fetched and passed
+ * directly to `client.add(buffer)` — this skips the ~6s magnet resolution
+ * round-trip (no tracker/peer needed for metadata). Falls back to magnet
+ * resolution if the fetch fails.
  */
-export async function requestUrl(magnetLink: string): Promise<string | null> {
+export async function requestUrl(
+  magnetLink: string,
+  torrentFileUrl?: string | null,
+): Promise<string | null> {
   if (!P2P_ENABLED) return null;
 
   // Fast path: torrent already managed
@@ -104,19 +112,45 @@ export async function requestUrl(magnetLink: string): Promise<string | null> {
     return url;
   }
 
-  const p = doAdd(magnetLink);
+  const p = doAdd(magnetLink, torrentFileUrl);
   pending.set(magnetLink, p);
   p.finally(() => pending.delete(magnetLink));
   return p;
 }
 
-async function doAdd(magnetLink: string): Promise<string | null> {
+/** Fetch a .torrent file and return it as a Uint8Array, or null on failure. */
+async function fetchTorrentFile(url: string): Promise<Uint8Array | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn('[webtorrent] .torrent fetch failed:', url, res.status);
+      return null;
+    }
+    const buf = await res.arrayBuffer();
+    return new Uint8Array(buf);
+  } catch {
+    console.warn('[webtorrent] .torrent fetch failed:', url);
+    return null;
+  }
+}
+
+async function doAdd(
+  magnetLink: string,
+  torrentFileUrl?: string | null,
+): Promise<string | null> {
   const ok = await ensureClient();
   if (!ok || !client || !MemoryChunkStore) return null;
 
+  // Prefer .torrent buffer (instant resolution) over magnet (6s round-trip)
+  let torrentId: string | Uint8Array = magnetLink;
+  if (torrentFileUrl) {
+    const buf = await fetchTorrentFile(torrentFileUrl);
+    if (buf) torrentId = buf;
+  }
+
   try {
     const torrent = await new Promise<Torrent>((resolve, reject) => {
-      const t = client!.add(magnetLink, { store: MemoryChunkStore! }, (torrent: Torrent) => {
+      const t = client!.add(torrentId, { store: MemoryChunkStore! }, (torrent: Torrent) => {
         resolve(torrent);
       });
       t.on('error', (e: unknown) => reject(e));

@@ -101,6 +101,7 @@ export const schemas = {
     // client hands straight to AVPlayer / a WebView, so a non-https
     // scheme is a direct injection/XSS vector (S2).
     hlsUrl: Joi.string().uri({ scheme: ['https'] }).allow(null, ''),
+    torrentFileUrl: Joi.string().uri({ scheme: ['https', 'http'] }).allow(null, ''),
     thumbnailUrl: Joi.string().uri({ scheme: ['https'] }).required(),
     durationSeconds: Joi.number().integer().min(1).max(300).required(),
     width: Joi.number().integer().min(1).required(),
@@ -111,6 +112,7 @@ export const schemas = {
   updateVideoUrls: Joi.object({
     hlsUrl: Joi.string().uri({ scheme: ['https'] }),
     magnetLink: Joi.string().pattern(/^magnet:\?/),
+    torrentFileUrl: Joi.string().uri({ scheme: ['https', 'http'] }).allow(null),
   }).min(1),
 
   likeVideo: Joi.object({

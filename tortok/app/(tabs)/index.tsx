@@ -21,6 +21,7 @@ import { useP2PUrl } from '@/lib/webtorrent/useP2PUrl';
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 80;
 const VIDEO_HEIGHT = SCREEN_HEIGHT - TAB_BAR_HEIGHT;
+const P2P_TIMEOUT_MS = 3_000;
 
 // Stable reference so `useVideoPlayer` doesn't see a fresh initializer on
 // every render (which can cause the player to be rebuilt on unrelated state
@@ -58,11 +59,36 @@ const VideoItem = memo(function VideoItem({
   // nothing else. Prevents the FlatList window from holding N simultaneous
   // AVPlayer / ExoPlayer instances that we aren't using.
   const shouldLoadPlayer = isActive || isAdjacent;
-  const p2pUrl = useP2PUrl(shouldLoadPlayer ? video.magnetLink : null);
-  const videoUrl: string | null = p2pUrl ?? video.hlsURL;
-  const player = useVideoPlayer(shouldLoadPlayer ? videoUrl : null, configurePlayer);
+  const p2pUrl = useP2PUrl(
+    shouldLoadPlayer ? video.magnetLink : null,
+    video.torrentFileUrl,
+  );
 
-  const videoVisible = isActive && status === 'readyToPlay';
+  // P2P-first source selection: wait for P2P to resolve (should be <1s with
+  // .torrent buffer). Only fall back to HLS after a timeout. Once a source
+  // is locked, never switch mid-playback (prevents restart + black flash).
+  const [lockedUrl, setLockedUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!shouldLoadPlayer) {
+      setLockedUrl(null);
+      return;
+    }
+    if (lockedUrl) return; // already locked
+    if (p2pUrl) {
+      setLockedUrl(p2pUrl);
+      return;
+    }
+    // Start HLS fallback timer
+    const timer = setTimeout(() => {
+      if (video.hlsURL) setLockedUrl(video.hlsURL);
+    }, P2P_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [shouldLoadPlayer, p2pUrl, lockedUrl, video.hlsURL]);
+
+  const videoUrl = shouldLoadPlayer ? lockedUrl : null;
+
+  const player = useVideoPlayer(videoUrl, configurePlayer);
 
   // Track player status for buffering/error overlays
   useEffect(() => {
@@ -72,6 +98,21 @@ const VideoItem = memo(function VideoItem({
     });
     return () => sub.remove();
   }, [player, retryKey]);
+
+  // Only reveal the VideoView once the player has actually rendered a frame.
+  // `readyToPlay` fires before the first frame hits the surface, causing a
+  // thumbnail → black → video flash. `playingChange` with isPlaying:true
+  // fires once AVPlayer/ExoPlayer has decoded and presented a frame.
+  const [hasPlayed, setHasPlayed] = useState(false);
+  useEffect(() => {
+    if (!player) { setHasPlayed(false); return; }
+    const sub = player.addListener('playingChange', (payload) => {
+      if (payload.isPlaying) setHasPlayed(true);
+    });
+    return () => sub.remove();
+  }, [player, retryKey]);
+
+  const videoVisible = isActive && hasPlayed;
 
   // Play/pause based on visibility.
   useEffect(() => {
@@ -100,6 +141,7 @@ const VideoItem = memo(function VideoItem({
     // site MUST also bump retryKey.
     player.replace(videoUrl);
     setStatus('loading');
+    setHasPlayed(false);
     setRetryKey((k) => k + 1);
   };
 

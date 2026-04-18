@@ -37,7 +37,7 @@ export type AddOpts = { store?: ChunkStoreCtor };
 
 export type WebTorrentClient = {
   add: (
-    magnet: string,
+    torrentId: string | Uint8Array,
     optsOrCb: AddOpts | ((torrent: Torrent) => void),
     cb?: (torrent: Torrent) => void,
   ) => Torrent;

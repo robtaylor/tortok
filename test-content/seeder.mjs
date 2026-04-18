@@ -46,6 +46,8 @@ client.seed(videoPath, {
 
 // Also start an HTTP server to serve the mp4 directly (BEP-19 webseed fallback)
 const httpPort = 8090;
+const torrentPath = path.join(__dirname, 'test_video.torrent');
+
 const httpServer = http.createServer((req, res) => {
   const cors = {
     'Access-Control-Allow-Origin': '*',
@@ -56,6 +58,37 @@ const httpServer = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, cors);
     res.end();
+    return;
+  }
+
+  // Serve .torrent file for instant P2P resolution (ADR-009 optimization)
+  if (req.url === '/test_video.torrent') {
+    try {
+      const tstat = fs.statSync(torrentPath);
+      res.writeHead(200, {
+        ...cors,
+        'Content-Type': 'application/x-bittorrent',
+        'Content-Length': tstat.size,
+      });
+      if (req.method === 'HEAD') { res.end(); return; }
+      fs.createReadStream(torrentPath).pipe(res);
+    } catch { res.writeHead(404, cors); res.end(); }
+    return;
+  }
+
+  // Serve thumbnail
+  if (req.url === '/thumb.jpg') {
+    const thumbPath = path.join(__dirname, 'thumb.jpg');
+    try {
+      const tstat = fs.statSync(thumbPath);
+      res.writeHead(200, {
+        ...cors,
+        'Content-Type': 'image/jpeg',
+        'Content-Length': tstat.size,
+      });
+      if (req.method === 'HEAD') { res.end(); return; }
+      fs.createReadStream(thumbPath).pipe(res);
+    } catch { res.writeHead(404, cors); res.end(); }
     return;
   }
 

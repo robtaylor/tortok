@@ -108,6 +108,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Add torrent_file_url column (ADR-009 optimization: inline .torrent metadata)
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS torrent_file_url TEXT;
+
 -- Add count columns if not exists
 ALTER TABLE users ADD COLUMN IF NOT EXISTS follower_count INTEGER DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS following_count INTEGER DEFAULT 0;
