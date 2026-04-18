@@ -2,6 +2,7 @@
 xcuserdata/
 .env*
 node_modules/
+*.torrent
 .claude/
 .tldr/
 .tldrignore
