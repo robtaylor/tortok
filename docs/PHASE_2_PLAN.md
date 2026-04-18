@@ -46,8 +46,6 @@ Scope: ADR-006 Phase 2 ("Cross-platform P2P").
 - **Android polyfills**: Defensive null checks on RTCPeerConnection
   and QuickCrypto, expo-crypto fallback when Nitro fails.
 
-## Remaining
-
 ### Unit 3 — Webseed-only (HLS dropped)
 - Added `urlList` (BEP-19 webseed) to torrent creation in both
   `backend/src/services/seeder.ts` and `test-content/seeder.mjs`.
@@ -55,19 +53,21 @@ Scope: ADR-006 Phase 2 ("Cross-platform P2P").
   state, `P2P_TIMEOUT_MS` timer all deleted.
 - Removed `hlsUrl` from validation schemas and API responses.
 - `hls_url` DB column kept nullable (vestigial).
+- Removed standalone `seeder/` service (webseed makes it redundant).
 - Recorded as ADR-009 amendment.
+
+### Unit 6 — Cleanup gate
+- Deleted `tortok/app/spike.tsx`, `tortok/app/spike-bridge.tsx`.
+- Removed spike auth-guard exemption in `tortok/app/_layout.tsx`.
+- Flipped `EXPO_PUBLIC_USE_P2P` default to enabled (opt-out via `'0'`).
+
+## Remaining
 
 ### Unit 5 — Client seeding policy (ADR-009)
 - Mobile: seed N most-recently-watched videos (scroll-back window).
 - Desktop/web: battery-gated aggressive seeding.
 - Files: seeding-policy hooks in `tortok/lib/webtorrent/`, battery
   detection via `expo-battery` (native) / `navigator.getBattery()` (web).
-
-### Unit 6 — Cleanup gate
-- Delete `tortok/app/spike.tsx`, `tortok/app/spike-bridge.tsx`.
-- Remove spike auth-guard exemption in `tortok/app/_layout.tsx`.
-- Flip `EXPO_PUBLIC_USE_P2P` default to `1` in development.
-- Write `docs/PHASE_2_HANDOFF.md`.
 
 ## Not in scope (future phases)
 - Recording / upload UX — separate concern

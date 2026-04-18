@@ -7,8 +7,8 @@
 // captured object is empty. On Hermes the React Native runtime supplies a
 // process global before the bundle loads, so this isn't an issue there.
 //
-// For the WebTorrent spike (and any future web build that pulls in Node-shaped
-// deps), we need the shim populated up-front. The shim is inline raw JS rather
+// For the web build (WebTorrent and other Node-shaped deps), we need the shim
+// populated up-front. The shim is inline raw JS rather
 // than `import process from 'process'` because at the point `<head>` runs
 // there is no module system — Metro's bundle (which provides CJS/ESM) hasn't
 // been loaded yet, and that's precisely the problem we're solving.

@@ -1,12 +1,12 @@
 // Singleton WebTorrent client with refcounted torrent management.
 //
-// Gated on EXPO_PUBLIC_USE_P2P — when absent/falsy, all exports are no-ops
-// and no WebTorrent code is loaded (zero overhead path).
+// Gated on EXPO_PUBLIC_USE_P2P — set to '0' to disable. Enabled by default.
+// When disabled, all exports are no-ops and no WebTorrent code is loaded.
 
 import type { ChunkStoreCtor, Torrent, WebTorrentClient, WebTorrentCtor } from './types';
 import { destroyBridge, registerTorrent, unregisterTorrent } from './bridge';
 
-const P2P_ENABLED = process.env.EXPO_PUBLIC_USE_P2P === '1';
+const P2P_ENABLED = process.env.EXPO_PUBLIC_USE_P2P !== '0';
 
 /** Grace period before removing an unreferenced torrent (prevents scroll thrashing). */
 const RELEASE_GRACE_MS = 5_000;
