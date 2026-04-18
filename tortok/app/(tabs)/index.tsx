@@ -21,8 +21,6 @@ import { useP2PUrl } from '@/lib/webtorrent/useP2PUrl';
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 80;
 const VIDEO_HEIGHT = SCREEN_HEIGHT - TAB_BAR_HEIGHT;
-const P2P_TIMEOUT_MS = 3_000;
-
 // Stable reference so `useVideoPlayer` doesn't see a fresh initializer on
 // every render (which can cause the player to be rebuilt on unrelated state
 // changes like like-count updates).
@@ -74,7 +72,7 @@ const VideoItem = memo(function VideoItem({
   // ---------------------------------------------------------------------------
   type DisplayState = 'poster' | 'playing' | 'paused' | 'error' | 'empty';
   const [displayState, setDisplayState] = useState<DisplayState>(
-    !video.posterURL && !video.magnetLink && !video.hlsURL ? 'empty' : 'poster',
+    !video.posterURL && !video.magnetLink ? 'empty' : 'poster',
   );
 
   // Only mount a player for the active cell and its immediate neighbors —
@@ -87,29 +85,8 @@ const VideoItem = memo(function VideoItem({
     video.torrentFileUrl,
   );
 
-  // P2P-first source selection: wait for P2P to resolve (should be <1s with
-  // .torrent buffer). Only fall back to HLS after a timeout. Once a source
-  // is locked, never switch mid-playback (prevents restart + black flash).
-  const [lockedUrl, setLockedUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!shouldLoadPlayer) {
-      setLockedUrl(null);
-      return;
-    }
-    if (lockedUrl) return; // already locked
-    if (p2pUrl) {
-      setLockedUrl(p2pUrl);
-      return;
-    }
-    // Start HLS fallback timer
-    const timer = setTimeout(() => {
-      if (video.hlsURL) setLockedUrl(video.hlsURL);
-    }, P2P_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-  }, [shouldLoadPlayer, p2pUrl, lockedUrl, video.hlsURL]);
-
-  const videoUrl = shouldLoadPlayer ? lockedUrl : null;
+  // p2pUrl is already null when !shouldLoadPlayer (magnetLink was null).
+  const videoUrl = p2pUrl;
 
   const player = useVideoPlayer(videoUrl, configurePlayer);
 
@@ -215,7 +192,7 @@ const VideoItem = memo(function VideoItem({
         />
       ) : null}
 
-      {videoUrl && shouldLoadPlayer ? (
+      {videoUrl ? (
         <Pressable style={styles.video} onPress={handleTogglePlay} testID="videoPressable">
           <VideoView
             player={player}

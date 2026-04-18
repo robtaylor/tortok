@@ -49,10 +49,14 @@ Scope: ADR-006 Phase 2 ("Cross-platform P2P").
 
 ## Remaining
 
-### Unit 3 — Seeder webseed wiring
-- Add `urlList` to torrent creation in `backend/src/services/seeder.ts`
-  pointing at R2 content origin.
-- Blocked on R2 content origin being live (Phase 0b deliverable).
+### Unit 3 — Webseed-only (HLS dropped)
+- Added `urlList` (BEP-19 webseed) to torrent creation in both
+  `backend/src/services/seeder.ts` and `test-content/seeder.mjs`.
+- Removed HLS fallback from client: `hlsURL` field, `lockedUrl`
+  state, `P2P_TIMEOUT_MS` timer all deleted.
+- Removed `hlsUrl` from validation schemas and API responses.
+- `hls_url` DB column kept nullable (vestigial).
+- Recorded as ADR-009 amendment.
 
 ### Unit 5 — Client seeding policy (ADR-009)
 - Mobile: seed N most-recently-watched videos (scroll-back window).

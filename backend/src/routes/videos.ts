@@ -13,18 +13,18 @@ router.post('/', authenticateJWT, validate(schemas.createVideo), async (req: Aut
   const client = await getClient();
 
   try {
-    const { caption, magnetLink, hlsUrl, torrentFileUrl, posterUrl, durationSeconds, width, height, hashtags } = req.body;
+    const { caption, magnetLink, torrentFileUrl, posterUrl, durationSeconds, width, height, hashtags } = req.body;
     const userId = req.user!.userId;
 
     await client.query('BEGIN');
 
     // Create video
     const videos = await client.query<any>(
-      `INSERT INTO videos (user_id, caption, magnet_link, hls_url, torrent_file_url, poster_url, duration_seconds, width, height)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING id, user_id, caption, magnet_link, hls_url, torrent_file_url, poster_url,
+      `INSERT INTO videos (user_id, caption, magnet_link, torrent_file_url, poster_url, duration_seconds, width, height)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, user_id, caption, magnet_link, torrent_file_url, poster_url,
                  duration_seconds, width, height, like_count, view_count, created_at`,
-      [userId, caption, magnetLink, hlsUrl || null, torrentFileUrl || null, posterUrl, durationSeconds, width, height]
+      [userId, caption, magnetLink, torrentFileUrl || null, posterUrl, durationSeconds, width, height]
     );
 
     const video = videos.rows[0];
@@ -67,7 +67,6 @@ router.post('/', authenticateJWT, validate(schemas.createVideo), async (req: Aut
       },
       caption: video.caption,
       magnetLink: video.magnet_link,
-      hlsURL: video.hls_url,
       torrentFileUrl: video.torrent_file_url,
       posterURL: video.poster_url,
       durationSeconds: video.duration_seconds,
@@ -100,7 +99,7 @@ router.get('/feed', optionalAuth, async (req: AuthRequest, res: Response) => {
     // Get videos with user info and hashtags
     const videos = await query<any>(
       `SELECT
-        v.id, v.caption, v.magnet_link, v.hls_url, v.torrent_file_url, v.poster_url,
+        v.id, v.caption, v.magnet_link, v.torrent_file_url, v.poster_url,
         v.duration_seconds, v.width, v.height, v.like_count, v.view_count, v.created_at,
         u.id as user_id, u.username, u.display_name, u.avatar_url,
         COALESCE(
@@ -128,7 +127,6 @@ router.get('/feed', optionalAuth, async (req: AuthRequest, res: Response) => {
       },
       caption: v.caption,
       magnetLink: v.magnet_link,
-      hlsURL: v.hls_url,
       torrentFileUrl: v.torrent_file_url,
       posterURL: v.poster_url,
       durationSeconds: v.duration_seconds,
@@ -251,7 +249,7 @@ router.get('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
 
     const videos = await query<any>(
       `SELECT
-        v.id, v.caption, v.magnet_link, v.hls_url, v.torrent_file_url, v.poster_url,
+        v.id, v.caption, v.magnet_link, v.torrent_file_url, v.poster_url,
         v.duration_seconds, v.width, v.height, v.like_count, v.view_count, v.created_at,
         u.id as user_id, u.username, u.display_name, u.avatar_url,
         COALESCE(
@@ -285,7 +283,6 @@ router.get('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
       },
       caption: v.caption,
       magnetLink: v.magnet_link,
-      hlsURL: v.hls_url,
       torrentFileUrl: v.torrent_file_url,
       posterURL: v.poster_url,
       durationSeconds: v.duration_seconds,
@@ -304,7 +301,7 @@ router.get('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
 
 /**
  * PATCH /videos/:id/urls
- * Update hls_url / magnet_link on a video. Owner-only.
+ * Update magnet_link / torrent_file_url on a video. Owner-only.
  *
  * There is no admin role yet, so the authorisation answer for v0 is
  * "only the video's uploader can rewrite its URLs". The old version of
@@ -316,7 +313,7 @@ router.patch('/:id/urls', authenticateJWT, validate(schemas.updateVideoUrls), as
   try {
     const videoId = req.params.id;
     const userId = req.user!.userId;
-    const { hlsUrl, magnetLink, torrentFileUrl } = req.body;
+    const { magnetLink, torrentFileUrl } = req.body;
 
     // Ownership check first: 404 if the video doesn't exist, 403 if it
     // exists but belongs to someone else. We deliberately use 403 rather
@@ -340,11 +337,6 @@ router.patch('/:id/urls', authenticateJWT, validate(schemas.updateVideoUrls), as
     const updates: string[] = [];
     const values: any[] = [];
     let paramCount = 1;
-
-    if (hlsUrl !== undefined) {
-      updates.push(`hls_url = $${paramCount++}`);
-      values.push(hlsUrl);
-    }
 
     if (magnetLink !== undefined) {
       updates.push(`magnet_link = $${paramCount++}`);

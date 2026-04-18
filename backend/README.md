@@ -127,8 +127,8 @@ Headers: `Authorization: Bearer <token>`
 {
   "caption": "My first video!",
   "magnetLink": "magnet:?xt=...",
-  "hlsUrl": "https://cdn.example.com/video.m3u8",
-  "thumbnailUrl": "https://cdn.example.com/thumb.jpg",
+  "torrentFileUrl": "https://cdn.example.com/video.torrent",
+  "posterUrl": "https://cdn.example.com/poster.jpg",
   "durationSeconds": 30,
   "width": 1080,
   "height": 1920,

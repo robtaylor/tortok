@@ -6,6 +6,7 @@ import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const httpPort = 8090;
 const client = new WebTorrent();
 const videoPath = path.join(__dirname, 'clips', 'bbb-01.mp4');
 
@@ -19,7 +20,9 @@ client.seed(videoPath, {
   // pieces (it tries to open `./<name>` instead of the original file).
   announce: [
     'ws://localhost:8000'
-  ]
+  ],
+  // BEP-19 webseed: HTTP fallback when no P2P peers are available.
+  urlList: [`http://localhost:${httpPort}/bbb-01.mp4`],
 }, (torrent) => {
   // Persist the fresh magnet + .torrent so clients can pick them up
   fs.writeFileSync(path.join(__dirname, 'magnet.txt'), torrent.magnetURI + '\n');
@@ -44,8 +47,7 @@ client.seed(videoPath, {
   }, 10000);
 });
 
-// Also start an HTTP server to serve the mp4 directly (BEP-19 webseed fallback)
-const httpPort = 8090;
+// Also start an HTTP server to serve the mp4 directly (BEP-19 webseed)
 const torrentPath = path.join(__dirname, 'test_video.torrent');
 
 const httpServer = http.createServer((req, res) => {
@@ -122,8 +124,8 @@ const httpServer = http.createServer((req, res) => {
 });
 
 httpServer.listen(httpPort, () => {
-  console.log(`\n🌐 HTTP fallback server running at http://localhost:${httpPort}`);
-  console.log(`   Video URL: http://localhost:${httpPort}/test_video.mp4`);
+  console.log(`\n🌐 HTTP webseed server running at http://localhost:${httpPort}`);
+  console.log(`   Video URL: http://localhost:${httpPort}/bbb-01.mp4`);
 });
 
 // Handle shutdown

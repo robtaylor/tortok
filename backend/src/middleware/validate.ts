@@ -96,11 +96,10 @@ export const schemas = {
   createVideo: Joi.object({
     caption: Joi.string().max(500).required(),
     magnetLink: Joi.string().pattern(/^magnet:\?/).required(),
-    // hlsUrl / posterUrl must be https. Joi's default .uri() would
-    // happily accept javascript:, data:, http:, file: — which the
-    // client hands straight to AVPlayer / a WebView, so a non-https
-    // scheme is a direct injection/XSS vector (S2).
-    hlsUrl: Joi.string().uri({ scheme: ['https'] }).allow(null, ''),
+    // posterUrl must be https. Joi's default .uri() would happily accept
+    // javascript:, data:, http:, file: — which the client hands straight
+    // to AVPlayer / a WebView, so a non-https scheme is a direct
+    // injection/XSS vector (S2).
     torrentFileUrl: Joi.string().uri({ scheme: ['https', 'http'] }).allow(null, ''),
     posterUrl: Joi.string().uri({ scheme: ['https'] }).required(),
     durationSeconds: Joi.number().integer().min(1).max(300).required(),
@@ -110,7 +109,6 @@ export const schemas = {
   }),
 
   updateVideoUrls: Joi.object({
-    hlsUrl: Joi.string().uri({ scheme: ['https'] }),
     magnetLink: Joi.string().pattern(/^magnet:\?/),
     torrentFileUrl: Joi.string().uri({ scheme: ['https', 'http'] }).allow(null),
   }).min(1),

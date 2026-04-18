@@ -8,8 +8,7 @@ import { release, requestUrl } from './client';
  * directly to WebTorrent — resolving in <1s instead of the ~6s magnet
  * round-trip. Falls back to magnet resolution if the fetch fails.
  *
- * Returns `null` while loading or if P2P is disabled/fails — callers fall
- * back to HLS via `useP2PUrl(magnet, torrentFileUrl) ?? video.hlsURL`.
+ * Returns `null` while loading or if P2P is disabled/fails.
  *
  * Pass `null` for magnetLink when the component doesn't need a torrent
  * (e.g. off-screen VideoItems) — this is a no-op that skips all work.
@@ -31,7 +30,6 @@ export function useP2PUrl(
     requestUrl(magnetLink, torrentFileUrl).then((bridgeUrl) => {
       if (!cancelled) setUrl(bridgeUrl);
     }).catch(() => {
-      // Silently fall through to HLS
       if (!cancelled) setUrl(null);
     });
 

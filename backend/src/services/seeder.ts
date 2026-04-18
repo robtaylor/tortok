@@ -20,9 +20,14 @@ class SeederService {
   private client: WebTorrentInstance | null = null;
   private seededTorrents: Map<string, TorrentInfo> = new Map();
   private contentDir: string;
+  private contentOrigin: string;
 
   constructor() {
     this.contentDir = path.join(__dirname, '../../content');
+    // R2 public bucket URL — webseed (BEP-19) lets WebTorrent fetch pieces
+    // from this HTTP origin when no P2P peers are available.
+    this.contentOrigin = process.env.CONTENT_ORIGIN_URL
+      ?? 'https://pub-96c2a0ac73ac40359616969672d5f67f.r2.dev';
   }
 
   async initialize(): Promise<void> {
@@ -77,7 +82,11 @@ class SeederService {
           'wss://tracker.openwebtorrent.com',
           'wss://tracker.btorrent.xyz',
           'wss://tracker.webtorrent.dev'
-        ]
+        ],
+        // BEP-19 webseed: HTTP fallback for pieces when no P2P peers are
+        // available. WebTorrent treats this as another peer — downloaded
+        // pieces are re-shared to the swarm.
+        urlList: [`${this.contentOrigin}/videos/${name}`],
       };
 
       this.client!.seed(dirPath, options as any, (torrent) => {

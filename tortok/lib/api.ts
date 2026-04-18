@@ -115,7 +115,6 @@ export type Video = {
   caption: string;
   magnetLink: string | null;
   torrentFileUrl: string | null;
-  hlsURL: string | null;
   posterURL: string | null;
   durationSeconds: number;
   width: number;

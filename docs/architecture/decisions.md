@@ -976,17 +976,41 @@ optimizations are deferred until after three-platform validation:
    the user scrolls to them — the `managed` map fast path returns
    the cached bridge URL immediately.
 
-3. **P2P-primary source selection.** Current behaviour: the video
-   player gets `hlsURL` immediately (while `p2pUrl` is null),
-   then switches to the bridge URL when P2P resolves ~6s later,
-   causing a brief reload. Better: choose the source once when the
-   video becomes active — use the bridge URL if P2P is already
-   resolved, otherwise fall back to HLS. Don't switch mid-playback.
+3. ~~**P2P-primary source selection.**~~ Implemented and then
+   superseded — see amendment below.
 
 Combined effect: first video in a session may start via HLS (cold
 torrent), but every subsequent scroll uses a pre-resolved P2P bridge
 URL with zero delay. The HLS fallback becomes a rare cold-start
 path rather than the default.
+
+**Amendment (2026-04-19): Drop HLS, webseed-only.**
+
+Optimizations #1 and #3 are now implemented. With inline .torrent
+metadata resolving in <1s, the 3-second HLS fallback timer fires
+rarely. More importantly, HLS viewers are "leeches" — the native
+player fetches segments directly from R2 via its own HTTP stack,
+bypassing the WebTorrent swarm entirely. Those bytes are never
+re-shared to peers.
+
+Webseed (BEP-19) solves this: the torrent metadata includes an
+`urlList` pointing at the raw MP4 on R2. When no peers are
+available, WebTorrent fetches pieces from that HTTP origin — but
+downloaded pieces are re-shared to the swarm like any other peer
+data. Every viewer participates in P2P regardless of how they got
+their first bytes.
+
+Changes:
+- `hlsURL` removed from Video type, API responses, and validation
+- `hls_url` DB column kept nullable (vestigial, no migration needed)
+- `lockedUrl` state and `P2P_TIMEOUT_MS` timer removed from client
+- `urlList` added to torrent creation in both production seeder and
+  test-content seeder
+- Source selection simplified: `videoUrl = p2pUrl` directly
+
+Requires raw MP4 uploaded to R2 at the webseed URL. The existing
+HLS segments in R2 remain for the standalone seeder service (which
+downloads them for its own torrent seeding).
 
 ---
 
