@@ -26,10 +26,9 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-// Serve static content (HLS files)
+// Serve static content (video files, HLS segments for legacy seeder)
 app.use('/content', express.static(path.join(__dirname, '../content'), {
   setHeaders: (res, filePath) => {
-    // Set correct MIME types for HLS
     if (filePath.endsWith('.m3u8')) {
       res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     } else if (filePath.endsWith('.ts')) {

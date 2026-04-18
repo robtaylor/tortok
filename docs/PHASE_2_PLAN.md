@@ -25,15 +25,14 @@ Scope: ADR-006 Phase 2 ("Cross-platform P2P").
   Range requests from torrent file streams.
 - `tortok/lib/webtorrent/useP2PUrl.ts` — hook resolving magnet →
   bridge URL with cleanup on unmount.
-- P2P-first source selection: waits for P2P (<1s with .torrent
-  buffer), falls back to HLS after 3s timeout. Source locked once
-  chosen — no mid-playback restart.
+- P2P source selection: resolves via .torrent buffer (<1s).
+  Webseed (BEP-19) provides HTTP fallback transparently.
 
 ### Unit 4 — Three-platform validation
 - iOS simulator: P2P end-to-end via bridge.
 - Android emulator: P2P init with defensive polyfills + expo-crypto
   fallback for Nitro timing race.
-- Expo web: HLS fallback via bridge.web.ts stub.
+- Expo web: bridge.web.ts stub (SW streamer deferred).
 - Results recorded in ADR-009.
 
 ### Additional work (not in original plan)

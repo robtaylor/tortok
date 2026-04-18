@@ -43,7 +43,7 @@ function contentTypeFor(name: string): string {
   return 'application/octet-stream';
 }
 
-/** Pick the best "entry" file: prefer HLS playlist, else largest file. */
+/** Pick the best "entry" file: prefer .m3u8 playlist, else largest file. */
 function pickEntry(files: TorrentFile[]): TorrentFile | undefined {
   return (
     files.find((f) => f.name.endsWith('.m3u8')) ??
