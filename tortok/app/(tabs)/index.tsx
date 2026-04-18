@@ -101,7 +101,7 @@ const VideoItem = memo(function VideoItem({
 
   // Only reveal the VideoView once the player has actually rendered a frame.
   // `readyToPlay` fires before the first frame hits the surface, causing a
-  // thumbnail → black → video flash. `playingChange` with isPlaying:true
+  // poster → black → video flash. `playingChange` with isPlaying:true
   // fires once AVPlayer/ExoPlayer has decoded and presented a frame.
   const [hasPlayed, setHasPlayed] = useState(false);
   useEffect(() => {
@@ -168,9 +168,9 @@ const VideoItem = memo(function VideoItem({
       {/* Poster — always rendered beneath the video layer, hidden only when
           playback is actually on screen. Decouples scroll feel from playback
           latency (HLS cold fetch, WebTorrent piece-0 wait in Phase 2). */}
-      {video.thumbnailURL ? (
+      {video.posterURL ? (
         <Image
-          source={{ uri: video.thumbnailURL }}
+          source={{ uri: video.posterURL }}
           style={styles.video}
           contentFit="cover"
           cachePolicy="memory-disk"
@@ -190,7 +190,7 @@ const VideoItem = memo(function VideoItem({
         </Pressable>
       ) : null}
 
-      {!video.thumbnailURL && !videoUrl ? (
+      {!video.posterURL && !videoUrl ? (
         <View style={[styles.video, styles.noVideo]}>
           <Text style={styles.noVideoText}>No video available</Text>
         </View>
@@ -198,7 +198,7 @@ const VideoItem = memo(function VideoItem({
 
       {/* Buffering indicator — only when there's no poster to mask the wait.
           The poster is the buffering state in the common path. */}
-      {videoUrl && isActive && status === 'loading' && !video.thumbnailURL ? (
+      {videoUrl && isActive && status === 'loading' && !video.posterURL ? (
         <View style={styles.centerOverlay} pointerEvents="none" testID="videoBuffering">
           <ActivityIndicator size="large" color="#fff" />
         </View>
@@ -291,7 +291,7 @@ export default function FeedScreen() {
   // that swipes land on an already-drawn poster, not on a spinner.
   useEffect(() => {
     const urls = [-2, -1, 1, 2]
-      .map((offset) => videos[activeIndex + offset]?.thumbnailURL)
+      .map((offset) => videos[activeIndex + offset]?.posterURL)
       .filter((u): u is string => !!u);
     if (urls.length) Image.prefetch(urls, 'memory-disk');
   }, [activeIndex, videos]);

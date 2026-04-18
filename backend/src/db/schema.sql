@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS videos (
     caption TEXT NOT NULL,
     magnet_link TEXT NOT NULL,
     hls_url TEXT,
-    thumbnail_url TEXT NOT NULL,
+    poster_url TEXT NOT NULL,
     duration_seconds INTEGER NOT NULL,
     width INTEGER NOT NULL,
     height INTEGER NOT NULL,
@@ -110,6 +110,13 @@ $$ LANGUAGE plpgsql;
 
 -- Add torrent_file_url column (ADR-009 optimization: inline .torrent metadata)
 ALTER TABLE videos ADD COLUMN IF NOT EXISTS torrent_file_url TEXT;
+
+-- Rename thumbnail_url → poster_url (it's a full-res still frame, not a thumbnail)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'videos' AND column_name = 'thumbnail_url') THEN
+    ALTER TABLE videos RENAME COLUMN thumbnail_url TO poster_url;
+  END IF;
+END $$;
 
 -- Add count columns if not exists
 ALTER TABLE users ADD COLUMN IF NOT EXISTS follower_count INTEGER DEFAULT 0;

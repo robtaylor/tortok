@@ -76,18 +76,18 @@ const httpServer = http.createServer((req, res) => {
     return;
   }
 
-  // Serve thumbnail
-  if (req.url === '/thumb.jpg') {
-    const thumbPath = path.join(__dirname, 'thumb.jpg');
+  // Serve poster (first-frame still image)
+  if (req.url === '/poster.jpg') {
+    const posterPath = path.join(__dirname, 'poster.jpg');
     try {
-      const tstat = fs.statSync(thumbPath);
+      const tstat = fs.statSync(posterPath);
       res.writeHead(200, {
         ...cors,
         'Content-Type': 'image/jpeg',
         'Content-Length': tstat.size,
       });
       if (req.method === 'HEAD') { res.end(); return; }
-      fs.createReadStream(thumbPath).pipe(res);
+      fs.createReadStream(posterPath).pipe(res);
     } catch { res.writeHead(404, cors); res.end(); }
     return;
   }
