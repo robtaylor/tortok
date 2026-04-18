@@ -8,7 +8,12 @@
 
 import { Buffer } from 'buffer';
 import process from 'process';
+// These imports may resolve to undefined on Android when the native module
+// init races the JS context (Nitro "javaScriptContextHolder is null").
+// All usage below is guarded so a single native-module failure doesn't
+// kill the entire polyfill setup.
 import QuickCrypto from 'react-native-quick-crypto';
+import * as ExpoCrypto from 'expo-crypto';
 import {
   RTCPeerConnection,
   RTCSessionDescription,
@@ -55,7 +60,7 @@ if (typeof global.process.nextTick !== 'function') {
 // Hermes there is no such global, so we have to populate it from
 // react-native-webrtc ourselves.
 const g = globalThis as unknown as Record<string, unknown>;
-if (typeof g.RTCPeerConnection === 'undefined') {
+if (typeof g.RTCPeerConnection === 'undefined' && RTCPeerConnection != null) {
   g.RTCPeerConnection = RTCPeerConnection;
   g.RTCSessionDescription = RTCSessionDescription;
   g.RTCIceCandidate = RTCIceCandidate;
@@ -71,12 +76,14 @@ if (typeof g.RTCPeerConnection === 'undefined') {
 // simple-peer takes the callback branch and passes its own callback as the
 // `selector` argument, which blows up with "Invalid selector: could not find
 // matching sender / receiver". Wrap the prototype to hide the optional arg.
-const pcProto = (RTCPeerConnection as unknown as { prototype: { getStats: (s?: unknown) => Promise<unknown> } }).prototype;
-const origGetStats = pcProto.getStats;
-if (origGetStats.length > 0) {
-  pcProto.getStats = function () {
-    return origGetStats.call(this);
-  };
+if (RTCPeerConnection != null) {
+  const pcProto = (RTCPeerConnection as unknown as { prototype: { getStats: (s?: unknown) => Promise<unknown> } }).prototype;
+  const origGetStats = pcProto.getStats;
+  if (origGetStats.length > 0) {
+    pcProto.getStats = function () {
+      return origGetStats.call(this);
+    };
+  }
 }
 
 // uint8-util (used by webtorrent for peerId/nodeId generation) reads
@@ -85,24 +92,57 @@ if (origGetStats.length > 0) {
 // `globalThis.crypto` BEFORE webtorrent is required so uint8-util latches
 // onto a working getRandomValues. (Metro's `crypto` alias only rewrites
 // `import/require 'crypto'`; it doesn't reach these dynamic reads.)
-if (typeof g.crypto === 'undefined' || typeof (g.crypto as { getRandomValues?: unknown }).getRandomValues !== 'function') {
-  g.crypto = QuickCrypto;
+// QuickCrypto may be unusable if Nitro failed to initialize (Android timing
+// race). Fall back to expo-crypto which uses Expo's own native module system.
+const qcUsable = QuickCrypto != null &&
+  typeof (QuickCrypto as { getRandomValues?: unknown }).getRandomValues === 'function';
+
+const needsCrypto = typeof g.crypto === 'undefined' ||
+  typeof (g.crypto as { getRandomValues?: unknown }).getRandomValues !== 'function';
+
+if (needsCrypto) {
+  if (qcUsable) {
+    g.crypto = QuickCrypto;
+  } else if (typeof ExpoCrypto.getRandomValues === 'function') {
+    // expo-crypto doesn't expose a full WebCrypto-shaped object. Build a
+    // minimal shim covering what WebTorrent actually touches:
+    //   - crypto.getRandomValues (uint8-util: peerId/nodeId generation)
+    //   - crypto.subtle.digest   (bittorrent-protocol: piece SHA-1 hashing)
+    const expoDigest = typeof ExpoCrypto.digest === 'function'
+      ? (algo: unknown, data: unknown) => {
+          const name = typeof algo === 'string' ? algo.toUpperCase()
+            : (algo && typeof algo === 'object' && 'name' in algo)
+              ? (algo as { name: string }).name.toUpperCase()
+              : String(algo);
+          return ExpoCrypto.digest(name as Parameters<typeof ExpoCrypto.digest>[0], data as BufferSource);
+        }
+      : undefined;
+    g.crypto = {
+      getRandomValues: ExpoCrypto.getRandomValues,
+      subtle: expoDigest ? { digest: expoDigest } : undefined,
+    } as unknown as Crypto;
+    console.warn('[polyfills] QuickCrypto unavailable, using expo-crypto fallback');
+  }
 }
 
 // QuickCrypto's SubtleCrypto does strict uppercase matching against
 // SUPPORTED_ALGORITHMS (e.g., 'SHA-1'). The WebCrypto spec says algorithm
 // names are case-insensitive — and uint8-util (used by bittorrent-protocol
 // for piece hashing) passes 'sha-1' lowercase. Wrap digest to uppercase.
-const subtle = (g.crypto as { subtle?: { digest?: (a: unknown, d: unknown) => Promise<ArrayBuffer> } }).subtle;
-if (subtle?.digest) {
-  const origDigest = subtle.digest.bind(subtle);
-  subtle.digest = (algo: unknown, data: unknown) => {
-    if (typeof algo === 'string') {
-      return origDigest(algo.toUpperCase(), data);
-    }
-    if (algo && typeof algo === 'object' && 'name' in algo && typeof (algo as { name: unknown }).name === 'string') {
-      return origDigest({ ...(algo as object), name: (algo as { name: string }).name.toUpperCase() }, data);
-    }
-    return origDigest(algo, data);
-  };
+// Only needed when QuickCrypto is the provider (expo-crypto fallback doesn't
+// expose subtle).
+if (qcUsable) {
+  const subtle = (g.crypto as { subtle?: { digest?: (a: unknown, d: unknown) => Promise<ArrayBuffer> } }).subtle;
+  if (subtle?.digest) {
+    const origDigest = subtle.digest.bind(subtle);
+    subtle.digest = (algo: unknown, data: unknown) => {
+      if (typeof algo === 'string') {
+        return origDigest(algo.toUpperCase(), data);
+      }
+      if (algo && typeof algo === 'object' && 'name' in algo && typeof (algo as { name: unknown }).name === 'string') {
+        return origDigest({ ...(algo as object), name: (algo as { name: string }).name.toUpperCase() }, data);
+      }
+      return origDigest(algo, data);
+    };
+  }
 }

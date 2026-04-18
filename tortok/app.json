@@ -52,6 +52,14 @@
           "cameraPermission": "Allow $(PRODUCT_NAME) to access the camera.",
           "microphonePermission": "Allow $(PRODUCT_NAME) to access the microphone."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
       ]
     ],
     "experiments": {
