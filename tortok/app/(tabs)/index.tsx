@@ -11,7 +11,7 @@ import {
   ViewToken,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useVideoPlayer, VideoView, type VideoPlayerStatus } from 'expo-video';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { useQuery } from '@tanstack/react-query';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { getFeed, likeVideo, type Video } from '@/lib/api';
@@ -47,12 +47,35 @@ const VideoItem = memo(function VideoItem({
   // single `setDelta(prev)` — no mirrored arithmetic to keep in sync.
   const [delta, setDelta] = useState<-1 | 0 | 1>(0);
   const [likePending, setLikePending] = useState(false);
-  const [status, setStatus] = useState<VideoPlayerStatus>('loading');
-  const [isPaused, setIsPaused] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
 
   const liked = delta === 0 ? video.isLiked : delta === 1;
   const likeCount = video.likeCount + delta;
+
+  // ---------------------------------------------------------------------------
+  // Display state machine — the single source of truth for what the user sees.
+  //
+  // States:
+  //   poster   — poster/cover image visible, video layer invisible
+  //   playing  — video visible, playback active (first frame has rendered)
+  //   paused   — video visible, playback paused (play icon overlay)
+  //   error    — error overlay with retry button
+  //   empty    — no poster, no video URL (placeholder text)
+  //
+  // Transitions:
+  //   poster  → playing   playingChange(isPlaying: true) — first frame rendered
+  //   poster  → error     statusChange(status: 'error')
+  //   playing → paused    user tap
+  //   playing → poster    scroll away (!isActive)
+  //   paused  → playing   user tap, or scroll away then back (isActive)
+  //   paused  → poster    scroll away (!isActive)
+  //   error   → poster    retry (player.replace)
+  //   *       → poster    player/source change (reset)
+  // ---------------------------------------------------------------------------
+  type DisplayState = 'poster' | 'playing' | 'paused' | 'error' | 'empty';
+  const [displayState, setDisplayState] = useState<DisplayState>(
+    !video.posterURL && !video.magnetLink && !video.hlsURL ? 'empty' : 'poster',
+  );
 
   // Only mount a player for the active cell and its immediate neighbors —
   // inactive cells that are simply scrolled-past render their poster and
@@ -90,39 +113,56 @@ const VideoItem = memo(function VideoItem({
 
   const player = useVideoPlayer(videoUrl, configurePlayer);
 
-  // Track player status for buffering/error overlays
+  // Transition: scroll away → poster, scroll back → resume playing
   useEffect(() => {
-    if (!player) return;
-    const sub = player.addListener('statusChange', (payload) => {
-      setStatus(payload.status);
+    if (!isActive) {
+      setDisplayState((s) => (s === 'playing' || s === 'paused') ? 'poster' : s);
+    } else {
+      // Scroll back to a paused cell → auto-play
+      setDisplayState((s) => s === 'paused' ? 'playing' : s);
+    }
+  }, [isActive]);
+
+  // Transition: player events drive state changes
+  useEffect(() => {
+    if (!player) {
+      setDisplayState((s) => s === 'empty' ? 'empty' : 'poster');
+      return;
+    }
+
+    const statusSub = player.addListener('statusChange', (payload) => {
+      if (payload.status === 'error') {
+        setDisplayState('error');
+      }
+      // When player becomes ready, retry play() — calling play() while
+      // loading is a no-op on some platforms.
+      if (payload.status === 'readyToPlay') {
+        player.play();
+      }
     });
-    return () => sub.remove();
+
+    const playingSub = player.addListener('playingChange', (payload) => {
+      if (payload.isPlaying) {
+        // First frame has been decoded and presented — safe to show video
+        setDisplayState('playing');
+      }
+    });
+
+    return () => {
+      statusSub.remove();
+      playingSub.remove();
+    };
   }, [player, retryKey]);
 
-  // Only reveal the VideoView once the player has actually rendered a frame.
-  // `readyToPlay` fires before the first frame hits the surface, causing a
-  // poster → black → video flash. `playingChange` with isPlaying:true
-  // fires once AVPlayer/ExoPlayer has decoded and presented a frame.
-  const [hasPlayed, setHasPlayed] = useState(false);
-  useEffect(() => {
-    if (!player) { setHasPlayed(false); return; }
-    const sub = player.addListener('playingChange', (payload) => {
-      if (payload.isPlaying) setHasPlayed(true);
-    });
-    return () => sub.remove();
-  }, [player, retryKey]);
-
-  const videoVisible = isActive && hasPlayed;
-
-  // Play/pause based on visibility.
+  // Drive the player based on display state
   useEffect(() => {
     if (!player) return;
-    if (isActive && videoUrl && !isPaused) {
+    if (displayState === 'playing') {
       player.play();
     } else {
       player.pause();
     }
-  }, [player, isActive, videoUrl, isPaused]);
+  }, [player, displayState]);
 
   const hashtagLine = useMemo(
     () => video.hashtags.map((h) => `#${h}`).join(' '),
@@ -130,18 +170,16 @@ const VideoItem = memo(function VideoItem({
   );
 
   const handleTogglePlay = () => {
-    setIsPaused((p) => !p);
+    setDisplayState((s) => s === 'playing' ? 'paused' : s === 'paused' ? 'playing' : s);
   };
 
   const handleRetry = () => {
     if (!player || videoUrl === null) return;
     // expo-video's `replace()` swaps the internal player; listeners bound to
-    // the old instance stop firing. Bumping retryKey forces the statusChange
-    // useEffect above to re-subscribe. Any future `player.replace()` call
-    // site MUST also bump retryKey.
+    // the old instance stop firing. Bumping retryKey forces the event
+    // listeners above to re-subscribe.
     player.replace(videoUrl);
-    setStatus('loading');
-    setHasPlayed(false);
+    setDisplayState('poster');
     setRetryKey((k) => k + 1);
   };
 
@@ -165,10 +203,8 @@ const VideoItem = memo(function VideoItem({
 
   return (
     <View style={styles.videoContainer}>
-      {/* Poster — always rendered beneath the video layer, hidden only when
-          playback is actually on screen. Decouples scroll feel from playback
-          latency (HLS cold fetch, WebTorrent piece-0 wait in Phase 2). */}
-      {video.posterURL ? (
+      {/* Poster — always rendered; hidden once video is playing/paused */}
+      {video.posterURL && displayState === 'poster' ? (
         <Image
           source={{ uri: video.posterURL }}
           style={styles.video}
@@ -183,36 +219,33 @@ const VideoItem = memo(function VideoItem({
         <Pressable style={styles.video} onPress={handleTogglePlay} testID="videoPressable">
           <VideoView
             player={player}
-            style={[styles.video, !videoVisible && styles.invisible]}
+            style={[styles.video, displayState === 'poster' && styles.invisible]}
             contentFit="cover"
             nativeControls={false}
           />
         </Pressable>
       ) : null}
 
-      {!video.posterURL && !videoUrl ? (
+      {displayState === 'empty' ? (
         <View style={[styles.video, styles.noVideo]}>
           <Text style={styles.noVideoText}>No video available</Text>
         </View>
       ) : null}
 
-      {/* Buffering indicator — only when there's no poster to mask the wait.
-          The poster is the buffering state in the common path. */}
-      {videoUrl && isActive && status === 'loading' && !video.posterURL ? (
+      {/* Buffering spinner — only when there's no poster to mask the wait */}
+      {videoUrl && isActive && displayState === 'poster' && !video.posterURL ? (
         <View style={styles.centerOverlay} pointerEvents="none" testID="videoBuffering">
           <ActivityIndicator size="large" color="#fff" />
         </View>
       ) : null}
 
-      {/* Paused indicator */}
-      {videoUrl && status === 'readyToPlay' && isActive && isPaused ? (
+      {displayState === 'paused' ? (
         <View style={styles.centerOverlay} pointerEvents="none" testID="videoPaused">
           <FontAwesome name="play" size={60} color="rgba(255,255,255,0.85)" />
         </View>
       ) : null}
 
-      {/* Error overlay with retry */}
-      {videoUrl && status === 'error' ? (
+      {displayState === 'error' ? (
         <View style={styles.centerOverlay} testID="videoError">
           <FontAwesome name="exclamation-triangle" size={36} color="#ff4444" />
           <Text style={styles.errorOverlayText}>Failed to load video</Text>
