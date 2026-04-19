@@ -7,94 +7,135 @@ import fs from 'fs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const httpPort = 8090;
+const CLIPS = ['bbb-01', 'bbb-02', 'bbb-03', 'bbb-04', 'bbb-05'];
+
 const client = new WebTorrent();
-const videoPath = path.join(__dirname, 'clips', 'bbb-01.mp4');
+// 5 torrents × internal listeners per torrent exceeds Node's default 10.
+client.setMaxListeners(CLIPS.length * 5);
 
 console.log('🌱 Starting WebTorrent Seeder...');
-console.log('📁 Seeding file:', videoPath);
+console.log(`📁 Seeding ${CLIPS.length} clips from clips/\n`);
 
-// Seed the content
-client.seed(videoPath, {
-  // Do NOT rename via `name:` — webtorrent's fs-chunk-store resolves by the
-  // torrent's logical name, so renaming it causes ENOENT when peers request
-  // pieces (it tries to open `./<name>` instead of the original file).
-  announce: [
-    'ws://localhost:8000'
-  ],
-  // BEP-19 webseed: HTTP fallback when no P2P peers are available.
-  urlList: [`http://localhost:${httpPort}/bbb-01.mp4`],
-}, (torrent) => {
-  // Persist the fresh magnet + .torrent so clients can pick them up
-  fs.writeFileSync(path.join(__dirname, 'magnet.txt'), torrent.magnetURI + '\n');
-  fs.writeFileSync(path.join(__dirname, 'test_video.torrent'), torrent.torrentFile);
-  console.log('\n✅ Seeding started!');
-  console.log('📊 Torrent Info:');
-  console.log('   Name:', torrent.name);
-  console.log('   Info Hash:', torrent.infoHash);
-  console.log('   Magnet URI:', torrent.magnetURI);
-  console.log('   Files:', torrent.files.length);
-  torrent.files.forEach(f => {
-    console.log('     -', f.name, '(' + Math.round(f.length / 1024) + ' KB)');
+// Seed all clips in parallel. Track results for the summary.
+let seeded = 0;
+for (const name of CLIPS) {
+  const videoPath = path.join(__dirname, 'clips', `${name}.mp4`);
+
+  client.seed(videoPath, {
+    // Do NOT rename via `name:` — webtorrent's fs-chunk-store resolves by the
+    // torrent's logical name, so renaming it causes ENOENT when peers request
+    // pieces (it tries to open `./<name>` instead of the original file).
+    announce: ['ws://localhost:8000'],
+    // BEP-19 webseed: HTTP fallback when no P2P peers are available.
+    urlList: [`http://localhost:${httpPort}/${name}.mp4`],
+  }, (torrent) => {
+    // Persist magnet + .torrent per clip so clients/scripts can pick them up.
+    fs.writeFileSync(
+      path.join(__dirname, `${name}.magnet.txt`),
+      torrent.magnetURI + '\n',
+    );
+    fs.writeFileSync(
+      path.join(__dirname, `${name}.torrent`),
+      torrent.torrentFile,
+    );
+
+    seeded++;
+    console.log(`✅ [${seeded}/${CLIPS.length}] ${name}`);
+    console.log(`   Hash: ${torrent.infoHash}`);
+    console.log(`   Magnet: ${torrent.magnetURI.slice(0, 80)}…`);
+    console.log(`   Files: ${torrent.files.map((f) => f.name).join(', ')}\n`);
+
+    if (seeded === CLIPS.length) {
+      console.log('🎉 All clips seeding. Waiting for peers…\n');
+    }
   });
+}
 
-  // Log stats periodically
-  setInterval(() => {
-    console.log('\n📈 Stats:');
-    console.log('   Peers:', torrent.numPeers);
-    console.log('   Upload Speed:', (torrent.uploadSpeed / 1024).toFixed(2), 'KB/s');
-    console.log('   Downloaded:', (torrent.downloaded / 1024 / 1024).toFixed(2), 'MB');
-    console.log('   Uploaded:', (torrent.uploaded / 1024 / 1024).toFixed(2), 'MB');
-  }, 10000);
-});
+// Aggregate stats every 10s.
+setInterval(() => {
+  const torrents = client.torrents;
+  if (torrents.length === 0) return;
+  const totalPeers = torrents.reduce((s, t) => s + t.numPeers, 0);
+  const totalUp = torrents.reduce((s, t) => s + t.uploaded, 0);
+  console.log(
+    `📈 ${torrents.length} torrents | ${totalPeers} peers | ` +
+    `↑ ${(totalUp / 1024 / 1024).toFixed(2)} MB total`,
+  );
+}, 10_000);
 
-// Also start an HTTP server to serve the mp4 directly (BEP-19 webseed)
-const torrentPath = path.join(__dirname, 'test_video.torrent');
+// ---------------------------------------------------------------------------
+// HTTP server — serves clips, posters, and .torrent files
+// ---------------------------------------------------------------------------
+
+const cors = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+  'Access-Control-Allow-Headers': 'Range',
+};
 
 const httpServer = http.createServer((req, res) => {
-  const cors = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-    'Access-Control-Allow-Headers': 'Range',
-  };
-
   if (req.method === 'OPTIONS') {
     res.writeHead(204, cors);
     res.end();
     return;
   }
 
-  // Serve .torrent file for instant P2P resolution (ADR-009 optimization)
-  if (req.url === '/test_video.torrent') {
-    try {
-      const tstat = fs.statSync(torrentPath);
-      res.writeHead(200, {
-        ...cors,
-        'Content-Type': 'application/x-bittorrent',
-        'Content-Length': tstat.size,
-      });
-      if (req.method === 'HEAD') { res.end(); return; }
-      fs.createReadStream(torrentPath).pipe(res);
-    } catch { res.writeHead(404, cors); res.end(); }
-    return;
+  const url = req.url?.split('?')[0]; // strip query string
+
+  // Serve .torrent files — e.g. /bbb-01.torrent
+  if (url?.endsWith('.torrent')) {
+    const torrentPath = path.join(__dirname, url.slice(1));
+    return serveFile(req, res, torrentPath, 'application/x-bittorrent');
   }
 
-  // Serve poster (first-frame still image)
-  if (req.url === '/poster.jpg') {
+  // Serve poster images — e.g. /posters/bbb-01.jpg
+  if (url?.startsWith('/posters/') && url.endsWith('.jpg')) {
+    const posterPath = path.join(__dirname, url.slice(1));
+    return serveFile(req, res, posterPath, 'image/jpeg');
+  }
+
+  // Legacy /poster.jpg route (single poster from before multi-clip)
+  if (url === '/poster.jpg') {
     const posterPath = path.join(__dirname, 'poster.jpg');
-    try {
-      const tstat = fs.statSync(posterPath);
-      res.writeHead(200, {
-        ...cors,
-        'Content-Type': 'image/jpeg',
-        'Content-Length': tstat.size,
-      });
-      if (req.method === 'HEAD') { res.end(); return; }
-      fs.createReadStream(posterPath).pipe(res);
-    } catch { res.writeHead(404, cors); res.end(); }
+    return serveFile(req, res, posterPath, 'image/jpeg');
+  }
+
+  // Serve video clips — e.g. /bbb-01.mp4
+  if (url?.endsWith('.mp4')) {
+    const videoPath = path.join(__dirname, 'clips', url.slice(1));
+    return serveVideoWithRange(req, res, videoPath);
+  }
+
+  res.writeHead(404, cors);
+  res.end('Not found');
+});
+
+function serveFile(req, res, filePath, contentType) {
+  try {
+    const stat = fs.statSync(filePath);
+    res.writeHead(200, {
+      ...cors,
+      'Content-Type': contentType,
+      'Content-Length': stat.size,
+    });
+    if (req.method === 'HEAD') { res.end(); return; }
+    fs.createReadStream(filePath).pipe(res);
+  } catch {
+    res.writeHead(404, cors);
+    res.end('Not found');
+  }
+}
+
+function serveVideoWithRange(req, res, videoPath) {
+  let stat;
+  try {
+    stat = fs.statSync(videoPath);
+  } catch {
+    res.writeHead(404, cors);
+    res.end('Not found');
     return;
   }
 
-  const stat = fs.statSync(videoPath);
   const total = stat.size;
   const range = req.headers.range;
 
@@ -121,20 +162,22 @@ const httpServer = http.createServer((req, res) => {
     if (req.method === 'HEAD') { res.end(); return; }
     fs.createReadStream(videoPath).pipe(res);
   }
-});
+}
 
 httpServer.listen(httpPort, () => {
-  console.log(`\n🌐 HTTP webseed server running at http://localhost:${httpPort}`);
-  console.log(`   Video URL: http://localhost:${httpPort}/bbb-01.mp4`);
+  console.log(`🌐 HTTP webseed server running at http://localhost:${httpPort}`);
+  console.log(`   Clips:   /bbb-01.mp4 … /bbb-05.mp4`);
+  console.log(`   Posters: /posters/bbb-01.jpg … /posters/bbb-05.jpg`);
+  console.log(`   Torrents: /bbb-01.torrent … /bbb-05.torrent\n`);
 });
 
 // Handle shutdown
 process.on('SIGINT', () => {
-  console.log('\n🛑 Shutting down...');
+  console.log('\n🛑 Shutting down…');
   client.destroy(() => {
     httpServer.close();
     process.exit(0);
   });
 });
 
-console.log('\nPress Ctrl+C to stop seeding.');
+console.log('Press Ctrl+C to stop seeding.\n');
