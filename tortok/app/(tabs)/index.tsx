@@ -17,6 +17,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { getFeed, likeVideo, type Video } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 import { useP2PUrl } from '@/lib/webtorrent/useP2PUrl';
+import { useSeedPolicy } from '@/lib/webtorrent/useSeedPolicy';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 80;
@@ -285,6 +286,8 @@ export default function FeedScreen() {
   });
 
   const videos = useMemo(() => data?.videos ?? [], [data]);
+
+  useSeedPolicy(videos[activeIndex] ?? null);
 
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {

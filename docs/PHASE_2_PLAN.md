@@ -61,13 +61,16 @@ Scope: ADR-006 Phase 2 ("Cross-platform P2P").
 - Removed spike auth-guard exemption in `tortok/app/_layout.tsx`.
 - Flipped `EXPO_PUBLIC_USE_P2P` default to enabled (opt-out via `'0'`).
 
-## Remaining
-
 ### Unit 5 — Client seeding policy (ADR-009)
-- Mobile: seed N most-recently-watched videos (scroll-back window).
-- Desktop/web: battery-gated aggressive seeding.
-- Files: seeding-policy hooks in `tortok/lib/webtorrent/`, battery
-  detection via `expo-battery` (native) / `navigator.getBattery()` (web).
+- `seedPolicy.ts` — core engine: refcount-based holds on recently-watched
+  torrents, eviction by TTL (30 min), count (5 mobile / unlimited desktop),
+  and byte budget (150 MB mobile / 500 MB desktop).
+- `deviceConditions.{native,web}.ts` — platform-specific battery + network
+  checks. Mobile: battery > 30% AND Wi-Fi. Desktop: charging OR > 80%.
+- `useSeedPolicy.ts` — React hook wiring policy into FeedScreen lifecycle
+  (AppState background → stopAll, condition changes → pause/resume).
+- Two-line integration in `FeedScreen`: `useSeedPolicy(activeVideo)`.
+- Dependencies: `expo-battery`, `expo-network`.
 
 ## Not in scope (future phases)
 - Recording / upload UX — separate concern
