@@ -1,22 +1,44 @@
-import * as Battery from 'expo-battery';
-import * as Network from 'expo-network';
-
 export type SeedConditions = { canSeed: boolean; reason?: string };
 
 const BATTERY_THRESHOLD = 0.3;
 
-async function evaluate(): Promise<SeedConditions> {
-  const [level, networkState] = await Promise.all([
-    Battery.getBatteryLevelAsync(),
-    Network.getNetworkStateAsync(),
-  ]);
+// Lazy imports — expo-battery and expo-network require native modules that
+// aren't available in Expo Go. Defer the import so the app doesn't crash
+// on load; if the modules are missing, we default to canSeed: true.
+let Battery: typeof import('expo-battery') | null = null;
+let Network: typeof import('expo-network') | null = null;
+let modulesLoaded = false;
 
-  if (level >= 0 && level < BATTERY_THRESHOLD) {
-    return { canSeed: false, reason: `battery ${Math.round(level * 100)}% < 30%` };
+async function loadModules(): Promise<void> {
+  if (modulesLoaded) return;
+  modulesLoaded = true;
+  try {
+    Battery = await import('expo-battery');
+  } catch {
+    console.warn('[deviceConditions] expo-battery unavailable');
+  }
+  try {
+    Network = await import('expo-network');
+  } catch {
+    console.warn('[deviceConditions] expo-network unavailable');
+  }
+}
+
+async function evaluate(): Promise<SeedConditions> {
+  await loadModules();
+
+  if (Battery) {
+    const level = await Battery.getBatteryLevelAsync();
+    if (level >= 0 && level < BATTERY_THRESHOLD) {
+      return { canSeed: false, reason: `battery ${Math.round(level * 100)}% < 30%` };
+    }
   }
 
-  if (networkState.type !== Network.NetworkStateType.WIFI) {
-    return { canSeed: false, reason: `network type: ${networkState.type}` };
+  if (Network) {
+    const networkState = await Network.getNetworkStateAsync();
+    if (networkState.type !== Network.NetworkStateType.WIFI) {
+      return { canSeed: false, reason: `network type: ${networkState.type}` };
+    }
   }
 
   return { canSeed: true };
@@ -28,29 +50,39 @@ export function subscribeToConditionChanges(
   onChange: (c: SeedConditions) => void,
 ): () => void {
   let last: boolean | null = null;
+  let batterySub: { remove(): void } | null = null;
+  let batteryStateSub: { remove(): void } | null = null;
+  let networkPoll: ReturnType<typeof setInterval> | null = null;
+  let cancelled = false;
 
   const notify = async () => {
     const c = await evaluate();
+    if (cancelled) return;
     if (c.canSeed !== last) {
       last = c.canSeed;
       onChange(c);
     }
   };
 
-  const batterySub = Battery.addBatteryLevelListener(() => void notify());
-  const batteryStateSub = Battery.addBatteryStateListener(() => void notify());
+  // Set up subscriptions after modules are loaded.
+  void loadModules().then(() => {
+    if (cancelled) return;
 
-  // expo-network doesn't have a live listener — poll on a slow cadence.
-  // Battery changes are the primary trigger; network polling catches Wi-Fi
-  // ↔ cellular transitions within 30 seconds.
-  const networkPoll = setInterval(() => void notify(), 30_000);
+    if (Battery) {
+      batterySub = Battery.addBatteryLevelListener(() => void notify());
+      batteryStateSub = Battery.addBatteryStateListener(() => void notify());
+    }
 
-  // Fire once immediately so the caller gets the initial state.
-  void notify();
+    // expo-network doesn't have a live listener — poll on a slow cadence.
+    networkPoll = setInterval(() => void notify(), 30_000);
+
+    void notify();
+  });
 
   return () => {
-    batterySub.remove();
-    batteryStateSub.remove();
-    clearInterval(networkPoll);
+    cancelled = true;
+    batterySub?.remove();
+    batteryStateSub?.remove();
+    if (networkPoll) clearInterval(networkPoll);
   };
 }
