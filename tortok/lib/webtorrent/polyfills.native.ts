@@ -31,6 +31,28 @@ declare global {
   var process: typeof process;
 }
 
+// cross-fetch-ponyfill (used by WebTorrent's webseed module) reads
+// `self.fetch`. On Hermes `self` is undefined → webseeds silently fail
+// and all data comes via 5s WebRTC round-trip instead.
+if (typeof (globalThis as unknown as Record<string, unknown>).self === 'undefined') {
+  (globalThis as unknown as Record<string, unknown>).self = globalThis;
+}
+
+// WebTorrent's webseed module (webconn.js) uses AbortSignal.timeout() for
+// HTTP request timeouts. Hermes doesn't implement it → every piece request
+// throws immediately → webseed silently falls back to (slow) WebRTC.
+if (typeof AbortSignal.timeout !== 'function') {
+  AbortSignal.timeout = (ms: number): AbortSignal => {
+    const controller = new AbortController();
+    setTimeout(() => {
+      const err = new Error('TimeoutError');
+      err.name = 'TimeoutError';
+      controller.abort(err);
+    }, ms);
+    return controller.signal;
+  };
+}
+
 if (typeof global.Buffer === 'undefined') {
   global.Buffer = Buffer;
 }

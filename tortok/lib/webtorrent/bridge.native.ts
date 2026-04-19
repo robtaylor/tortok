@@ -60,22 +60,29 @@ type TorrentEntry = {
   entry: TorrentFile;
 };
 
-/** infoHash → { file map, entry file } */
-const registry = new Map<string, TorrentEntry>();
-
 // ---------------------------------------------------------------------------
-// Server singleton
+// Server singleton + registry
 //
 // Stash on globalThis so Metro Fast Refresh doesn't orphan a running server
-// when re-executing the module body. The old module's references are lost but
-// the server keeps listening — without this guard we'd start a second server
-// on a new port and leak the first.
+// when re-executing the module body. The registry MUST also live on globalThis
+// because the server handler closure captures it — if only the server is
+// preserved across hot reload, new registerTorrent() calls write to the new
+// module's Map while the old handler reads the old (empty) Map → 404.
 // ---------------------------------------------------------------------------
 
 type BridgeGlobals = {
-  __webtorrentBridge?: { server: BridgeServer; port: number; ready: Promise<void> };
+  __webtorrentBridge?: {
+    server: BridgeServer;
+    port: number;
+    ready: Promise<void>;
+    registry: Map<string, TorrentEntry>;
+  };
 };
 const g = globalThis as BridgeGlobals;
+
+/** infoHash → { file map, entry file } */
+const registry: Map<string, TorrentEntry> =
+  g.__webtorrentBridge?.registry ?? new Map();
 
 let server: BridgeServer | null = g.__webtorrentBridge?.server ?? null;
 let serverPort: number | null = g.__webtorrentBridge?.port ?? null;
@@ -183,7 +190,7 @@ function ensureServer(): Promise<void> {
       if (!addr) return reject(new Error('bridge: no address after listen'));
       server = srv;
       serverPort = addr.port;
-      g.__webtorrentBridge = { server: srv, port: addr.port, ready: serverReady! };
+      g.__webtorrentBridge = { server: srv, port: addr.port, ready: serverReady!, registry };
       resolve();
     });
   });
