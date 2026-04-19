@@ -156,6 +156,23 @@ async function doAdd(
       t.on('error', (e: unknown) => reject(e));
     });
 
+    // Wait for the first piece before handing the URL to the video player.
+    // Without this, the bridge serves an empty stream and the player errors.
+    if (torrent.progress === 0) {
+      await new Promise<void>((resolve, reject) => {
+        const onDownload = () => { cleanup(); resolve(); };
+        const onError = (e: unknown) => { cleanup(); reject(e); };
+        const timeout = setTimeout(() => { cleanup(); resolve(); }, 15_000);
+        function cleanup() {
+          torrent.removeListener('download', onDownload);
+          torrent.removeListener('error', onError);
+          clearTimeout(timeout);
+        }
+        torrent.on('download', onDownload);
+        torrent.on('error', onError);
+      });
+    }
+
     const bridgeUrl = await registerTorrent(torrent);
 
     managed.set(magnetLink, {
@@ -184,6 +201,10 @@ export function release(magnetLink: string): void {
   entry.refCount = Math.max(0, entry.refCount - 1);
   if (entry.refCount > 0) return;
 
+  // Clear any existing grace timer to prevent leaked timers from double-release
+  if (entry.graceTimer) {
+    clearTimeout(entry.graceTimer);
+  }
   entry.graceTimer = setTimeout(() => {
     // Re-check: might have been re-requested during the grace period
     if (entry.refCount > 0) return;

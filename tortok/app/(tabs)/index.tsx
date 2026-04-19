@@ -17,112 +17,115 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { getFeed, likeVideo, type Video } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 import { useP2PUrl } from '@/lib/webtorrent/useP2PUrl';
+import { usePrefetch } from '@/lib/webtorrent/usePrefetch';
 import { useSeedPolicy } from '@/lib/webtorrent/useSeedPolicy';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 80;
 const VIDEO_HEIGHT = SCREEN_HEIGHT - TAB_BAR_HEIGHT;
-// Stable reference so `useVideoPlayer` doesn't see a fresh initializer on
-// every render (which can cause the player to be rebuilt on unrelated state
-// changes like like-count updates).
+
 function configurePlayer(p: { loop: boolean; muted: boolean }) {
   p.loop = true;
   p.muted = false;
 }
 
+// ---------------------------------------------------------------------------
+// Display state machine
+// ---------------------------------------------------------------------------
+//
+// States:
+//   idle     — poster visible, no player
+//   loading  — poster visible, player buffering behind it
+//   playing  — video visible, playback active
+//   paused   — video visible, playback paused
+//   error    — error overlay with retry
+//   empty    — no content
+//
+// Only the active cell mounts a player. Adjacent cells are data-prefetched
+// by usePrefetch (no player mounted). Poster visible in idle + loading → no
+// black gap.
+
+type DisplayState = 'idle' | 'loading' | 'playing' | 'paused' | 'error' | 'empty';
+
 const VideoItem = memo(function VideoItem({
   video,
   isActive,
-  isAdjacent,
   token,
 }: {
   video: Video;
   isActive: boolean;
-  isAdjacent: boolean;
   token: string | null;
 }) {
-  // Optimistic like: `delta` records the pending change on top of the
-  // server-confirmed `video.isLiked` / `video.likeCount`. Rollback is a
-  // single `setDelta(prev)` — no mirrored arithmetic to keep in sync.
+  // --- Like state ---
   const [delta, setDelta] = useState<-1 | 0 | 1>(0);
   const [likePending, setLikePending] = useState(false);
-  const [retryKey, setRetryKey] = useState(0);
-
   const liked = delta === 0 ? video.isLiked : delta === 1;
   const likeCount = video.likeCount + delta;
 
-  // ---------------------------------------------------------------------------
-  // Display state machine — the single source of truth for what the user sees.
-  //
-  // States:
-  //   poster   — poster/cover image visible, video layer invisible
-  //   playing  — video visible, playback active (first frame has rendered)
-  //   paused   — video visible, playback paused (play icon overlay)
-  //   error    — error overlay with retry button
-  //   empty    — no poster, no video URL (placeholder text)
-  //
-  // Transitions:
-  //   poster  → playing   playingChange(isPlaying: true) — first frame rendered
-  //   poster  → error     statusChange(status: 'error')
-  //   playing → paused    user tap
-  //   playing → poster    scroll away (!isActive)
-  //   paused  → playing   user tap, or scroll away then back (isActive)
-  //   paused  → poster    scroll away (!isActive)
-  //   error   → poster    retry (player.replace)
-  //   *       → poster    player/source change (reset)
-  // ---------------------------------------------------------------------------
-  type DisplayState = 'poster' | 'playing' | 'paused' | 'error' | 'empty';
+  // --- Display state ---
   const [displayState, setDisplayState] = useState<DisplayState>(
-    !video.posterURL && !video.magnetLink ? 'empty' : 'poster',
+    !video.posterURL && !video.magnetLink ? 'empty' : 'idle',
   );
 
-  // Only mount a player for the active cell and its immediate neighbors —
-  // inactive cells that are simply scrolled-past render their poster and
-  // nothing else. Prevents the FlatList window from holding N simultaneous
-  // AVPlayer / ExoPlayer instances that we aren't using.
-  const shouldLoadPlayer = isActive || isAdjacent;
+  // Only the active cell gets a player.
   const p2pUrl = useP2PUrl(
-    shouldLoadPlayer ? video.magnetLink : null,
+    isActive ? video.magnetLink : null,
     video.torrentFileUrl,
   );
+  const player = useVideoPlayer(p2pUrl, configurePlayer);
 
-  // p2pUrl is already null when !shouldLoadPlayer (magnetLink was null).
-  const videoUrl = p2pUrl;
-
-  const player = useVideoPlayer(videoUrl, configurePlayer);
-
-  // Transition: scroll away → poster, scroll back → resume playing
+  // --- When isActive changes ---
   useEffect(() => {
     if (!isActive) {
-      setDisplayState((s) => (s === 'playing' || s === 'paused') ? 'poster' : s);
-    } else {
-      // Scroll back to a paused cell → auto-play
-      setDisplayState((s) => s === 'paused' ? 'playing' : s);
+      setDisplayState((s) =>
+        s === 'playing' || s === 'paused' || s === 'loading' || s === 'error'
+          ? 'idle'
+          : s,
+      );
     }
+    // When active: URL will resolve → loading → readyToPlay → playing.
+    // No action needed here — the URL and player effects handle it.
   }, [isActive]);
 
-  // Transition: player events drive state changes
+  // --- When URL resolves/drops ---
   useEffect(() => {
-    if (!player) {
-      setDisplayState((s) => s === 'empty' ? 'empty' : 'poster');
-      return;
+    if (p2pUrl) {
+      setDisplayState((s) => (s === 'idle' ? 'loading' : s));
+    } else {
+      setDisplayState((s) =>
+        s === 'loading' || s === 'playing' || s === 'paused' ? 'idle' : s,
+      );
     }
+  }, [p2pUrl]);
+
+  // --- Player events ---
+  useEffect(() => {
+    if (!player) return;
 
     const statusSub = player.addListener('statusChange', (payload) => {
       if (payload.status === 'error') {
-        setDisplayState('error');
+        setDisplayState((s) =>
+          s === 'loading' || s === 'playing' ? 'error' : s,
+        );
       }
-      // When player becomes ready, retry play() — calling play() while
-      // loading is a no-op on some platforms.
       if (payload.status === 'readyToPlay') {
         player.play();
       }
     });
 
+    // If the player already reached readyToPlay before this effect ran
+    // (prefetched data → instant load), kick playback now.
+    if (player.status === 'readyToPlay') {
+      player.play();
+      // playingChange may also have fired before our listener, so force transition
+      if (player.playing) {
+        setDisplayState('playing');
+      }
+    }
+
     const playingSub = player.addListener('playingChange', (payload) => {
       if (payload.isPlaying) {
-        // First frame has been decoded and presented — safe to show video
-        setDisplayState('playing');
+        setDisplayState((s) => (s === 'loading' ? 'playing' : s));
       }
     });
 
@@ -130,36 +133,38 @@ const VideoItem = memo(function VideoItem({
       statusSub.remove();
       playingSub.remove();
     };
-  }, [player, retryKey]);
+  }, [player]);
 
-  // Drive the player based on display state
+  // --- Drive player from state ---
+  // Only pause for explicit user-pause or deactivation. Do NOT pause during
+  // 'loading' — readyToPlay may call play() before this effect re-runs, and
+  // pausing during loading kills that play().
   useEffect(() => {
     if (!player) return;
     if (displayState === 'playing') {
       player.play();
-    } else {
+    } else if (displayState === 'paused' || displayState === 'idle') {
       player.pause();
     }
   }, [player, displayState]);
+
+  // --- Handlers ---
+  const handleTogglePlay = () => {
+    setDisplayState((s) =>
+      s === 'playing' ? 'paused' : s === 'paused' ? 'playing' : s,
+    );
+  };
+
+  const handleRetry = () => {
+    if (!player || !p2pUrl) return;
+    player.replaceAsync(p2pUrl);
+    setDisplayState('loading');
+  };
 
   const hashtagLine = useMemo(
     () => video.hashtags.map((h) => `#${h}`).join(' '),
     [video.hashtags],
   );
-
-  const handleTogglePlay = () => {
-    setDisplayState((s) => s === 'playing' ? 'paused' : s === 'paused' ? 'playing' : s);
-  };
-
-  const handleRetry = () => {
-    if (!player || videoUrl === null) return;
-    // expo-video's `replace()` swaps the internal player; listeners bound to
-    // the old instance stop firing. Bumping retryKey forces the event
-    // listeners above to re-subscribe.
-    player.replace(videoUrl);
-    setDisplayState('poster');
-    setRetryKey((k) => k + 1);
-  };
 
   const handleLike = async () => {
     if (!token || likePending) return;
@@ -179,10 +184,12 @@ const VideoItem = memo(function VideoItem({
     }
   };
 
+  const showPoster = displayState === 'idle' || displayState === 'loading';
+  const showVideo = displayState === 'playing' || displayState === 'paused';
+
   return (
     <View style={styles.videoContainer}>
-      {/* Poster — always rendered; hidden once video is playing/paused */}
-      {video.posterURL && displayState === 'poster' ? (
+      {video.posterURL && showPoster ? (
         <Image
           source={{ uri: video.posterURL }}
           style={styles.video}
@@ -193,11 +200,11 @@ const VideoItem = memo(function VideoItem({
         />
       ) : null}
 
-      {videoUrl ? (
+      {p2pUrl ? (
         <Pressable style={styles.video} onPress={handleTogglePlay} testID="videoPressable">
           <VideoView
             player={player}
-            style={[styles.video, displayState === 'poster' && styles.invisible]}
+            style={[styles.video, !showVideo && styles.invisible]}
             contentFit="cover"
             nativeControls={false}
           />
@@ -210,8 +217,7 @@ const VideoItem = memo(function VideoItem({
         </View>
       ) : null}
 
-      {/* Buffering spinner — only when there's no poster to mask the wait */}
-      {videoUrl && isActive && displayState === 'poster' && !video.posterURL ? (
+      {displayState === 'loading' && !video.posterURL ? (
         <View style={styles.centerOverlay} pointerEvents="none" testID="videoBuffering">
           <ActivityIndicator size="large" color="#fff" />
         </View>
@@ -237,7 +243,6 @@ const VideoItem = memo(function VideoItem({
         </View>
       ) : null}
 
-      {/* Overlay: user info + caption */}
       <View style={styles.bottomOverlay}>
         <Text style={styles.username}>@{video.user.username}</Text>
         <Text style={styles.caption} numberOfLines={2}>
@@ -248,7 +253,6 @@ const VideoItem = memo(function VideoItem({
         )}
       </View>
 
-      {/* Overlay: action buttons */}
       <View style={styles.actionsOverlay}>
         <TouchableOpacity
           style={styles.actionButton}
@@ -275,6 +279,10 @@ const VideoItem = memo(function VideoItem({
   );
 });
 
+// ---------------------------------------------------------------------------
+// FeedScreen
+// ---------------------------------------------------------------------------
+
 export default function FeedScreen() {
   const token = useAuthStore((s) => s.token);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -287,6 +295,7 @@ export default function FeedScreen() {
 
   const videos = useMemo(() => data?.videos ?? [], [data]);
 
+  usePrefetch(videos, activeIndex);
   useSeedPolicy(videos[activeIndex] ?? null);
 
   const onViewableItemsChanged = useCallback(
@@ -300,8 +309,6 @@ export default function FeedScreen() {
 
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
-  // Warm the native image cache for the neighbors of the active cell so
-  // that swipes land on an already-drawn poster, not on a spinner.
   useEffect(() => {
     const urls = [-2, -1, 1, 2]
       .map((offset) => videos[activeIndex + offset]?.posterURL)
@@ -344,7 +351,6 @@ export default function FeedScreen() {
         <VideoItem
           video={item}
           isActive={index === activeIndex}
-          isAdjacent={Math.abs(index - activeIndex) === 1}
           token={token}
         />
       )}
@@ -359,9 +365,6 @@ export default function FeedScreen() {
         offset: VIDEO_HEIGHT * index,
         index,
       })}
-      // Narrow the FlatList render window. Defaults mount ~10 screens of
-      // cells; we only need the active cell + its two neighbors (the
-      // preload budget matches `shouldLoadPlayer`'s adjacency rule).
       initialNumToRender={1}
       maxToRenderPerBatch={2}
       windowSize={3}

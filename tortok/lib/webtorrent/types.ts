@@ -28,6 +28,7 @@ export type Torrent = {
   progress: number;
   pieces: Array<unknown | null>;
   on: (event: string, cb: (arg?: unknown) => void) => void;
+  removeListener: (event: string, cb: (arg?: unknown) => void) => void;
 };
 
 /** chunk-store constructor — MemoryChunkStore / FSAChunkStore / future RNFS store */
