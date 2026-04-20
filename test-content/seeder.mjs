@@ -70,7 +70,7 @@ setInterval(() => {
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-  'Access-Control-Allow-Headers': 'Range',
+  'Access-Control-Allow-Headers': 'Range, Cache-Control',
 };
 
 const httpServer = http.createServer((req, res) => {
