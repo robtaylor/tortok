@@ -2,8 +2,9 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
-  FlatList,
   Dimensions,
+  FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   TouchableOpacity,
@@ -20,9 +21,7 @@ import { useP2PUrl } from '@/lib/webtorrent/useP2PUrl';
 import { usePrefetch } from '@/lib/webtorrent/usePrefetch';
 import { useSeedPolicy } from '@/lib/webtorrent/useSeedPolicy';
 
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
-const TAB_BAR_HEIGHT = 80;
-const VIDEO_HEIGHT = SCREEN_HEIGHT - TAB_BAR_HEIGHT;
+const PHONE_ASPECT = 9 / 16; // width / height
 
 function configurePlayer(p: { loop: boolean; muted: boolean; timeUpdateEventInterval: number }) {
   p.loop = true;
@@ -56,11 +55,15 @@ const VideoItem = memo(function VideoItem({
   isActive,
   offset,
   token,
+  videoWidth,
+  videoHeight,
 }: {
   video: Video;
   isActive: boolean;
   offset: number;
   token: string | null;
+  videoWidth: number;
+  videoHeight: number;
 }) {
   const pos = offset === 0 ? 'curr' : offset === 1 ? 'next' : offset === -1 ? 'prev' : 'off';
   const tag = video.caption.slice(0, 20);
@@ -184,6 +187,11 @@ const VideoItem = memo(function VideoItem({
     const playingSub = player.addListener('playingChange', (payload) => {
       console.log(`${preRef.current} playingChange: ${payload.isPlaying}`);
       if (payload.isPlaying) {
+        if (!isActiveRef.current) {
+          console.log(`${preRef.current} playingChange PAUSED (inactive)`);
+          player.pause();
+          return;
+        }
         stamp('playingChange');
         setDisplayState((s) => (s === 'loading' ? 'playing' : s));
       }
@@ -257,29 +265,35 @@ const VideoItem = memo(function VideoItem({
     }
   };
 
-  const showPoster = displayState === 'idle' || displayState === 'loading';
-  const showVideo = displayState === 'playing' || displayState === 'paused';
+  const showPoster = displayState === 'idle' || displayState === 'loading' || !isActive;
+  const showVideo = isActive && (displayState === 'playing' || displayState === 'paused');
+  // On web, useVideoPlayer(null) renders <video src=""> which triggers a
+  // browser warning and a redundant network request. Skip mounting the
+  // VideoView entirely until we have a real source.
+  const mountPlayer = Platform.OS !== 'web' || !!p2pUrl;
 
   return (
-    <View style={styles.videoContainer}>
+    <View style={[styles.videoContainer, { width: videoWidth, height: videoHeight }]}>
       {video.posterURL && showPoster ? (
         <Image
           source={{ uri: video.posterURL }}
           style={styles.video}
           contentFit="cover"
           cachePolicy="memory-disk"
-          transition={150}
+          transition={0}
           testID="videoPoster"
         />
       ) : null}
 
       <Pressable style={styles.video} onPress={handleTogglePlay} testID="videoPressable">
-        <VideoView
-          player={player}
-          style={[styles.video, !showVideo && styles.invisible]}
-          contentFit="cover"
-          nativeControls={false}
-        />
+        {mountPlayer ? (
+          <VideoView
+            player={player}
+            style={[styles.video, !showVideo && styles.invisible]}
+            contentFit="cover"
+            nativeControls={false}
+          />
+        ) : null}
       </Pressable>
 
       {displayState === 'empty' ? (
@@ -357,6 +371,21 @@ const VideoItem = memo(function VideoItem({
 export default function FeedScreen() {
   const token = useAuthStore((s) => s.token);
   const [activeIndex, setActiveIndex] = useState(0);
+  const listRef = useRef<FlatList>(null);
+  const [layout, setLayout] = useState<{ w: number; h: number } | null>(null);
+  const fallbackW = useRef(Dimensions.get('window').width).current;
+
+  const onFeedLayout = useCallback((e: { nativeEvent: { layout: { width: number; height: number } } }) => {
+    const { width, height } = e.nativeEvent.layout;
+    setLayout((prev) => (prev?.w === width && prev?.h === height ? prev : { w: width, h: height }));
+  }, []);
+
+  // Measured height = actual space between header and tab bar.
+  // On web, constrain width to 9:16 phone column.
+  const videoHeight = layout?.h ?? 0;
+  const videoWidth = Platform.OS === 'web'
+    ? Math.min(layout?.w ?? fallbackW, Math.round(videoHeight * PHONE_ASPECT))
+    : (layout?.w ?? fallbackW);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['feed', token],
@@ -388,10 +417,42 @@ export default function FeedScreen() {
         isActive={index === activeIndex}
         offset={index - activeIndex}
         token={token}
+        videoWidth={videoWidth}
+        videoHeight={videoHeight}
       />
     ),
-    [activeIndex, token],
+    [activeIndex, token, videoWidth, videoHeight],
   );
+
+  // Web: mouse drag to scroll between videos.
+  // Refs so handlers stay stable across scrolls (no useMemo churn).
+  const activeIndexRef = useRef(activeIndex);
+  activeIndexRef.current = activeIndex;
+  const videosLenRef = useRef(videos.length);
+  videosLenRef.current = videos.length;
+  const dragStart = useRef<{ y: number; index: number } | null>(null);
+  const webDragHandlers = useMemo(() => {
+    if (Platform.OS !== 'web') return {};
+    const DRAG_THRESHOLD = 50;
+    return {
+      onPointerDown: (e: { nativeEvent: { clientY: number } }) => {
+        dragStart.current = { y: e.nativeEvent.clientY, index: activeIndexRef.current };
+      },
+      onPointerUp: (e: { nativeEvent: { clientY: number } }) => {
+        if (!dragStart.current) return;
+        const dy = dragStart.current.y - e.nativeEvent.clientY;
+        const fromIndex = dragStart.current.index;
+        dragStart.current = null;
+        if (Math.abs(dy) < DRAG_THRESHOLD) return;
+        const nextIndex = dy > 0
+          ? Math.min(fromIndex + 1, videosLenRef.current - 1)
+          : Math.max(fromIndex - 1, 0);
+        if (nextIndex !== fromIndex) {
+          listRef.current?.scrollToIndex({ index: nextIndex, animated: true });
+        }
+      },
+    };
+  }, []);
 
   useEffect(() => {
     const urls = [-2, -1, 1, 2]
@@ -400,24 +461,21 @@ export default function FeedScreen() {
     if (urls.length) Image.prefetch(urls, 'memory-disk');
   }, [activeIndex, videos]);
 
-  if (isLoading) {
-    return (
+  let content;
+  if (isLoading || !layout) {
+    content = (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#fff" />
       </View>
     );
-  }
-
-  if (error) {
-    return (
+  } else if (error) {
+    content = (
       <View style={styles.centered}>
         <Text style={styles.errorText}>Failed to load feed</Text>
       </View>
     );
-  }
-
-  if (videos.length === 0) {
-    return (
+  } else if (videos.length === 0) {
+    content = (
       <View style={styles.centered} testID="emptyFeedView">
         <Text style={styles.emptyTitle} testID="emptyFeedTitle">
           No videos yet
@@ -425,32 +483,45 @@ export default function FeedScreen() {
         <Text style={styles.emptySubtitle}>Be the first to post!</Text>
       </View>
     );
+  } else {
+    content = (
+      <FlatList
+        ref={listRef}
+        data={videos}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        snapToInterval={videoHeight}
+        snapToAlignment="start"
+        decelerationRate="fast"
+        showsVerticalScrollIndicator={false}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        getItemLayout={(_, index) => ({
+          length: videoHeight,
+          offset: videoHeight * index,
+          index,
+        })}
+        style={{ width: videoWidth }}
+        initialNumToRender={1}
+        maxToRenderPerBatch={2}
+        windowSize={5}
+      />
+    );
   }
 
   return (
-    <FlatList
-      data={videos}
-      keyExtractor={keyExtractor}
-      renderItem={renderItem}
-      snapToInterval={VIDEO_HEIGHT}
-      snapToAlignment="start"
-      decelerationRate="fast"
-      showsVerticalScrollIndicator={false}
-      onViewableItemsChanged={onViewableItemsChanged}
-      viewabilityConfig={viewabilityConfig}
-      getItemLayout={(_, index) => ({
-        length: VIDEO_HEIGHT,
-        offset: VIDEO_HEIGHT * index,
-        index,
-      })}
-      initialNumToRender={1}
-      maxToRenderPerBatch={2}
-      windowSize={3}
-    />
+    <View style={styles.feedRoot} onLayout={onFeedLayout} {...webDragHandlers}>
+      {content}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  feedRoot: {
+    flex: 1,
+    backgroundColor: '#000',
+    alignItems: 'center',
+  },
   centered: {
     flex: 1,
     backgroundColor: '#000',
@@ -472,8 +543,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   videoContainer: {
-    height: VIDEO_HEIGHT,
-    width: SCREEN_WIDTH,
     backgroundColor: '#000',
   },
   video: {

@@ -1,14 +1,25 @@
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import { release, requestUrl } from './client';
 
 /**
- * Hook that resolves a torrent to a local bridge URL for video playback.
+ * Extract the first webseed URL (`ws=`) from a magnet link.
+ * Returns null if none found.
+ */
+function extractWebseedUrl(magnetLink: string): string | null {
+  const match = magnetLink.match(/[&?]ws=([^&]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+/**
+ * Hook that resolves a torrent to a playable URL for video playback.
  *
- * When `torrentFileUrl` is provided, the .torrent file is fetched and passed
- * directly to WebTorrent — resolving in <1s instead of the ~6s magnet
- * round-trip. Falls back to magnet resolution if the fetch fails.
+ * On native: resolves via WebTorrent P2P bridge (local HTTP server).
+ * On web: extracts the webseed URL from the magnet link and returns it
+ * directly — the Service Worker bridge isn't built yet, so we skip the
+ * P2P stack entirely and use the HTTP fallback.
  *
- * Returns `null` while loading or if P2P is disabled/fails.
+ * Returns `null` while loading or if resolution fails.
  *
  * Pass `null` for magnetLink when the component doesn't need a torrent
  * (e.g. off-screen VideoItems) — this is a no-op that skips all work.
@@ -26,16 +37,25 @@ export function useP2PUrl(
       return;
     }
 
-    let cancelled = false;
     const label = tag ?? magnetLink.slice(20, 40);
+
+    if (Platform.OS === 'web') {
+      const wsUrl = extractWebseedUrl(magnetLink);
+      console.log(`[p2p:${label}] web → webseed ${wsUrl ? 'found' : 'missing'}`);
+      setUrl(wsUrl);
+      return;
+    }
+
+    // Native: resolve via WebTorrent bridge.
+    let cancelled = false;
     const t0 = Date.now();
     console.log(`[p2p:${label}] requesting…`);
 
     requestUrl(magnetLink, torrentFileUrl).then((bridgeUrl) => {
       console.log(`[p2p:${label}] resolved in ${Date.now() - t0}ms → ${bridgeUrl ? 'url' : 'null'}`);
       if (!cancelled) setUrl(bridgeUrl);
-    }).catch((e) => {
-      console.warn(`[p2p:${label}] error after ${Date.now() - t0}ms:`, e);
+    }).catch((e: Error) => {
+      console.warn(`[p2p:${label}] error after ${Date.now() - t0}ms:`, e.message);
       if (!cancelled) setUrl(null);
     });
 
