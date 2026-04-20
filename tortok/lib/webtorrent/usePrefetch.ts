@@ -27,11 +27,12 @@ export function usePrefetch(videos: Video[], activeIndex: number): void {
   const held = useRef(new Map<string, HeldEntry>());
 
   useEffect(() => {
-    const desired = new Map<string, Video>();
+    const desired = new Map<string, { video: Video; pos: string }>();
     for (let offset = -PREFETCH_WINDOW; offset <= PREFETCH_WINDOW; offset++) {
       if (offset === 0) continue; // active cell manages its own torrent
       const v = videos[activeIndex + offset];
-      if (v?.magnetLink) desired.set(v.magnetLink, v);
+      const pos = offset === 1 ? 'next' : offset === -1 ? 'prev' : `${offset}`;
+      if (v?.magnetLink) desired.set(v.magnetLink, { video: v, pos });
     }
 
     // Release magnets that scrolled out of range
@@ -44,11 +45,12 @@ export function usePrefetch(videos: Video[], activeIndex: number): void {
     }
 
     // Acquire new magnets and prefetch first bytes
-    for (const [magnet, video] of desired) {
+    for (const [magnet, { video, pos }] of desired) {
       if (held.current.has(magnet)) continue;
       const entry: HeldEntry = { bridgeUrl: null, abort: new AbortController() };
       held.current.set(magnet, entry);
 
+      const pre = `[${pos}] [prefetch:${video.caption.slice(0, 20)}]`;
       requestUrl(magnet, video.torrentFileUrl)
         .then((url) => {
           // Guard: magnet may have been released while we awaited
@@ -58,10 +60,14 @@ export function usePrefetch(videos: Video[], activeIndex: number): void {
           }
           entry.bridgeUrl = url;
           if (url) {
+            const t0 = Date.now();
+            console.log(`${pre} fetching ${PREFETCH_BYTES} bytes`);
             fetch(url, {
               headers: { Range: `bytes=0-${PREFETCH_BYTES - 1}` },
               signal: entry.abort.signal,
-            }).catch(() => {});
+            })
+              .then(() => console.log(`${pre} done in ${Date.now() - t0}ms`))
+              .catch(() => {});
           }
         })
         .catch(() => {

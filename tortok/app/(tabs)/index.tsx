@@ -24,9 +24,13 @@ const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 80;
 const VIDEO_HEIGHT = SCREEN_HEIGHT - TAB_BAR_HEIGHT;
 
-function configurePlayer(p: { loop: boolean; muted: boolean }) {
+function configurePlayer(p: { loop: boolean; muted: boolean; timeUpdateEventInterval: number }) {
   p.loop = true;
   p.muted = false;
+  // 100ms for accurate first-frame detection. The self-removing listener
+  // in the player events effect unsubscribes after the first frame, so
+  // this only fires ~1-5 times per video load, not continuously.
+  p.timeUpdateEventInterval = 0.1;
 }
 
 // ---------------------------------------------------------------------------
@@ -50,12 +54,47 @@ type DisplayState = 'idle' | 'loading' | 'playing' | 'paused' | 'error' | 'empty
 const VideoItem = memo(function VideoItem({
   video,
   isActive,
+  offset,
   token,
 }: {
   video: Video;
   isActive: boolean;
+  offset: number;
   token: string | null;
 }) {
+  const pos = offset === 0 ? 'curr' : offset === 1 ? 'next' : offset === -1 ? 'prev' : 'off';
+  const tag = video.caption.slice(0, 20);
+  const vid = video.id.slice(0, 6);
+  const pre = `[${pos}] [${vid}:${tag}]`;
+  // Ref so event listeners always log the current position, not the one
+  // captured at registration time (player is stable → effects don't re-run).
+  const preRef = useRef(pre);
+  preRef.current = pre;
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
+
+  // --- Profiling timeline (all Date.now(), no bridge lag) ---
+  const tl = useRef<Record<string, number>>({});
+  const stamp = useCallback((label: string) => { tl.current[label] = Date.now(); }, []);
+  const dumpTimeline = useCallback(() => {
+    const t = tl.current;
+    if (!t.activate) return;
+    const d = (a: string, b: string) => {
+      const va = t[a], vb = t[b];
+      return va && vb ? `${b}-${a}=${vb - va}ms` : `${b}=?`;
+    };
+    console.log(
+      `${preRef.current} TIMELINE: total=${Date.now() - t.activate}ms | ` +
+      [
+        d('activate', 'replaceAsync'),
+        d('replaceAsync', 'replaceResolved'),
+        d('replaceResolved', 'readyToPlay'),
+        d('readyToPlay', 'playingChange'),
+        d('playingChange', 'renderPlaying'),
+      ].join(' | '),
+    );
+  }, []);
+
   // --- Like state ---
   const [delta, setDelta] = useState<-1 | 0 | 1>(0);
   const [likePending, setLikePending] = useState(false);
@@ -67,64 +106,85 @@ const VideoItem = memo(function VideoItem({
     !video.posterURL && !video.magnetLink ? 'empty' : 'idle',
   );
 
-  // Only the active cell gets a player.
+  // Only the active cell resolves a URL.
   const p2pUrl = useP2PUrl(
     isActive ? video.magnetLink : null,
     video.torrentFileUrl,
+    tag,
   );
-  const player = useVideoPlayer(p2pUrl, configurePlayer);
+
+  // Stable player — created once at mount, source swapped via replaceAsync.
+  // Avoids 500-750ms native player construction cost on every scroll.
+  const player = useVideoPlayer(null, configurePlayer);
+
+  // Log display state transitions.
+  useEffect(() => {
+    console.log(`${pre} → ${displayState}`);
+    if (displayState === 'playing') {
+      stamp('renderPlaying');
+      dumpTimeline();
+    }
+  }, [displayState]);
 
   // --- When isActive changes ---
   useEffect(() => {
+    console.log(`${pre} ${isActive ? 'ACTIVATE' : 'DEACTIVATE'}`);
+    if (isActive) {
+      tl.current = {};
+      stamp('activate');
+    }
     if (!isActive) {
       setDisplayState((s) =>
         s === 'playing' || s === 'paused' || s === 'loading' || s === 'error'
           ? 'idle'
           : s,
       );
+      player.pause();
     }
-    // When active: URL will resolve → loading → readyToPlay → playing.
-    // No action needed here — the URL and player effects handle it.
-  }, [isActive]);
+  }, [isActive, player]);
 
-  // --- When URL resolves/drops ---
+  // --- When URL resolves/drops: swap source on the stable player ---
   useEffect(() => {
     if (p2pUrl) {
+      stamp('replaceAsync');
+      console.log(`${pre} replaceAsync`);
       setDisplayState((s) => (s === 'idle' ? 'loading' : s));
+      player.replaceAsync(p2pUrl).then(() => {
+        stamp('replaceResolved');
+        console.log(`${pre} replaceAsync resolved`);
+      });
     } else {
       setDisplayState((s) =>
         s === 'loading' || s === 'playing' || s === 'paused' ? 'idle' : s,
       );
     }
-  }, [p2pUrl]);
+  }, [p2pUrl, player]);
 
   // --- Player events ---
   useEffect(() => {
     if (!player) return;
 
     const statusSub = player.addListener('statusChange', (payload) => {
+      console.log(`${preRef.current} statusChange: ${payload.status}${payload.error ? ` — ${payload.error.message}` : ''}`);
       if (payload.status === 'error') {
         setDisplayState((s) =>
           s === 'loading' || s === 'playing' ? 'error' : s,
         );
       }
       if (payload.status === 'readyToPlay') {
-        player.play();
+        stamp('readyToPlay');
+        if (isActiveRef.current) {
+          player.play();
+        } else {
+          console.log(`${preRef.current} readyToPlay SKIPPED (inactive)`);
+        }
       }
     });
 
-    // If the player already reached readyToPlay before this effect ran
-    // (prefetched data → instant load), kick playback now.
-    if (player.status === 'readyToPlay') {
-      player.play();
-      // playingChange may also have fired before our listener, so force transition
-      if (player.playing) {
-        setDisplayState('playing');
-      }
-    }
-
     const playingSub = player.addListener('playingChange', (payload) => {
+      console.log(`${preRef.current} playingChange: ${payload.isPlaying}`);
       if (payload.isPlaying) {
+        stamp('playingChange');
         setDisplayState((s) => (s === 'loading' ? 'playing' : s));
       }
     });
@@ -135,15 +195,28 @@ const VideoItem = memo(function VideoItem({
     };
   }, [player]);
 
+  // First-frame detector — diagnostic only. Measures actual decode latency.
+  useEffect(() => {
+    if (!player || !p2pUrl) return;
+    let removed = false;
+    const timeSub = player.addListener('timeUpdate', (payload) => {
+      if (!removed && payload.currentTime > 0) {
+        removed = true;
+        console.log(`${preRef.current} FIRST_FRAME at ${payload.currentTime.toFixed(3)}s`);
+        timeSub.remove();
+      }
+    });
+    return () => {
+      if (!removed) timeSub.remove();
+    };
+  }, [player, p2pUrl]);
+
   // --- Drive player from state ---
-  // Only pause for explicit user-pause or deactivation. Do NOT pause during
-  // 'loading' — readyToPlay may call play() before this effect re-runs, and
-  // pausing during loading kills that play().
   useEffect(() => {
     if (!player) return;
     if (displayState === 'playing') {
       player.play();
-    } else if (displayState === 'paused' || displayState === 'idle') {
+    } else if (displayState === 'paused') {
       player.pause();
     }
   }, [player, displayState]);
@@ -200,16 +273,14 @@ const VideoItem = memo(function VideoItem({
         />
       ) : null}
 
-      {p2pUrl ? (
-        <Pressable style={styles.video} onPress={handleTogglePlay} testID="videoPressable">
-          <VideoView
-            player={player}
-            style={[styles.video, !showVideo && styles.invisible]}
-            contentFit="cover"
-            nativeControls={false}
-          />
-        </Pressable>
-      ) : null}
+      <Pressable style={styles.video} onPress={handleTogglePlay} testID="videoPressable">
+        <VideoView
+          player={player}
+          style={[styles.video, !showVideo && styles.invisible]}
+          contentFit="cover"
+          nativeControls={false}
+        />
+      </Pressable>
 
       {displayState === 'empty' ? (
         <View style={[styles.video, styles.noVideo]}>
@@ -309,6 +380,19 @@ export default function FeedScreen() {
 
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
+  const keyExtractor = useCallback((item: Video) => item.id, []);
+  const renderItem = useCallback(
+    ({ item, index }: { item: Video; index: number }) => (
+      <VideoItem
+        video={item}
+        isActive={index === activeIndex}
+        offset={index - activeIndex}
+        token={token}
+      />
+    ),
+    [activeIndex, token],
+  );
+
   useEffect(() => {
     const urls = [-2, -1, 1, 2]
       .map((offset) => videos[activeIndex + offset]?.posterURL)
@@ -346,16 +430,10 @@ export default function FeedScreen() {
   return (
     <FlatList
       data={videos}
-      keyExtractor={(item) => item.id}
-      renderItem={({ item, index }) => (
-        <VideoItem
-          video={item}
-          isActive={index === activeIndex}
-          token={token}
-        />
-      )}
-      pagingEnabled
+      keyExtractor={keyExtractor}
+      renderItem={renderItem}
       snapToInterval={VIDEO_HEIGHT}
+      snapToAlignment="start"
       decelerationRate="fast"
       showsVerticalScrollIndicator={false}
       onViewableItemsChanged={onViewableItemsChanged}

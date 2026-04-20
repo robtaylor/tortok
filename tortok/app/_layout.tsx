@@ -9,6 +9,22 @@ import { useAuthStore } from '@/stores/auth';
 
 export { ErrorBoundary } from 'expo-router';
 
+// Suppress noisy rn-webrtc debug spew (dozens of lines per peer connection).
+// Timestamp prefix aids log correlation across webtorrent/bridge/player layers.
+if (__DEV__ && !(globalThis as unknown as { __consolePatched?: boolean }).__consolePatched) {
+  (globalThis as unknown as { __consolePatched: boolean }).__consolePatched = true;
+  const t0 = Date.now();
+  const SUPPRESSED = /^rn-webrtc:/;
+  for (const level of ['log', 'warn', 'error', 'info', 'debug'] as const) {
+    const orig = console[level].bind(console);
+    (console as unknown as Record<string, (...a: unknown[]) => void>)[level] = (...args: unknown[]) => {
+      if (typeof args[0] === 'string' && SUPPRESSED.test(args[0])) return;
+      const elapsed = ((Date.now() - t0) / 1000).toFixed(3);
+      orig(`[+${elapsed}s]`, ...args);
+    };
+  }
+}
+
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
