@@ -1,12 +1,15 @@
 # Open problem: Content moderation
 
 **Status:** Unresolved. Sketch only.
-**Must resolve by:** Phase 3 — before our PDS opens signup to anyone
-outside the team. Shipping moderation after real users arrive is
-strictly harder than shipping it before.
+**Must resolve by:** Phase 3 — before signup opens to anyone outside
+the team. The auth source is now the user's existing PDS (typically
+`bsky.social`, per the 2026-04-29 amendments to ADR-003 and ADR-007),
+but we still curate the TorTok feed and own AppView-layer moderation.
+Shipping moderation after real users arrive is strictly harder than
+shipping it before.
 **Blocks:** opening signup beyond invite list.
-**Related ADRs:** ADR-005 (own PDS), ADR-007 (signup UX and abuse
-escalation ladder).
+**Related ADRs:** ADR-005 (AppView), ADR-007 (signup UX and AppView-
+layer abuse escalation ladder, as amended 2026-04-29).
 **Related open problems:** `monetization.md` (see the DMCA note
 below; copyright hygiene is not gated by monetization launch under
 the external-monetization model, but it's still a v1 requirement).

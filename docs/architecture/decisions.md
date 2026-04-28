@@ -125,14 +125,40 @@ standard atproto pipeline: client → PDS → firehose → AppView.
 
 ## ADR-003: Identity uses DIDs — `did:plc` default, `did:web` opt-in
 
-**Status:** Accepted
+**Status:** Accepted. Amended 2026-04-29 — v1 no longer runs a custodial
+TorTok PDS; users authenticate via their existing atproto identity
+(typically `bsky.social`). See "Amendment 2026-04-29" below.
 
 **Context.** AT Protocol accounts are DIDs. Two methods are practical:
 `did:plc` (PLC directory, currently operated by Bluesky PBC) and `did:web`
 (DNS-based, self-sovereign). `did:key` is unsuitable because AT Protocol
 assumes keys can rotate.
 
-**Decision.**
+**Decision (as amended 2026-04-29).**
+- Users authenticate via the atproto identity they already have. In
+  practice that means `bsky.social` for the overwhelming majority;
+  any atproto-compatible PDS works.
+- The user's home PDS holds their rotation key, password, recovery
+  flow, and blob storage. We hold none of those.
+- We still build our own AppView and our own `tortok.video.post`
+  Lexicon (see ADR-002, ADR-005). Records live in the user's PDS
+  repo; we index them in our AppView.
+- **`did:web` opt-in for sovereigns.** Power users who own a domain
+  can opt into `did:web` per the standard atproto upgrade path. We
+  document the DNS configuration; we do not host identity documents
+  for them. Self-custody happens via the standard atproto migration
+  flow against the user's PDS, not against TorTok.
+- Whether to ever run our own PDS is now an open problem
+  (`docs/architecture/open-problems/own-pds.md`). Triggers to revisit
+  are documented there.
+
+**Amendment 2026-04-29.** The original Decision below specified a
+custodial v1 in which TorTok ran a PDS, generated `did:plc` identities
+on signup, and held rotation keys server-side. That model has been
+reversed. The reasoning, costs, and triggers for revisiting are in
+ADR-007's Amendment block and in `open-problems/own-pds.md`.
+
+**Original decision (pre-amendment, retained for context).**
 - Signup creates a `did:plc` identity behind the scenes. The user does
   not see this — the flow is email + password + captcha, with no
   atproto terminology in the UI (see ADR-007).
@@ -144,27 +170,27 @@ assumes keys can rotate.
   upgrade to user-held keys. At that point the rotation key moves from
   our servers into the platform secure store (iOS Keychain, Android
   Keystore, WebCrypto on web, all accessed via Expo SecureStore's
-  cross-platform API). Users who upgrade gain the ability to migrate
-  to another PDS without our cooperation.
-- **Post-v1: `did:web` for sovereigns.** Power users who own a domain
-  can opt into `did:web` as part of the self-custody upgrade. We
-  document the DNS configuration; we do not host identity documents
-  for them.
+  cross-platform API).
 
-**Consequences.**
-- v1 users get a familiar, frictionless signup flow. No seed phrases,
-  no key exports, no "write this down" dialogs.
-- v1 is explicitly not self-sovereign. A user who loses their password
-  can recover via email; a user who wants to migrate off TorTok cannot
-  do so without our cooperation until they opt into self-custody. We
-  document this limitation honestly rather than hiding it.
-- Once a user upgrades to self-custody, the full atproto
-  account-portability win kicks in — they can migrate PDS without
-  losing handle, followers, or history. This is the payoff that makes
-  the protocol choice worth it in the first place.
-- `did:plc` depends on PLC directory availability. We should monitor
-  proposals to decentralize PLC and follow the consensus migration
-  path if one emerges.
+**Consequences (as amended).**
+- v1 ships materially faster. No PDS fork, no custodial key store,
+  no signup spam ladder, no email/password complexity.
+- We surface "sign in with Bluesky" at the user level. The product
+  hypothesis (see ADR-007 amendment) is that this is a credibility
+  and community signal, not a leak of plumbing.
+- We accept dependency on the user's PDS. If `bsky.social` rate-limits
+  third-party Lexicons or refuses our records, our users can't post
+  through it. This is the dominant new risk; it is monitored as a
+  trigger in `open-problems/own-pds.md`.
+- We accept that we cannot deplatform a problematic user at the
+  protocol layer. Our only lever is the AppView (refuse to index).
+  A user banned from `bsky.social` for unrelated reasons loses TorTok
+  access until they migrate PDS.
+- Account portability and self-custody are now atproto-standard from
+  day one (no upgrade flow needed).
+- `did:plc` still depends on PLC directory availability. We should
+  monitor proposals to decentralize PLC and follow the consensus
+  migration path if one emerges.
 
 ---
 
@@ -387,24 +413,29 @@ plan in `tortok/lib/webtorrent/seedPolicy.ts` and `useSeedPolicy.ts`
 will land post-Phase 3 once we know how PDS-driven session lifetimes
 interact with foreground-only seeding.
 
-**Phase 3 — Stand up our own PDS and wire the client to it.**
-- Fork `bluesky-social/atproto`'s reference PDS implementation. Strip
-  Bluesky-specific lexicons; keep the core auth, blob, and repo
-  surface. Deploy it alongside the existing backend.
-- Implement the `tortok.video.post` Lexicon and register it.
-- Replace the legacy email/password backend with our PDS as the auth
-  source. Signup flow becomes email + password + Turnstile (see
-  ADR-007). Migrate existing users by creating did:plc identities for
-  them on the PDS and mapping old user IDs to new DIDs.
-- Add `@atproto/api` to the client. Publish a video as a signed
-  `tortok.video.post` record (create magnet, upload thumbnail as blob,
-  create record). The old video-post endpoint is retired in this phase.
-- **Revisit web token storage.** Phase 2 accepts expo-secure-store's
-  web fallback to `localStorage` (readable by any XSS on the domain) on
-  the basis that the Expo app ships only to iOS/Android for now. Once
-  the PDS owns auth, session cookies with `HttpOnly`/`SameSite` become
-  available and should replace localStorage token storage on the web
-  build. Tracked in `tortok/stores/auth.ts:18`.
+**Phase 3 — atproto integration via the user's existing PDS.**
+
+Scope changed 2026-04-29: the original Phase 3 forked our own PDS and
+ran a custodial signup. That has been reversed (see amendments to
+ADR-003 and ADR-007). Phase 3 now leverages users' existing atproto
+identities and ships materially smaller.
+- Define and publish the `tortok.video.post` Lexicon (ADR-002).
+- Add `@atproto/api` to the client. Login becomes atproto OAuth against
+  the user's PDS (typically `bsky.social`).
+- Publish video as a signed `tortok.video.post` record into the user's
+  PDS repo: upload thumbnail as a blob via the user's PDS, then create
+  the record. Magnet is generated client-side as it is today.
+- Retire the legacy email/password backend and the legacy video-post
+  endpoint. With no released users, there is no migration to perform.
+- **Revisit web token storage.** Phase 2 accepted expo-secure-store's
+  web fallback to `localStorage` (readable by any XSS on the domain).
+  atproto OAuth produces tokens that should live in `HttpOnly` /
+  `SameSite` cookies on the web build. Tracked in
+  `tortok/stores/auth.ts:18`.
+- **Open question:** whether TorTok ever runs its own PDS is parked in
+  `docs/architecture/open-problems/own-pds.md`, with documented
+  triggers to revisit (Bluesky restricting our Lexicon, onboarding
+  friction in user research, brand or moderation control needs).
 
 **Phase 4 — AppView cutover.**
 - Stand up the AppView as a separate service. It subscribes to our
@@ -438,18 +469,66 @@ was, not what still exists.
 
 ## ADR-007: Signup UX and spam prevention
 
-**Status:** Accepted
+**Status:** Accepted. Amended 2026-04-29 — signup is now atproto OAuth
+against the user's existing PDS, not a custodial email + password flow.
+See "Amendment 2026-04-29" below.
 
-**Context.** Earlier drafts of ADR-005 assumed users would bring their
-own atproto identity from an existing PDS (typically bsky.social) and
-log in via atproto OAuth. Research confirmed Bluesky themselves dropped
-SMS verification in February 2024 in favour of CAPTCHA-only signup,
-and exposing Bluesky at the user level is explicitly not what we want
-for TorTok — we want a clean, familiar, branded experience where
-atproto is backend plumbing the user never sees. This ADR defines the
-signup flow and the spam-prevention strategy that sits in front of it.
+**Amendment 2026-04-29.** This ADR originally specified a clean,
+TorTok-branded signup with atproto as invisible backend plumbing. That
+stance has been reversed. The new flow is atproto OAuth against the
+user's existing PDS — typically `bsky.social`. The spam-prevention
+ladder below largely becomes N/A: the user's PDS handles signup spam
+for us. Per-user rate limits at our AppView remain in scope.
 
-**Decision.**
+The product hypothesis underlying the original ADR ("exposing Bluesky
+at the user level is what we don't want") has flipped. The new
+hypothesis is that surfacing Bluesky on signup is a *credibility*
+signal — established protocol, recognised brand, real account, you
+arrive in TorTok already plugged into a community. We will revisit
+this if onboarding-funnel data contradicts it.
+
+The original Context, Decision, escalation ladder, and Alternatives
+ruled out are retained below for the audit trail. They no longer
+describe the v1 flow. The question of whether TorTok ever runs its
+own PDS — for any reason: signup branding, Bluesky restricting our
+Lexicon, protocol-layer moderation control — is now an open problem
+in `docs/architecture/open-problems/own-pds.md` with documented
+triggers to revisit.
+
+**Decision (as amended 2026-04-29).**
+
+Signup and login are **atproto OAuth against the user's PDS**. The
+client embeds the standard atproto OAuth flow (`@atproto/api`). Most
+users land on `bsky.social`; users on third-party PDSes work the same
+way. We do not run an auth endpoint of our own; we do not store
+passwords; we do not generate `did:plc` identities; we do not hold
+rotation keys.
+
+We still publish a `tortok.video.post` Lexicon (ADR-002), still run our
+own AppView (ADR-005), and still write video records signed by the
+user's repo key into the user's PDS via `@atproto/api`.
+
+**Spam prevention (as amended).**
+
+The user's PDS handles signup-time spam (Bluesky uses Turnstile;
+third-party PDSes vary). We retain authority over per-user rate limits
+at the AppView ingest and at our own backend endpoints (e.g., upload
+quotas, posting cadence). The escalation ladder below is preserved as
+a reference for the AppView surface, not the signup surface.
+
+---
+
+**Original Context (pre-amendment).** Earlier drafts of ADR-005 assumed
+users would bring their own atproto identity from an existing PDS
+(typically bsky.social) and log in via atproto OAuth. Research
+confirmed Bluesky themselves dropped SMS verification in February 2024
+in favour of CAPTCHA-only signup, and exposing Bluesky at the user
+level is explicitly not what we want for TorTok — we want a clean,
+familiar, branded experience where atproto is backend plumbing the
+user never sees. This ADR defines the signup flow and the
+spam-prevention strategy that sits in front of it.
+
+**Original Decision (pre-amendment).**
 
 Signup is **email + password + CAPTCHA**. Nothing else. No phone
 number, no "pick a PDS" step, no mention of Bluesky, atproto, DIDs,
@@ -1432,8 +1511,9 @@ Real design problems with candidate approaches live in
 `docs/architecture/open-problems/`. Each file has a `Must resolve by:`
 header stating the phase that forces the decision.
 
-- **`moderation.md`** — resolve by Phase 3, before our PDS opens
-  signup to anyone outside the team.
+- **`moderation.md`** — resolve by Phase 3, before signup opens to
+  anyone outside the team. (Even though auth now lives at the user's
+  PDS, content moderation is still our job at the AppView layer.)
 - **`view-counting.md`** — resolve by Phase 4 AppView cutover, or
   earlier if feed ranking uses view counts. Under the external
   monetization model (see `monetization.md`) this becomes the single
@@ -1450,6 +1530,10 @@ header stating the phase that forces the decision.
   Store Guideline 3.1.1 written position, and the tortok
   US-incorporation decision. Sub-problem A (payout-destination
   Lexicon) is unblocked and can ship in Phase 3 independently.
+- **`own-pds.md`** — parked. v1 leverages users' existing atproto
+  identities (typically `bsky.social`); no TorTok PDS is in scope.
+  Documents the costs we're avoiding, the risks we've taken on, and
+  the triggers that would force us to revisit and write a new ADR.
 
 ## Execution risks
 
