@@ -372,6 +372,21 @@ marking the phase complete.
   exists only to de-risk the engine-compat question; it has no purpose
   once the production integration lands. Don't carry it into Phase 3.
 
+Phase 2 delivered: WebTorrent integrated end-to-end across iOS sim,
+Android emulator, and Expo web. Hermes runs the JS WebTorrent client
+with `react-native-webrtc` for the WebRTC layer; on web the Service
+Worker bridge isn't built yet so the client extracts the `ws=`
+webseed URL from the magnet and plays directly over HTTP. Two-iOS-sim
+peer test on 2026-04-29 measured **89–91% P2P offload** with two
+peers (per-torrent log line `[webtorrent] offload: …` added in
+`tortok/lib/webtorrent/client.ts`). Spike route deleted. Real-device
+P2P validation (mobile data + NAT) was deferred — an execution risk
+to revisit when we have devices in hand. Client seeding policy
+(ADR-009 v1) was scoped out of Phase 2 by mutual agreement; the
+plan in `tortok/lib/webtorrent/seedPolicy.ts` and `useSeedPolicy.ts`
+will land post-Phase 3 once we know how PDS-driven session lifetimes
+interact with foreground-only seeding.
+
 **Phase 3 — Stand up our own PDS and wire the client to it.**
 - Fork `bluesky-social/atproto`'s reference PDS implementation. Strip
   Bluesky-specific lexicons; keep the core auth, blob, and repo

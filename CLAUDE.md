@@ -30,9 +30,10 @@ map — tell the user so we can fix it.
 
 ## Phases of development
 
-From ADR-006. Phases 0a, 0b, 1, and 5 are **complete** (Phase 5 was
-executed early since the project was never released — Swift codebase
-deleted 2026-04-14). We are entering **Phase 2**.
+From ADR-006. Phases 0a, 0b, 1, 2, and 5 are **complete** (Phase 5
+was executed early since the project was never released — Swift
+codebase deleted 2026-04-14). Phase 2 closed out 2026-04-29 with a
+two-sim P2P test measuring 89–91% offload. We are entering **Phase 3**.
 
 | Phase | Name | What it delivers | Blocks |
 |-------|------|------------------|--------|
