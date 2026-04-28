@@ -17,6 +17,12 @@ export type TorrentFile = {
   createReadStream: (opts?: { start?: number; end?: number }) => Readable;
 };
 
+export type Wire = {
+  type: string | null; // 'webSeed' for HTTP webseeds, null for P2P peers
+  downloaded: number;
+  remoteAddress?: string;
+};
+
 export type Torrent = {
   infoHash: string;
   magnetURI: string;
@@ -27,6 +33,7 @@ export type Torrent = {
   downloadSpeed: number;
   progress: number;
   pieces: Array<unknown | null>;
+  wires: Wire[];
   on: (event: string, cb: (arg?: unknown) => void) => void;
   removeListener: (event: string, cb: (arg?: unknown) => void) => void;
 };

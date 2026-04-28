@@ -173,6 +173,26 @@ async function doAdd(
       });
     }
 
+    // Log P2P offload ratio once download completes.
+    const logOffload = () => {
+      const wsBytes = torrent.wires
+        .filter((w) => w.type === 'webSeed')
+        .reduce((sum, w) => sum + w.downloaded, 0);
+      const p2pBytes = torrent.wires
+        .filter((w) => w.type !== 'webSeed')
+        .reduce((sum, w) => sum + w.downloaded, 0);
+      const total = wsBytes + p2pBytes;
+      const p2pPct = total > 0 ? Math.round((p2pBytes / total) * 100) : 0;
+      console.log(
+        `[webtorrent] offload: ${p2pPct}% P2P (${p2pBytes}B) / ${100 - p2pPct}% webseed (${wsBytes}B) | ${torrent.numPeers} peers`,
+      );
+    };
+    if (torrent.progress === 1) {
+      logOffload();
+    } else {
+      torrent.on('done', logOffload);
+    }
+
     const bridgeUrl = await registerTorrent(torrent);
 
     managed.set(magnetLink, {
