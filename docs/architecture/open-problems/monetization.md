@@ -440,14 +440,16 @@ Confirming the philosophy-decided part doesn't need any new infra:
   is untouched.
 - **No ad serving** → not needed, not built, not planned.
 
-## DMCA and copyright (shared with `moderation.md`)
+## DMCA and copyright (now resolved in ADR-013)
 
 Copyright hygiene is legally required regardless of monetization —
 DMCA safe harbor needs a repeat-infringer policy and a takedown
-pipeline. See `moderation.md`. Under external monetization, this is
-*not* gated by a monetization launch (we're not paying creators, so
-the "money flows → legal exposure escalates" argument is weaker),
-but it's still required for v1 when we open signup.
+pipeline. ADR-013 resolves this: registered DMCA agent, takedown
+endpoint, 3-strikes-in-12-months suspension policy. Under external
+monetization, this is *not* gated by a monetization launch (we're
+not paying creators, so the "money flows → legal exposure
+escalates" argument is weaker), but it's still required for v1
+when we open signup beyond the team.
 
 ## What a resolved version looks like
 

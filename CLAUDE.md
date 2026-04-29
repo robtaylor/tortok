@@ -16,10 +16,11 @@ Before doing any non-trivial work, read (in this order):
    decision is recorded here, it is the decision; do not re-litigate
    it without a reason.
 2. **`docs/architecture/open-problems/`** — Things we have
-   deliberately *not* decided yet. Four files (`moderation.md`,
-   `view-counting.md`, `seeding-policy.md`, `monetization.md`), each
-   with a `Must resolve by:` header stating which phase forces the
-   decision.
+   deliberately *not* decided yet. Three files (`view-counting.md`,
+   `seeding-policy.md`, `monetization.md`), each with a
+   `Must resolve by:` header stating which phase forces the
+   decision. (`moderation.md` was resolved 2026-04-29 by ADR-013;
+   `own-pds.md` is parked.)
 3. **Appendix A in `decisions.md`** — The Phase 0 punch list: bugs
    (B1–B6), security footguns (S1–S4), libtorrent cleanup, doc
    cleanup. This is the concrete work Phase 0a consumes.
@@ -41,7 +42,7 @@ two-sim P2P test measuring 89–91% offload. We are entering **Phase 3**.
 | **0b** | Extract seeder infra | Standalone seeder Docker image, Fly.io deploy (L2), own trackers (L3), R2 content origin (L1), self-hosting guide (L4) | seeding-policy.md (server side) |
 | **1** | Expo skeleton | Expo app logs in against existing backend, vertical feed with react-native-video, feature parity with Swift prototype minus P2P | — |
 | **2** | Cross-platform P2P | WebTorrent integrated in Expo client, tested on iOS / Android / web simulators, P2P offload measured, Hermes WebRTC validated | ~~seeding-policy.md (client side)~~ resolved in ADR-009; execution risks #1 and #3 |
-| **3** | atproto integration | atproto OAuth login against user's existing PDS (typically bsky.social), `app.tortok.video.post` Lexicon live, client publishes via `@atproto/api`, legacy email/password backend retired | moderation.md; own-pds.md (parked, not blocking) |
+| **3** | atproto integration | atproto OAuth login against user's existing PDS (typically bsky.social), `app.tortok.video.post` Lexicon live, client publishes via `@atproto/api`, legacy email/password backend retired | ~~moderation.md~~ resolved in ADR-013 (launch criteria gate signup-beyond-team); own-pds.md (parked, not blocking) |
 | **4** | AppView cutover | Own AppView subscribes to own PDS, indexes records, feed endpoint moves off legacy backend | view-counting.md (if ranking on views); open Q #4 |
 | **5** | Retire Swift | Swift codebase deleted (done early 2026-04-14) | — |
 
@@ -61,10 +62,10 @@ Most changes don't need a checkpoint. These do:
    items 1–6 plus the libtorrent delete, anything else?" is enough.
 2. **When an open problem in `open-problems/` becomes blocking.** If
    the work in front of you can't proceed without resolving
-   `moderation.md`, `view-counting.md`, `seeding-policy.md`, or
-   `monetization.md` — **stop and tell the user**. Do not pick a
-   policy silently. Offer the candidate options from the open-problem
-   file and let the user pick. The resolution becomes a new ADR.
+   `view-counting.md`, `seeding-policy.md`, or `monetization.md` —
+   **stop and tell the user**. Do not pick a policy silently. Offer
+   the candidate options from the open-problem file and let the user
+   pick. The resolution becomes a new ADR.
 3. **When you would contradict an existing ADR.** If a task seems to
    require undoing a decision (e.g., "just use libtorrent for this
    one thing"), stop. ADRs are reversible but only deliberately.
