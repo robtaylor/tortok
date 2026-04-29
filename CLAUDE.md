@@ -41,7 +41,7 @@ two-sim P2P test measuring 89–91% offload. We are entering **Phase 3**.
 | **0b** | Extract seeder infra | Standalone seeder Docker image, Fly.io deploy (L2), own trackers (L3), R2 content origin (L1), self-hosting guide (L4) | seeding-policy.md (server side) |
 | **1** | Expo skeleton | Expo app logs in against existing backend, vertical feed with react-native-video, feature parity with Swift prototype minus P2P | — |
 | **2** | Cross-platform P2P | WebTorrent integrated in Expo client, tested on iOS / Android / web simulators, P2P offload measured, Hermes WebRTC validated | ~~seeding-policy.md (client side)~~ resolved in ADR-009; execution risks #1 and #3 |
-| **3** | atproto integration | atproto OAuth login against user's existing PDS (typically bsky.social), `tortok.video.post` Lexicon live, client publishes via `@atproto/api`, legacy email/password backend retired | moderation.md; own-pds.md (parked, not blocking) |
+| **3** | atproto integration | atproto OAuth login against user's existing PDS (typically bsky.social), `app.tortok.video.post` Lexicon live, client publishes via `@atproto/api`, legacy email/password backend retired | moderation.md; own-pds.md (parked, not blocking) |
 | **4** | AppView cutover | Own AppView subscribes to own PDS, indexes records, feed endpoint moves off legacy backend | view-counting.md (if ranking on views); open Q #4 |
 | **5** | Retire Swift | Swift codebase deleted (done early 2026-04-14) | — |
 

@@ -230,7 +230,7 @@ discussion contributed Sub-problem C (the first-party PWYW
 "support open content" pool with fan-allocated distribution).
 
 What this track needs to deliver before Phase B graduates:
-- Sub-problem A shipped: `tortok.payout.destination` lexicon for
+- Sub-problem A shipped: `app.tortok.payout.destination` lexicon for
   external-link payout surfaces (Patreon, Substack, etc.) on
   creator profiles
 - Sub-problem C designed: the first-party pool ADR landed,

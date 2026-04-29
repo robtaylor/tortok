@@ -1,0 +1,77 @@
+{
+  "lexicon": 1,
+  "id": "app.tortok.video.post",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A TorTok short-form video post. Bytes are addressed by a magnet URI; the record carries metadata and a thumbnail blob hosted on the author's PDS.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["magnetUri", "infoHash", "durationMs", "createdAt"],
+        "properties": {
+          "magnetUri": {
+            "type": "string",
+            "description": "BitTorrent magnet URI. Includes the info hash (xt=urn:btih:...), display name, tracker list, and one or more BEP-19 webseed URLs.",
+            "format": "uri",
+            "maxLength": 8192
+          },
+          "infoHash": {
+            "type": "string",
+            "description": "SHA-1 info hash, lowercase hex. Redundant with the magnet URI but useful as an indexable column.",
+            "minLength": 40,
+            "maxLength": 40
+          },
+          "durationMs": {
+            "type": "integer",
+            "description": "Video duration in milliseconds.",
+            "minimum": 1,
+            "maximum": 600000
+          },
+          "aspectRatio": {
+            "type": "object",
+            "description": "Display dimensions of the video. Shape matches app.bsky.embed.defs#aspectRatio so ADR-010's inbound Bluesky-video bridge does not have to translate shapes.",
+            "required": ["width", "height"],
+            "properties": {
+              "width": { "type": "integer", "minimum": 1 },
+              "height": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "caption": {
+            "type": "string",
+            "description": "Author-supplied caption.",
+            "maxGraphemes": 300,
+            "maxLength": 1200
+          },
+          "thumbnailBlob": {
+            "type": "blob",
+            "description": "Poster image. Stored as a blob in the author's PDS.",
+            "accept": ["image/jpeg", "image/png", "image/webp"],
+            "maxSize": 1000000
+          },
+          "hashtags": {
+            "type": "array",
+            "description": "Author-tagged hashtags, each beginning with '#'.",
+            "maxLength": 20,
+            "items": {
+              "type": "string",
+              "maxGraphemes": 64,
+              "maxLength": 256
+            }
+          },
+          "hlsFallbackUrl": {
+            "type": "string",
+            "description": "HLS playlist URL on the L1 origin. Used as a fallback when WebTorrent cannot bootstrap a swarm.",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Client-stamped creation time.",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

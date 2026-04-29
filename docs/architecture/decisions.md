@@ -66,23 +66,27 @@ host JavaScript runtime directly — no `WKWebView` bridge, no
 
 ## ADR-002: Federation protocol is AT Protocol
 
-**Status:** Accepted
+**Status:** Accepted. Amended 2026-04-29 — NSID is `app.tortok.video.post`
+(reverse-DNS rooted at `tortok.app`); see ADR-012. The example record
+shape below has been updated to match the formal Lexicon definition in
+`lexicons/app/tortok/video/post.json` (notably `aspectRatio` is now
+`{width: int, height: int}` to match `app.bsky.embed.defs#aspectRatio`).
 
 **Context.** Publishing is the central design question. We need federation,
 identity, and attestation. Options surveyed: ActivityPub (the PeerTube /
 Loops lineage), AT Protocol (Bluesky), Nostr, and rolling our own.
 
 **Decision.** Adopt AT Protocol. Define a custom Lexicon,
-`tortok.video.post`, with this shape:
+`app.tortok.video.post`, with this shape:
 
 ```json
 {
-  "$type": "tortok.video.post",
+  "$type": "app.tortok.video.post",
   "magnetUri": "magnet:?xt=urn:btih:...",
   "infoHash": "hex",
   "durationMs": 15230,
-  "aspectRatio": "9:16",
-  "caption": "string (max 300 chars)",
+  "aspectRatio": { "width": 1080, "height": 1920 },
+  "caption": "string (max 300 graphemes)",
   "thumbnailBlob": { "$type": "blob", "ref": "...", "mimeType": "image/jpeg" },
   "hashtags": ["#tortok", "#demo"],
   "hlsFallbackUrl": "https://webseed.tortok.example/video/abc.m3u8",
@@ -140,7 +144,7 @@ assumes keys can rotate.
   any atproto-compatible PDS works.
 - The user's home PDS holds their rotation key, password, recovery
   flow, and blob storage. We hold none of those.
-- We still build our own AppView and our own `tortok.video.post`
+- We still build our own AppView and our own `app.tortok.video.post`
   Lexicon (see ADR-002, ADR-005). Records live in the user's PDS
   repo; we index them in our AppView.
 - **`did:web` opt-in for sovereigns.** Power users who own a domain
@@ -259,7 +263,7 @@ token, and like-counter bugs need fixing regardless.
 **Decision.** Keep Node/TypeScript. Evolve the backend in two directions:
 
 1. **AppView.** Subscribe to the AT Protocol firehose (via a relay),
-   filter for `tortok.video.post` records, index them in Postgres, and
+   filter for `app.tortok.video.post` records, index them in Postgres, and
    serve feed endpoints to the client. Use `@atproto/api` and
    `@atproto/sync` for the heavy lifting.
 2. **Seeder worker.** Move the WebTorrent seeder out of the Cloud Run
@@ -419,10 +423,10 @@ Scope changed 2026-04-29: the original Phase 3 forked our own PDS and
 ran a custodial signup. That has been reversed (see amendments to
 ADR-003 and ADR-007). Phase 3 now leverages users' existing atproto
 identities and ships materially smaller.
-- Define and publish the `tortok.video.post` Lexicon (ADR-002).
+- Define and publish the `app.tortok.video.post` Lexicon (ADR-002).
 - Add `@atproto/api` to the client. Login becomes atproto OAuth against
   the user's PDS (typically `bsky.social`).
-- Publish video as a signed `tortok.video.post` record into the user's
+- Publish video as a signed `app.tortok.video.post` record into the user's
   PDS repo: upload thumbnail as a blob via the user's PDS, then create
   the record. Magnet is generated client-side as it is today.
 - Retire the legacy email/password backend and the legacy video-post
@@ -439,7 +443,7 @@ identities and ships materially smaller.
 
 **Phase 4 — AppView cutover.**
 - Stand up the AppView as a separate service. It subscribes to our
-  own PDS's repo event stream, filters for `tortok.video.post` records,
+  own PDS's repo event stream, filters for `app.tortok.video.post` records,
   indexes them in Postgres, and serves feed endpoints.
 - Client feed endpoint switches from the legacy feed API to the
   AppView. The legacy feed endpoint is retired.
@@ -504,7 +508,7 @@ way. We do not run an auth endpoint of our own; we do not store
 passwords; we do not generate `did:plc` identities; we do not hold
 rotation keys.
 
-We still publish a `tortok.video.post` Lexicon (ADR-002), still run our
+We still publish a `app.tortok.video.post` Lexicon (ADR-002), still run our
 own AppView (ADR-005), and still write video records signed by the
 user's repo key into the user's PDS via `@atproto/api`.
 
@@ -1128,7 +1132,7 @@ by design.
 
 The current ADR-006 phase plan defers all federation work to Phase 3
 (PDS standoff). That ordering is correct for the *outbound* direction
-— publishing signed `tortok.video.post` records requires our own PDS.
+— publishing signed `app.tortok.video.post` records requires our own PDS.
 But the *inbound* direction — consuming and rendering existing
 Bluesky video posts in the tortok feed — needs none of that
 infrastructure. It can run as a read-only firehose subscriber,
@@ -1147,7 +1151,7 @@ cold-start solution for the open beta launch.
    alongside the existing video schema.
 
 2. **Render bridged posts in the tortok vertical feed alongside
-   native `tortok.video.post` content.** Bridged posts are
+   native `app.tortok.video.post` content.** Bridged posts are
    first-class feed items, not segregated into a separate "explore
    Bluesky" tab. The federation pitch — "same network, different
    lens" — only works if the experience is genuinely unified.
@@ -1222,7 +1226,7 @@ cold-start solution for the open beta launch.
   trust failure that lights up Bluesky within hours. Opt-out
   correctness is a launch criterion, not a polish item.
 - ADR-006's Phase 3 ordering is unaffected for *outbound* federation
-  (publishing signed `tortok.video.post` records still requires the
+  (publishing signed `app.tortok.video.post` records still requires the
   PDS). Inbound is decoupled from that timeline. ADR-005's AppView
   effectively starts here in pull-only mode — Phase 3/4 work then
   extends it to subscribe to our own PDS as well.
@@ -1277,7 +1281,9 @@ cold-start solution for the open beta launch.
 
 ## ADR-011: Monetization architecture — interface-first payout, first-party pool committed, V1 rail gated on Apple + US-incorporation prerequisites
 
-**Status:** Accepted — 2026-04-17
+**Status:** Accepted — 2026-04-17. Amended 2026-04-29 — NSIDs are
+`app.tortok.payout.destination` and `app.tortok.payout.pool` (reverse-
+DNS rooted at `tortok.app`); see ADR-012.
 
 **Context.** The release-plan discussion forced the monetization
 question earlier than expected. The public wedge settled as "your
@@ -1325,7 +1331,7 @@ fully knowable yet?
 **Decision.**
 
 1. **Architect payout behind an interface, not a rail.** The stable
-   primitive is Sub-problem A's `tortok.payout.destination` Lexicon
+   primitive is Sub-problem A's `app.tortok.payout.destination` Lexicon
    (creator-owned, multiple destination kinds: Patreon URL, LN
    address, Base wallet, Stripe Connect link, generic URL). Which
    backend routes money for a given pool is a per-pool
@@ -1390,7 +1396,7 @@ fully knowable yet?
    V1.** Neither researched rail supports it cleanly — Stripe
    Connect per pool requires platform-level onboarding per pool;
    fiscal hosts require per-project approval. The general
-   `tortok.payout.pool` Lexicon ships when there is a rail that
+   `app.tortok.payout.pool` Lexicon ships when there is a rail that
    supports per-pool instantiation without heavy platform friction.
    For V1, the first-party pool is the only first-party-surfaced
    pool; third parties can still self-host pools and publish the
@@ -1411,7 +1417,7 @@ fully knowable yet?
     same pool infrastructure with a different distribution formula
     (1:1 to the tipped creator).
 
-11. **Sequencing.** Sub-problem A (the `tortok.payout.destination`
+11. **Sequencing.** Sub-problem A (the `app.tortok.payout.destination`
     Lexicon) ships first and is not rail-dependent — creators can
     publish Patreon / Substack / LN / URL destinations on day one
     of Phase 3. The first-party pool ships after both prerequisites
@@ -1424,7 +1430,7 @@ fully knowable yet?
   to "TorTok does not profit from custody of creator money." This
   is a softening; record it clearly so it is not silently drifted.
 - Monetization is unblocked as a product decision without being
-  locked to a rail. The `tortok.payout.destination` Lexicon can
+  locked to a rail. The `app.tortok.payout.destination` Lexicon can
   land in Phase 3 alongside the PDS work with no rail commitment.
 - The release-plan Phase C ("App Store/Play 1.0 promotion, triggered
   by readiness or catalyst") acquires a hard dependency on
@@ -1490,7 +1496,7 @@ fully knowable yet?
 
 **Implementation notes.**
 
-- `tortok.payout.destination` Lexicon design work: Phase 3,
+- `app.tortok.payout.destination` Lexicon design work: Phase 3,
   independent of rail decision.
 - First-party pool UX design: Phase B of `docs/release-plan.md` or
   later, gated on P1 + P2 + rail commitment.
@@ -1502,6 +1508,114 @@ fully knowable yet?
 - Apple engagement (P1): written position via App Store Review /
   DR channel, not forum posts or precedent-hunting. This is the
   only kind of answer that holds under review.
+
+---
+
+## ADR-012: Lexicon namespace governance
+
+**Status:** Accepted — 2026-04-29
+
+**Context.** ADR-002 commits us to AT Protocol and references a
+video-post Lexicon. ADR-011 references `payout.destination` and
+`payout.pool` Lexicons. Phase 3 is the first phase that actually
+publishes records under our namespace, which forces a small cluster of
+decisions:
+
+1. Where do our schema files live, and how are they versioned?
+2. What's our NSID? atproto's NSID convention is reverse-DNS-based and
+   the first segment is the TLD of an authority domain. Earlier ADR
+   drafts wrote `tortok.video.post` as a shorthand, which doesn't
+   conform.
+3. How do we relate to schemas owned by Bluesky (`app.bsky.*`)?
+4. What happens if a formal Lexicon registry / governance process
+   emerges later?
+
+This ADR is deliberately small — we are not deciding the registry or
+the migration mechanism here. We are committing to a namespace, a
+layout, and a stance on reuse.
+
+**Decision.**
+
+1. **Namespace.** TorTok's canonical domain is `tortok.app`, so NSIDs
+   follow the strict reverse-DNS form rooted there. Records currently
+   in scope: `app.tortok.video.post`, `app.tortok.payout.destination`
+   (ADR-011 Sub-problem A, ships in Phase 3 alongside this work),
+   `app.tortok.payout.pool` (ADR-011 Sub-problem B, deferred to V2).
+   Future schemas extend `app.tortok.*` along domain segments
+   (`app.tortok.video.*`, `app.tortok.payout.*`, etc.). This matches
+   the convention used by `app.bsky.*`, `chat.bsky.*`, `com.atproto.*`,
+   etc.
+
+2. **Repo layout.** Schemas live in
+   `lexicons/<segment>/<segment>/<segment>/<segment>.json`, mirroring
+   the NSID. `app.tortok.video.post` is
+   `lexicons/app/tortok/video/post.json` — the same convention used by
+   `bluesky-social/atproto` for `app.bsky.*`. The repo is the source
+   of truth; CI may publish them to a static URL later, but resolution
+   at runtime does not depend on a hosted endpoint (atproto Lexicons
+   are validated by code that already knows the schema).
+
+3. **Reuse Bluesky lexicons for the social graph.** When follows and
+   likes ship in a later phase, use `app.bsky.graph.follow` and
+   `app.bsky.feed.like` (the latter's generic `strongRef` subject
+   points at `app.tortok.video.post` records natively). We do not
+   define `app.tortok.graph.*`. Confirmed in the 2026-04-29 Phase 3
+   going-in answers.
+
+4. **Reuse Bluesky shapes inside our records where they exist.**
+   `app.tortok.video.post` uses the Bluesky-shaped `aspectRatio`
+   (`{width: int, height: int}`, matching
+   `app.bsky.embed.defs#aspectRatio`) so that ADR-010's inbound bridge
+   does not have to translate between shapes. Reuse is a per-field
+   decision, not a blanket rule — we still own the schema; we copy
+   shape only where interop matters.
+
+5. **Versioning.** No version segment in the NSID. Schema-incompatible
+   changes mint a new NSID (e.g., `app.tortok.video.postV2`).
+   Schema-compatible additions go on the existing schema. Matches the
+   atproto convention.
+
+6. **Governance posture.** No formal cross-app Lexicon registry exists
+   yet. We follow whatever process atproto formalizes if and when one
+   lands. Until then, we treat the repo and this ADR as the canonical
+   source of `app.tortok.*` definitions.
+
+**Consequences.**
+
+- ADR-002's coupling caveat (Lexicon namespace governance is unsettled)
+  is now explicit, recorded, and bounded. We mitigated it by running
+  our own AppView; this ADR pins the rest.
+- Reuse of `app.bsky.*` for the social graph and selective shape
+  reuse for embed metadata is intentional cross-pollination, not
+  accident. We benefit from Bluesky's existing graph; we accept that
+  Bluesky owns those schemas and could change them. Lexicon stability
+  is a stated Bluesky value, so the practical risk is small.
+- We do not host a Lexicon resolution endpoint in v1. If atproto
+  tooling ever requires one, we add static publishing to CI and the
+  natural home is `https://tortok.app/.well-known/...`.
+- A future canonical-domain switch (e.g., to `tortok.org`) is
+  mechanical but not free: rename schema files, bump records to the
+  new `$type` at write time, deprecation window in the AppView. Worth
+  flagging during Phase 3 implementation so engineers do not bake the
+  namespace into too many places.
+
+**Alternatives ruled out.**
+
+- **Use `app.bsky.feed.post` for video records.** ADR-002 ruled this
+  out: we want our own schema for the magnet URI, info hash, and HLS
+  fallback. Bluesky's video embed is a different shape with different
+  goals.
+- **Wait for an atproto Lexicon registry before declaring our
+  namespace.** No registry is on the roadmap. Waiting is indefinite.
+- **Use a non-reverse-DNS NSID like `tortok.video.post`.** Tempting
+  shorthand and what ADR-002 originally drafted, but it conflicts
+  with the atproto NSID spec (first segment is the TLD of the
+  authority domain). Rejected — `tortok.app` is locked in, no reason
+  to ship a non-conforming NSID.
+- **Define `app.tortok.graph.*` for follows/likes.** Would fragment
+  the social graph (TorTok follows would not be visible to Bluesky
+  AppViews and vice versa). Going-in answer #2 from the Phase 3 plan
+  rejected this in favour of reuse.
 
 ---
 
@@ -1566,35 +1680,42 @@ These will become ADRs at a specific phase boundary. Listed here so
 they don't get forgotten; each gets a real ADR when the phase that
 forces it arrives.
 
-- **Lexicon namespace governance.** Declare `tortok.*` publicly in
-  our repo and document our schema; follow any formal atproto
-  governance that lands later. Before Phase 3.
-- **AppView + PDS running cost estimate.** Indexing, repo event
-  subscription, feed generation, and PDS blob storage all cost real
-  money on top of the ADR-008 envelope. Back-of-envelope before
-  Phase 3; detailed before Phase 4.
+- **AppView running cost estimate (back-of-envelope, 2026-04-29).**
+  Indexing and feed generation add a small fixed cost on top of the
+  ADR-008 envelope. v1 uses users' existing PDSes (no TorTok PDS) so
+  PDS storage and blob egress are zero to us. The ingest path is
+  `bsky.social` polling for `app.tortok.video.post` records (one
+  persistent worker, ~30s cadence, sub-MB requests). Postgres index
+  growth is negligible — ~1KB per record means 10% of a 100k-DAU
+  userbase posting daily adds ~300MB/month.
+
+  | Scale | ADR-008 envelope | AppView add-on | Total |
+  |-------|------------------|----------------|-------|
+  | 1k DAU | ~$31/mo | ~$10/mo (1 ingest worker) | ~$41/mo |
+  | 10k DAU | ~$80/mo | ~$20/mo (worker scaling, more polling) | ~$100/mo |
+  | 100k DAU | ~$465/mo | ~$50/mo (multiple workers, larger postgres) | ~$515/mo |
+
+  Caveats: assumes `bsky.social` does not rate-limit our polling
+  (escalates to relay subscription in Phase 4 if it does); assumes
+  ~10% of DAU posts daily, which is a guess and may be off by 2–3× in
+  either direction. Detailed estimate is Phase 4 when we measure real
+  ingest rates.
 - **AppView firehose scale / subscription filtering.** A naive
   subscriber to the full Bluesky firehose drowns. Subscribe only to a
   TorTok-specific relay (nobody is running one yet) or filter
   aggressively at ingest. Phase 4.
-- **PDS fork scope.** How much of `bluesky-social/atproto`'s reference
-  PDS do we keep? The `app.bsky.*` lexicons aren't relevant but
-  ripping them out may be more work than leaving them as unused
-  endpoints. Err on "leave it alone unless it's hurting anything."
-  Phase 3 during the fork.
-- **Custodial rotation key storage.** Google Secret Manager, AWS KMS,
-  HashiCorp Vault, or a dedicated Postgres table with column-level
-  encryption? Most sensitive material in the stack. Phase 3 before
-  the PDS handles its first real user.
-- **Self-custody upgrade path.** UX flow for a user moving from
-  custodial to user-held rotation keys without breaking their account.
-  The atproto mechanism supports it; the flow (generate on device,
-  prove possession, server hands over authority, update PLC op) needs
-  designing. Not blocking v1; worth prototyping before we promise it.
-- **Existing user migration.** If Phase 1 ships before Phase 3, users
-  who sign up during that window exist only in the legacy backend.
-  Phase 3 has to mint DIDs for them and rewire their accounts.
-  One-shot backfill, not ongoing dual-write. Design during Phase 3.
+- **`did:web` migration UX.** Power users who own a domain may want
+  to move from a `bsky.social`-managed `did:plc` to a self-controlled
+  `did:web` (per ADR-003 amendment). The atproto mechanism supports
+  it; the in-app flow (DNS verification, PLC op, account migration)
+  needs designing. Not blocking v1; worth prototyping before we
+  promise it.
+- **Legacy account migration.** Phase 1 shipped against the legacy
+  email/password backend, so a small number of test/team accounts
+  exist in the `users` table. Phase 3 retires that table; affected
+  accounts re-onboard via atproto OAuth. One-shot, communicated to
+  the affected users out of band. Coordinated with Unit 5 of the
+  Phase 3 plan.
 - **R2 reliability and backup strategy.** Weekly backup to Backblaze
   B2 (~$5/month) once the catalog warrants it. Not urgent at launch;
   revisit after Phase 4.

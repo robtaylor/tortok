@@ -15,7 +15,7 @@ amended 2026-04-29), ADR-005 (backend evolves to AppView), ADR-006
 
 TorTok's v1 architecture leverages whichever PDS the user is already on
 — for the overwhelming majority that is `bsky.social`. We define our
-own Lexicon (`tortok.video.post`), run our own AppView, and write
+own Lexicon (`app.tortok.video.post`), run our own AppView, and write
 records into the user's existing repo via `@atproto/api`. We do not
 fork the reference PDS, we do not run signup ourselves, and we do not
 hold rotation keys.
@@ -41,7 +41,7 @@ would the cost of running our own PDS become worth it again?**
 ## Risks we have taken on by punting
 
 - **Lexicon-restriction risk.** `bsky.social` could in principle
-  rate-limit, refuse, or filter `tortok.video.post` records. The
+  rate-limit, refuse, or filter `app.tortok.video.post` records. The
   atproto spec says PDSes accept arbitrary lexicons; Bluesky has not
   signalled any change. But we don't control that lever.
 - **Blob-size risk.** `bsky.social` has limits on blob size (currently
@@ -65,7 +65,7 @@ Any of these would make the trade flip:
 
 1. **Bluesky restricts third-party lexicons.** Public policy change,
    rate limits applied to non-`app.bsky.*` records, blob-size cuts,
-   or refusal to serve `tortok.video.post` records.
+   or refusal to serve `app.tortok.video.post` records.
 2. **Onboarding-funnel data shows real friction.** Conversion from
    "tap signup" to "first video posted" lags below product
    expectations and user research traces it to the Bluesky-account

@@ -82,7 +82,7 @@ Sketch:
 
 ```json
 {
-  "$type": "tortok.payout.destination",
+  "$type": "app.tortok.payout.destination",
   "kind": "patreon" | "substack" | "lightning" | "url" | ...,
   "value": "https://patreon.com/alice" | "alice@getalby.com" | ...,
   "label": "Support on Patreon",
@@ -135,7 +135,7 @@ Sketch lexicons:
 ```json
 // Published by the pool operator's DID
 {
-  "$type": "tortok.payout.pool",
+  "$type": "app.tortok.payout.pool",
   "name": "The Cozy Streamer Collective",
   "formula": "engagement_weighted" | "equal_split" | "view_share",
   "payoutCadence": "weekly" | "monthly",
@@ -146,7 +146,7 @@ Sketch lexicons:
 
 // Published by the creator's DID
 {
-  "$type": "tortok.payout.poolAcceptance",
+  "$type": "app.app.tortok.payout.poolAcceptance",
   "pool": "did:plc:poolOperator",
   "acceptedTermsHash": "sha256:...",
   "acceptedAt": "..."
@@ -172,7 +172,7 @@ engagement signals the pool formula reads from.
    discovery entirely to third-party clients? Surfacing pools in the
    first-party client means we implicitly endorse them, which has
    moderation implications.
-3. **Formula transparency.** Does the `tortok.payout.pool` record
+3. **Formula transparency.** Does the `app.tortok.payout.pool` record
    include enough detail that a contributor can verify the
    distribution was fair? (Probably yes, via a published
    `stateEndpoint`, but the exact format is open.)
@@ -357,7 +357,7 @@ ADR-011 in `decisions.md` is the authoritative record of the
 decision. The summary below reflects what ADR-011 commits to.
 
 1. The *interface* is the stable primitive. Sub-problem A's
-   `tortok.payout.destination` Lexicon is the contract; which backend
+   `app.tortok.payout.destination` Lexicon is the contract; which backend
    routes money per pool is an implementation detail. Ship the
    Lexicon even before any pool mechanism goes live — it unblocks
    external-destination linking (Patreon, LN address, URL) on day
@@ -383,7 +383,7 @@ decision. The summary below reflects what ADR-011 commits to.
    deprioritized due to automation and platform-risk blockers.
 6. "Click to create your own pool" (Sub-problem B) is **V2, not V1**.
    Neither researched rail supports it cleanly. The general
-   `tortok.payout.pool` primitive ships when there is a rail that
+   `app.tortok.payout.pool` primitive ships when there is a rail that
    supports per-pool instantiation without platform-level onboarding
    for each new pool.
 
@@ -409,7 +409,7 @@ decision. The summary below reflects what ADR-011 commits to.
 3. TorTok's cut: 0%, fixed-fee infrastructure cost, or opt-in
    "tip the platform" pattern?
 4. Fan UX for picking creators — does it surface the creator's
-   `tortok.payout.destination` records (Sub-problem A), or use a
+   `app.tortok.payout.destination` records (Sub-problem A), or use a
    tortok-specific "in-pool" creator opt-in record?
 5. Relationship to Sub-problem B's third-party pools — does the
    first-party pool count as one instance of the general pool
@@ -454,7 +454,7 @@ but it's still required for v1 when we open signup.
 A resolved `monetization.md` splits into three (updated 2026-04-17):
 
 1. **An ADR (or a small set of profile-record additions)** that
-   ships the `tortok.payout.destination` lexicon and the baseline
+   ships the `app.tortok.payout.destination` lexicon and the baseline
    external-link surfacing (Sub-problem A). This unblocks creators
    monetizing off-platform on day one.
 2. **A first-party-pool ADR** that picks an operating mechanism for
@@ -463,7 +463,7 @@ A resolved `monetization.md` splits into three (updated 2026-04-17):
    "TorTok does not operate the pool" principle. Likely the next
    monetization ADR after the inbound-federation work in ADR-010.
 3. **A third-party-pool ADR** (possibly much later) that ships the
-   `tortok.payout.pool` + `poolAcceptance` lexicons, the pool
+   `app.tortok.payout.pool` + `poolAcceptance` lexicons, the pool
    discovery UX, and the abuse/trust story (Sub-problem B). This
    one is optional — we can ship TorTok without it and add it when
    there's demand.
