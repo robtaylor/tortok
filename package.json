@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "scripts": {
+    "smoke:atproto": "node scripts/atproto-smoke-test.mjs"
+  },
+  "dependencies": {
+    "@atproto/api": "^0.13.0",
+    "dotenv": "^16.4.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.83.0"
+  }
+}
