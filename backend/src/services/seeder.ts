@@ -25,9 +25,13 @@ class SeederService {
   constructor() {
     this.contentDir = path.join(__dirname, '../../content');
     // R2 public bucket URL — webseed (BEP-19) lets WebTorrent fetch pieces
-    // from this HTTP origin when no P2P peers are available.
+    // from this HTTP origin when no P2P peers are available. In dev we
+    // point at the local test-content seeder on :8090; in prod we use
+    // the public R2 bucket. Override with CONTENT_ORIGIN_URL.
     this.contentOrigin = process.env.CONTENT_ORIGIN_URL
-      ?? 'https://pub-96c2a0ac73ac40359616969672d5f67f.r2.dev';
+      ?? (process.env.NODE_ENV !== 'production'
+        ? 'http://localhost:8090'
+        : 'https://pub-96c2a0ac73ac40359616969672d5f67f.r2.dev');
   }
 
   async initialize(): Promise<void> {

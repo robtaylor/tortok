@@ -2,8 +2,21 @@ import { Pool, PoolClient } from 'pg';
 import fs from 'fs';
 import path from 'path';
 
-// Cloud SQL via Unix socket (Cloud Run) doesn't use SSL
-const databaseUrl = process.env.DATABASE_URL || '';
+// Cloud SQL via Unix socket (Cloud Run) doesn't use SSL.
+// Dev default matches scripts/dev-up.sh + test-content/seed-db.mjs;
+// prod must set DATABASE_URL explicitly (we'd rather fail fast than
+// silently connect to nothing).
+const databaseUrl = process.env.DATABASE_URL ??
+  (process.env.NODE_ENV !== 'production'
+    ? 'postgresql://localhost:5432/tortok'
+    : '');
+if (!databaseUrl) {
+  throw new Error(
+    'DATABASE_URL is not set. In production this is required; in development ' +
+      'the default is postgresql://localhost:5432/tortok (set NODE_ENV=development ' +
+      'or set DATABASE_URL explicitly).'
+  );
+}
 const isUnixSocket = databaseUrl.includes('host=/cloudsql');
 
 const pool = new Pool({

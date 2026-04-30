@@ -10,6 +10,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="/tmp/tortok-dev"
 mkdir -p "$LOG_DIR"
 
+# Ensure dev secrets exist (idempotent — only generates missing ones).
+"$REPO_ROOT/scripts/init-dev-secrets.sh"
+
 is_listening() {
   lsof -nP -iTCP:"$1" -sTCP:LISTEN -t >/dev/null 2>&1
 }

@@ -1,15 +1,32 @@
-// Fail loudly in dev when EXPO_PUBLIC_API_URL is unset — silent fallback to
-// the prod URL during local work causes "why does this mutate prod?" debugging
-// sessions. Prod builds keep the fallback because the env var is baked at
-// build time and we don't want a missing var to brick the app.
+import Constants from 'expo-constants';
+
+// Resolution order:
+//   1. Explicit EXPO_PUBLIC_API_URL — wins always (CI, staging, custom
+//      LAN backend).
+//   2. In dev, derive from the host Metro is reachable on. Constants.
+//      expoConfig.hostUri tells us where Metro is — that's the dev
+//      machine from the perspective of an iOS sim, Android emu, or
+//      physical device on the LAN. Drop the Metro port (8081), use the
+//      backend port (8080).
+//   3. Last-resort dev fallback: localhost.
+//   4. Prod: the deployed API. Env var is baked at build time; we
+//      don't want a missing var to brick the app.
+//
+// We do NOT silently fall back to the prod URL in dev — that pattern
+// caused "why does this mutate prod?" debugging sessions previously.
 function getApiUrl(): string {
   const env = process.env.EXPO_PUBLIC_API_URL;
   if (env) return env;
+
   if (__DEV__) {
-    throw new Error(
-      'EXPO_PUBLIC_API_URL is not set. Add it to .env or your shell before starting Expo.',
-    );
+    const hostUri = Constants.expoConfig?.hostUri;
+    if (hostUri) {
+      const host = hostUri.split(':')[0];
+      return `http://${host}:8080`;
+    }
+    return 'http://localhost:8080';
   }
+
   return 'https://tortok-api.fly.dev';
 }
 
