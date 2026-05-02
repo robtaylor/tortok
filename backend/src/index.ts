@@ -11,6 +11,7 @@ import videoRoutes from './routes/videos';
 import { seeder } from './services/seeder';
 import { bskyFirehose } from './services/bskyFirehose';
 import { bskyEngagementPoller } from './services/bskyEngagementPoller';
+import { bskyMirror } from './services/bskyMirror';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -155,6 +156,19 @@ async function start() {
       console.warn('⚠️ Failed to start Bluesky engagement poller:', err);
     }
 
+    // Phase 3 Unit 2.5 — start the mirror pipeline (slice 3).
+    // Mirror loop copies HLS bytes from Bluesky's CDN into R2 +
+    // generates a .torrent for any `mirrored AND r2_path IS NULL`
+    // row, so client playback uses ADR-008's pipeline (R2 = origin,
+    // our trackers = discovery, webseed via R2). Decay loop expires
+    // unwatched mirrors after BSKY_DECAY_DAYS. Non-fatal on failure.
+    try {
+      bskyMirror.start();
+      console.log('🪞 Bluesky mirror pipeline started');
+    } catch (err) {
+      console.warn('⚠️ Failed to start Bluesky mirror pipeline:', err);
+    }
+
     // Start listening
     app.listen(PORT, () => {
       console.log('');
@@ -175,6 +189,7 @@ async function start() {
 // Handle graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('Received SIGTERM, shutting down...');
+  bskyMirror.stop();
   bskyEngagementPoller.stop();
   bskyFirehose.stop();
   await seeder.destroy();
@@ -183,6 +198,7 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   console.log('Received SIGINT, shutting down...');
+  bskyMirror.stop();
   bskyEngagementPoller.stop();
   bskyFirehose.stop();
   await seeder.destroy();
