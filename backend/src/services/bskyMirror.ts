@@ -440,10 +440,27 @@ export class BskyMirrorService {
     try {
       // Write the playlist file with the same basename as the source
       // (`playlist.m3u8`) so its relative segment paths resolve from
-      // disk for ffmpeg's input. Don't rewrite the playlist text.
+      // disk for ffmpeg's input. Strip query strings from non-comment
+      // lines: Bluesky's playlist references segments as
+      // `video0.ts?session_id=...&dur=...`, but on disk we save them
+      // as plain `video0.ts` (per basenameFromUrl). ffmpeg's HLS
+      // demuxer also enforces an `allowed_segment_extensions` check
+      // against the full URI tail — the query-string suffix fails it
+      // ("not in allowed_segment_extensions, consider updating
+      // hls.c"). Stripping `?<query>` from each segment line leaves
+      // the playlist pointing at the clean basenames that exist on
+      // disk and pass ffmpeg's extension allowlist.
       const playlistBasename = basenameFromUrl(playlistUrl);
       const playlistPath = path.join(tmpDir, playlistBasename);
-      await fsp.writeFile(playlistPath, playlistText);
+      const cleanedPlaylist = playlistText
+        .split('\n')
+        .map((line) => {
+          if (line.startsWith('#') || line.trim() === '') return line;
+          const q = line.indexOf('?');
+          return q >= 0 ? line.slice(0, q) : line;
+        })
+        .join('\n');
+      await fsp.writeFile(playlistPath, cleanedPlaylist);
 
       // 3. Stream each segment to disk in parallel. Segments are
       //    NOT uploaded to R2 directly anymore — only the resulting
