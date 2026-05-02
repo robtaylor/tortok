@@ -102,6 +102,12 @@ Substack/long-form essay, seed creators amplifying.
 - Crash and error reporting wired (so we can iterate fast in
   Phase B)
 - Phase 2 P2P client work either complete or feature-flag-gated off
+- First-time atproto OAuth flow has an automated e2e gate in CI.
+  Phase 3 Unit 2 currently relies on a manual sim run against the
+  live `tortok-dev.bsky.social` account, which is rate-limited
+  10 logins/day and brittle to bsky.social UI changes — fine for
+  dev, not fine as a release gate. Long-term target: Phase 4
+  AppView serves as the test PDS so we control its uptime + UX.
 
 ---
 
