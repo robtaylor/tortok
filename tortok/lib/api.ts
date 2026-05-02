@@ -121,6 +121,14 @@ export function register(data: {
 
 // --- Feed ---
 
+// `source` discriminates native (`'tortok'`) feed items from
+// inbound-bridged Bluesky items (`'bsky'`, ADR-010 + ADR-010-A).
+// `bsky` is present iff `source === 'bsky'` — kept optional rather
+// than baked into a discriminated union so existing call sites that
+// access `magnetLink` / `posterURL` / etc. don't have to narrow.
+// (Single playback path: bridged items are fully mirrored to R2 +
+// have a real magnet by the time they surface here, so the player
+// treats them identically to native items.)
 export type Video = {
   id: string;
   user: {
@@ -140,6 +148,8 @@ export type Video = {
   likeCount: number;
   isLiked: boolean;
   createdAt: string;
+  source: 'tortok' | 'bsky';
+  bsky?: { atUri: string; handle: string };
 };
 
 export type FeedResponse = {

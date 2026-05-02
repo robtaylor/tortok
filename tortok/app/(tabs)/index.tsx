@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ViewToken,
+  Linking,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -247,6 +248,23 @@ const VideoItem = memo(function VideoItem({
     [video.hashtags],
   );
 
+  // Bridged items (`source === 'bsky'`) carry a `bsky.atUri` of the
+  // shape `at://did:plc:.../app.bsky.feed.post/<rkey>`. The web
+  // client deep-link uses `<rkey>` (the record key, last path
+  // segment) plus the original handle, not the DID. We tolerate
+  // missing/malformed at-uris by no-op'ing the press rather than
+  // throwing — the badge is decoration-grade UX.
+  const handleViaBlueskyPress = useCallback(() => {
+    if (video.source !== 'bsky' || !video.bsky) return;
+    const { atUri, handle } = video.bsky;
+    const rkey = atUri.split('/').pop();
+    if (!rkey || !handle) return;
+    const url = `https://bsky.app/profile/${handle}/post/${rkey}`;
+    Linking.openURL(url).catch((err) => {
+      console.warn('failed to open bsky deep link', err);
+    });
+  }, [video.source, video.bsky]);
+
   const handleLike = async () => {
     if (!token || likePending) return;
     const nextLiked = !liked;
@@ -329,7 +347,21 @@ const VideoItem = memo(function VideoItem({
       ) : null}
 
       <View style={styles.bottomOverlay}>
-        <Text style={styles.username}>@{video.user.username}</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.username}>@{video.user.username}</Text>
+          {video.source === 'bsky' && video.bsky ? (
+            <TouchableOpacity
+              onPress={handleViaBlueskyPress}
+              hitSlop={8}
+              testID="viaBlueskyBadge"
+              accessibilityRole="link"
+              accessibilityLabel="View on Bluesky"
+              style={styles.viaBlueskyBadge}
+            >
+              <Text style={styles.viaBlueskyBadgeText}>via Bluesky</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
         <Text style={styles.caption} numberOfLines={2}>
           {video.caption}
         </Text>
@@ -588,13 +620,31 @@ const styles = StyleSheet.create({
     left: 16,
     right: 80,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
   username: {
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
-    marginBottom: 4,
     textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowRadius: 4,
+  },
+  viaBlueskyBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0, 133, 255, 0.18)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  viaBlueskyBadgeText: {
+    color: '#dde7ff',
+    fontSize: 11,
+    fontWeight: '600',
   },
   caption: {
     color: '#fff',

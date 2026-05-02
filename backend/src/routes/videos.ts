@@ -88,7 +88,17 @@ router.post('/', authenticateJWT, validate(schemas.createVideo), async (req: Aut
 
 /**
  * GET /feed
- * Get video feed
+ * Get video feed — UNIONs native `videos` rows with mirrored
+ * `bridged_posts` rows (Phase 3 Unit 2.5, ADR-010-A). Single
+ * playback path: bridged content is already mirrored to R2 with a
+ * magnet by slice 3, so the client renders both shapes through the
+ * same WebTorrent + expo-video pipeline. The `source` discriminator
+ * + `bsky` sub-object are the only client-visible difference.
+ *
+ * `mirror_state = 'mirrored'` is the load-bearing filter on the
+ * bridged side — pending/expired/declined rows MUST NOT appear in
+ * the feed (preserves the single-playback-path invariant; magnets
+ * for non-mirrored rows are null/stale).
  */
 router.get('/feed', optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
@@ -96,52 +106,143 @@ router.get('/feed', optionalAuth, async (req: AuthRequest, res: Response) => {
     const offset = parseInt(req.query.offset as string) || 0;
     const userId = req.user?.userId;
 
-    // Get videos with user info and hashtags
-    const videos = await query<any>(
-      `SELECT
-        v.id, v.caption, v.magnet_link, v.torrent_file_url, v.poster_url,
-        v.duration_seconds, v.width, v.height, v.like_count, v.view_count, v.created_at,
-        u.id as user_id, u.username, u.display_name, u.avatar_url,
-        COALESCE(
-          (SELECT array_agg(h.name)
-           FROM hashtags h
-           JOIN video_hashtags vh ON vh.hashtag_id = h.id
-           WHERE vh.video_id = v.id),
-          ARRAY[]::text[]
-        ) as hashtags,
-        ${userId ? `EXISTS(SELECT 1 FROM likes WHERE user_id = $3 AND video_id = v.id) as is_liked` : 'false as is_liked'}
-       FROM videos v
-       JOIN users u ON v.user_id = u.id
-       ORDER BY v.created_at DESC
-       LIMIT $1 OFFSET $2`,
+    // UNION ALL of native + bridged rows projected into a common
+    // shape. Each branch tags itself via the `source` literal column;
+    // hashtags/is_liked only mean something on the native side and
+    // project empty/false on the bridged side. Order by created time
+    // across both (`v.created_at` for native, `record_created_at` for
+    // bridged — i.e. the original Bluesky post time, not when our
+    // indexer noticed it).
+    //
+    // Param order:
+    //   $1 limit, $2 offset, $3 userId (only when authed)
+    //
+    // Note: `like_count` on `videos` is NOT NULL DEFAULT 0 but
+    // `bridged_posts.like_count` is nullable until first poll —
+    // COALESCE on the bridged branch keeps the projected column type
+    // consistent.
+    const sql = `
+      SELECT * FROM (
+        SELECT
+          'tortok'::text AS source,
+          v.id::text AS id,
+          v.caption AS caption,
+          v.magnet_link AS magnet_link,
+          v.torrent_file_url AS torrent_file_url,
+          v.poster_url AS poster_url,
+          v.duration_seconds AS duration_seconds,
+          v.width AS width,
+          v.height AS height,
+          v.like_count AS like_count,
+          v.created_at AS created_at,
+          u.id::text AS user_id,
+          u.username AS username,
+          u.display_name AS display_name,
+          u.avatar_url AS avatar_url,
+          COALESCE(
+            (SELECT array_agg(h.name)
+             FROM hashtags h
+             JOIN video_hashtags vh ON vh.hashtag_id = h.id
+             WHERE vh.video_id = v.id),
+            ARRAY[]::text[]
+          ) AS hashtags,
+          ${userId
+            ? `EXISTS(SELECT 1 FROM likes WHERE user_id = $3 AND video_id = v.id)`
+            : `false`} AS is_liked,
+          NULL::text AS bsky_at_uri,
+          NULL::text AS bsky_handle
+        FROM videos v
+        JOIN users u ON v.user_id = u.id
+
+        UNION ALL
+
+        SELECT
+          'bsky'::text AS source,
+          bp.bsky_at_uri AS id,
+          COALESCE(bp.text, '') AS caption,
+          bp.magnet_link AS magnet_link,
+          bp.torrent_file_url AS torrent_file_url,
+          bp.poster_url AS poster_url,
+          COALESCE(bp.duration_ms / 1000, 0) AS duration_seconds,
+          COALESCE(bp.width, 0) AS width,
+          COALESCE(bp.height, 0) AS height,
+          COALESCE(bp.like_count, 0) AS like_count,
+          bp.record_created_at AS created_at,
+          bp.bsky_did AS user_id,
+          bp.bsky_handle AS username,
+          COALESCE(bp.bsky_display_name, bp.bsky_handle) AS display_name,
+          bp.bsky_avatar_url AS avatar_url,
+          ARRAY[]::text[] AS hashtags,
+          false AS is_liked,
+          bp.bsky_at_uri AS bsky_at_uri,
+          bp.bsky_handle AS bsky_handle
+        FROM bridged_posts bp
+        WHERE bp.mirror_state = 'mirrored'
+          AND bp.r2_path IS NOT NULL
+          AND bp.magnet_link IS NOT NULL
+      ) feed
+      ORDER BY created_at DESC NULLS LAST
+      LIMIT $1 OFFSET $2
+    `;
+
+    const rows = await query<any>(
+      sql,
       userId ? [limit, offset, userId] : [limit, offset]
     );
 
-    const formattedVideos = videos.map((v: any) => ({
-      id: v.id,
-      user: {
-        id: v.user_id,
-        username: v.username,
-        displayName: v.display_name,
-        avatarURL: v.avatar_url,
-      },
-      caption: v.caption,
-      magnetLink: v.magnet_link,
-      torrentFileUrl: v.torrent_file_url,
-      posterURL: v.poster_url,
-      durationSeconds: v.duration_seconds,
-      width: v.width,
-      height: v.height,
-      hashtags: v.hashtags || [],
-      likeCount: v.like_count || 0,
-      isLiked: v.is_liked || false,
-      createdAt: v.created_at,
-    }));
+    const formattedVideos = rows.map((v: any) => {
+      const base = {
+        id: v.id,
+        user: {
+          id: v.user_id,
+          username: v.username,
+          displayName: v.display_name,
+          avatarURL: v.avatar_url,
+        },
+        caption: v.caption,
+        magnetLink: v.magnet_link,
+        torrentFileUrl: v.torrent_file_url,
+        posterURL: v.poster_url,
+        durationSeconds: v.duration_seconds,
+        width: v.width,
+        height: v.height,
+        hashtags: v.hashtags || [],
+        likeCount: v.like_count || 0,
+        isLiked: v.is_liked || false,
+        createdAt: v.created_at,
+        source: v.source as 'tortok' | 'bsky',
+      };
+      if (v.source === 'bsky') {
+        return {
+          ...base,
+          bsky: {
+            atUri: v.bsky_at_uri,
+            handle: v.bsky_handle,
+          },
+        };
+      }
+      return base;
+    });
+
+    // Touch `last_played_at` on bridged items returned by this batch
+    // so the storage-decay job (slice 3) only expires mirrors that
+    // are genuinely cold. Without this, every mirror would decay on
+    // the BSKY_DECAY_DAYS clock regardless of demand. Skip the UPDATE
+    // entirely when no bridged items appeared in the batch.
+    const bridgedAtUris = rows
+      .filter((v: any) => v.source === 'bsky')
+      .map((v: any) => v.bsky_at_uri);
+    if (bridgedAtUris.length > 0) {
+      await query(
+        `UPDATE bridged_posts SET last_played_at = NOW() WHERE bsky_at_uri = ANY($1)`,
+        [bridgedAtUris]
+      );
+    }
 
     res.json({
       videos: formattedVideos,
-      nextCursor: videos.length === limit ? (offset + limit).toString() : null,
-      hasMore: videos.length === limit,
+      nextCursor: rows.length === limit ? (offset + limit).toString() : null,
+      hasMore: rows.length === limit,
     });
   } catch (error) {
     console.error('Get feed error:', error);
