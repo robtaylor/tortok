@@ -10,30 +10,42 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { login } from '@/lib/api';
+import { signIn as atprotoSignIn } from '@/lib/atproto/oauth';
 import { authStyles } from '@/lib/styles';
 import { useAuthStore } from '@/stores/auth';
 
+// Phase 3 Unit 2: replaces the legacy email/password form with atproto
+// OAuth (PAR + DPoP) against the user's existing PDS — typically
+// bsky.social. Users register / recover their account on the PDS, not
+// in TorTok, which is why there's no sign-up link any more.
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [handle, setHandle] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const signIn = useAuthStore((s) => s.signIn);
+  const signInWithDid = useAuthStore((s) => s.signInWithDid);
   const router = useRouter();
 
   const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      setError('Please fill in all fields');
+    const trimmed = handle.trim();
+    if (!trimmed) {
+      setError('Please enter your Bluesky handle');
       return;
     }
     setError('');
     setLoading(true);
     try {
-      const res = await login(email.trim(), password);
-      await signIn(res.token, res.user);
+      const session = await atprotoSignIn(trimmed);
+      await signInWithDid(session.sub);
+      router.replace('/');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Login failed');
+      console.error('[oauth] signIn failed:', e);
+      if (e instanceof Error && 'cause' in e && e.cause) {
+        console.error('[oauth] cause:', e.cause);
+        if (e.cause instanceof Error && 'cause' in e.cause && e.cause.cause) {
+          console.error('[oauth] cause.cause:', e.cause.cause);
+        }
+      }
+      setError(e instanceof Error ? e.message : 'Sign in failed');
     } finally {
       setLoading(false);
     }
@@ -46,7 +58,7 @@ export default function LoginScreen() {
     >
       <View style={styles.inner}>
         <Text style={styles.title}>TorTok</Text>
-        <Text style={styles.subtitle}>Sign in to continue</Text>
+        <Text style={styles.subtitle}>Sign in with Bluesky</Text>
 
         {error ? (
           <Text style={authStyles.error} testID="errorMessage">
@@ -56,23 +68,14 @@ export default function LoginScreen() {
 
         <TextInput
           style={authStyles.input}
-          placeholder="Email"
+          placeholder="tortok-dev.bsky.social"
           placeholderTextColor="#888"
-          value={email}
-          onChangeText={setEmail}
+          value={handle}
+          onChangeText={setHandle}
           autoCapitalize="none"
+          autoCorrect={false}
           keyboardType="email-address"
-          testID="emailTextField"
-        />
-
-        <TextInput
-          style={authStyles.input}
-          placeholder="Password"
-          placeholderTextColor="#888"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          testID="passwordTextField"
+          testID="handleTextField"
         />
 
         <TouchableOpacity
@@ -84,19 +87,14 @@ export default function LoginScreen() {
           {loading ? (
             <ActivityIndicator color="#000" />
           ) : (
-            <Text style={authStyles.buttonText}>Sign In</Text>
+            <Text style={authStyles.buttonText}>Sign in with Bluesky</Text>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={() => router.push('/(auth)/register')}
-          style={styles.linkButton}
-          testID="signUpButton"
-        >
-          <Text style={styles.linkText}>
-            Don't have an account? <Text style={styles.linkBold}>Sign Up</Text>
-          </Text>
-        </TouchableOpacity>
+        <Text style={styles.helpText}>
+          Enter the handle you use on Bluesky. You'll be redirected to
+          your PDS to authorize TorTok.
+        </Text>
       </View>
     </KeyboardAvoidingView>
   );
@@ -121,16 +119,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 32,
   },
-  linkButton: {
+  helpText: {
+    color: '#666',
+    fontSize: 13,
+    textAlign: 'center',
     marginTop: 24,
-    alignItems: 'center',
-  },
-  linkText: {
-    color: '#888',
-    fontSize: 14,
-  },
-  linkBold: {
-    color: '#fff',
-    fontWeight: '600',
+    paddingHorizontal: 8,
+    lineHeight: 18,
   },
 });

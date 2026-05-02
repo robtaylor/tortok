@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "tortok",
+    "scheme": "app.tortok",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -63,7 +63,8 @@
             "deploymentTarget": "26.3"
           }
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
