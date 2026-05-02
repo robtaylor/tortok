@@ -830,6 +830,17 @@ const defaultMuxFactory = (ffmpegPath: string): MuxFn => {
         '-i', inputPlaylistPath,
         '-c', 'copy',
         '-bsf:a', 'aac_adtstoasc',
+        // Move the moov atom to the start of the file so AVPlayer
+        // can read the MP4 header from the first range-request and
+        // begin decoding while bytes stream in via webseed. Without
+        // this, ffmpeg writes moov at the end (its default for
+        // single-pass output), which forces AVPlayer to download the
+        // entire file before it can `open` — and AVPlayer's open
+        // timeout (~1s) fires before WebTorrent finishes the
+        // download, producing "Failed to load the player item:
+        // Cannot Open". Cheap (single seek + rewrite of moov),
+        // critical for HTTP streaming.
+        '-movflags', '+faststart',
         outputMp4Path,
       ];
       const proc = spawn(ffmpegPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
