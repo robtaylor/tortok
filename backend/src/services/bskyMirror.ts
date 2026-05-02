@@ -419,7 +419,14 @@ export class BskyMirrorService {
       // 5. Generate the .torrent. Webseed = the R2 public-URL prefix
       //    so WebTorrent peers without seeders fall back to HTTP.
       const torrentName = row.video_cid; // unique-per-video; collision-safe.
-      const webseedUrl = `${this.webseedBase.replace(/\/$/, '')}/${r2Prefix}`;
+      // BEP-19 multi-file webseed: when urlList ends in `/`, clients
+      // construct `<urlList><name>/<filePath>` — i.e. they re-insert
+      // the torrent name as a path segment. So the webseed URL must
+      // be the *parent* of the cid directory, not the cid itself, or
+      // we'd end up requesting `bridged/<did>/<cid>/<cid>/playlist.m3u8`
+      // (doubled cid — 404 in R2).
+      const r2Parent = r2Prefix.replace(/[^/]+\/$/, ''); // drop last segment
+      const webseedUrl = `${this.webseedBase.replace(/\/$/, '')}/${r2Parent}`;
       const torrentBytes = await this.torrentFromDir(tmpDir, torrentName, {
         announce: this.trackers,
         urlList: [webseedUrl],
