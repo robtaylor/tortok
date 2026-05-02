@@ -35,6 +35,7 @@ export type Torrent = {
   pieces: Array<unknown | null>;
   wires: Wire[];
   on: (event: string, cb: (arg?: unknown) => void) => void;
+  once: (event: string, cb: (arg?: unknown) => void) => void;
   removeListener: (event: string, cb: (arg?: unknown) => void) => void;
 };
 

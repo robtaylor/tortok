@@ -34,6 +34,14 @@ function ensureClient(): Promise<boolean> {
       MemoryChunkStore = (storeMod?.default ?? storeMod) as ChunkStoreCtor;
 
       client = new WT();
+      // Each torrent.add can add internal listeners on the shared
+      // client for piece tracking, peer events, etc. Default ceiling
+      // is 10; raise it so a vertical-feed scrolling session that
+      // touches dozens of torrents doesn't trip
+      // MaxListenersExceededWarning. 50 is generous; tune down once
+      // we're confident about webtorrent's per-add listener count.
+      const maybeSetMax = (client as unknown as { setMaxListeners?: (n: number) => void }).setMaxListeners;
+      if (typeof maybeSetMax === 'function') maybeSetMax.call(client, 50);
       client.on('error', (e: unknown) => {
         console.warn('[webtorrent] client error:', e);
       });
@@ -150,10 +158,18 @@ async function doAdd(
 
   try {
     const torrent = await new Promise<Torrent>((resolve, reject) => {
+      let onAddError: ((e: unknown) => void) | null = null;
       const t = client!.add(torrentId, { store: MemoryChunkStore! }, (torrent: Torrent) => {
+        // Add succeeded — remove the temporary error listener so it
+        // doesn't leak onto the torrent for its lifetime.
+        if (onAddError) t.removeListener('error', onAddError);
         resolve(torrent);
       });
-      t.on('error', (e: unknown) => reject(e));
+      onAddError = (e: unknown) => {
+        t.removeListener('error', onAddError!);
+        reject(e);
+      };
+      t.on('error', onAddError);
     });
 
     // Wait for the first piece before handing the URL to the video player.
@@ -190,7 +206,12 @@ async function doAdd(
     if (torrent.progress === 1) {
       logOffload();
     } else {
-      torrent.on('done', logOffload);
+      // `once` so the listener auto-removes after firing — without
+      // this, every torrent we add accumulates an extra `done`
+      // listener for its lifetime, which contributed to the
+      // MaxListenersExceededWarning we observed in the sim after
+      // ~10 min of scrolling.
+      torrent.once('done', logOffload);
     }
 
     const bridgeUrl = await registerTorrent(torrent);
