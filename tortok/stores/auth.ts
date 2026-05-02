@@ -16,9 +16,13 @@ type AuthState = {
   token: string | null;
   user: User | null;
   did: string | null;
+  // Convenience: last handle the user signed in with. Persists across
+  // sign-out so the login screen can pre-fill the field on next visit.
+  // Not sensitive (it's a public Bluesky handle).
+  lastHandle: string | null;
   isLoading: boolean;
   signIn: (token: string, user: User) => Promise<void>;
-  signInWithDid: (did: string) => Promise<void>;
+  signInWithDid: (did: string, handle: string) => Promise<void>;
   signOut: () => Promise<void>;
   hydrate: () => Promise<void>;
 };
@@ -26,6 +30,7 @@ type AuthState = {
 const TOKEN_KEY = 'tortok_auth_token';
 const USER_KEY = 'tortok_auth_user';
 const DID_KEY = 'tortok_auth_did';
+const LAST_HANDLE_KEY = 'tortok_last_handle';
 
 // On web, expo-secure-store falls back to localStorage, which is readable
 // by any XSS on the domain. Tokens stored here are effectively bearer
@@ -58,6 +63,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   token: null,
   user: null,
   did: null,
+  lastHandle: null,
   isLoading: true,
 
   // Legacy email/password sign-in. Removed in Unit 5 along with the
@@ -74,10 +80,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // atproto OAuth sign-in. Persists only the DID; the live OAuthSession
   // (and its DPoP keys) is held inside the OAuth client's MMKV store
   // and re-hydrated on demand via `oauthRestore(did)` at call sites
-  // that need an `Agent`.
-  signInWithDid: async (did: string) => {
-    await secureSet(DID_KEY, did);
-    set({ did });
+  // that need an `Agent`. Also stashes the handle for next-visit
+  // pre-fill (kept across sign-out).
+  signInWithDid: async (did: string, handle: string) => {
+    await Promise.all([
+      secureSet(DID_KEY, did),
+      secureSet(LAST_HANDLE_KEY, handle),
+    ]);
+    set({ did, lastHandle: handle });
   },
 
   signOut: async () => {
@@ -103,12 +113,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   hydrate: async () => {
     try {
-      const [token, userJson, did] = await Promise.all([
+      const [token, userJson, did, lastHandle] = await Promise.all([
         secureGet(TOKEN_KEY),
         secureGet(USER_KEY),
         secureGet(DID_KEY),
+        secureGet(LAST_HANDLE_KEY),
       ]);
-      const next: Partial<AuthState> = { isLoading: false };
+      const next: Partial<AuthState> = { isLoading: false, lastHandle };
       if (token && userJson) {
         next.token = token;
         next.user = JSON.parse(userJson);

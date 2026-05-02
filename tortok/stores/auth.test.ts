@@ -48,7 +48,9 @@ const secureStoreMock = jest.requireMock('expo-secure-store') as {
 };
 
 const TEST_DID = 'did:plc:teqobv6pqer5nw7roqrgi55v';
+const TEST_HANDLE = 'tortok-dev.bsky.social';
 const DID_KEY = 'tortok_auth_did';
+const LAST_HANDLE_KEY = 'tortok_last_handle';
 
 beforeEach(() => {
   // Reset store contents.
@@ -58,6 +60,7 @@ beforeEach(() => {
     token: null,
     user: null,
     did: null,
+    lastHandle: null,
     isLoading: true,
   });
   oauth.signIn.mockReset();
@@ -66,11 +69,13 @@ beforeEach(() => {
 });
 
 describe('signInWithDid', () => {
-  it('persists the DID to secure storage and updates state', async () => {
-    await useAuthStore.getState().signInWithDid(TEST_DID);
+  it('persists DID and handle to secure storage and updates state', async () => {
+    await useAuthStore.getState().signInWithDid(TEST_DID, TEST_HANDLE);
 
     expect(secureStoreMock.__store.get(DID_KEY)).toBe(TEST_DID);
+    expect(secureStoreMock.__store.get(LAST_HANDLE_KEY)).toBe(TEST_HANDLE);
     expect(useAuthStore.getState().did).toBe(TEST_DID);
+    expect(useAuthStore.getState().lastHandle).toBe(TEST_HANDLE);
   });
 });
 
@@ -108,6 +113,21 @@ describe('signOut', () => {
     expect(secureStoreMock.__store.has(DID_KEY)).toBe(false);
     warnSpy.mockRestore();
   });
+
+  it('preserves lastHandle for next-visit pre-fill', async () => {
+    // Signing out shouldn't clear the handle — that's a UX convenience
+    // that survives sign-out so the login screen can pre-fill the field.
+    secureStoreMock.__store.set(DID_KEY, TEST_DID);
+    secureStoreMock.__store.set(LAST_HANDLE_KEY, TEST_HANDLE);
+    useAuthStore.setState({ did: TEST_DID, lastHandle: TEST_HANDLE });
+    oauth.signOut.mockResolvedValue(undefined);
+
+    await useAuthStore.getState().signOut();
+
+    expect(secureStoreMock.__store.has(LAST_HANDLE_KEY)).toBe(true);
+    expect(secureStoreMock.__store.get(LAST_HANDLE_KEY)).toBe(TEST_HANDLE);
+    expect(useAuthStore.getState().lastHandle).toBe(TEST_HANDLE);
+  });
 });
 
 describe('hydrate', () => {
@@ -129,8 +149,21 @@ describe('hydrate', () => {
       token: null,
       user: null,
       did: null,
+      lastHandle: null,
       isLoading: false,
     });
+    expect(oauth.restore).not.toHaveBeenCalled();
+  });
+
+  it('loads lastHandle independently of DID (signed-out user with prior handle)', async () => {
+    // After sign-out, DID is gone but lastHandle persists. Hydrate must
+    // surface the handle so the login screen can pre-fill the field.
+    secureStoreMock.__store.set(LAST_HANDLE_KEY, TEST_HANDLE);
+
+    await useAuthStore.getState().hydrate();
+
+    expect(useAuthStore.getState().lastHandle).toBe(TEST_HANDLE);
+    expect(useAuthStore.getState().did).toBeNull();
     expect(oauth.restore).not.toHaveBeenCalled();
   });
 });

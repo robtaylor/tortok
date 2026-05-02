@@ -19,7 +19,8 @@ import { useAuthStore } from '@/stores/auth';
 // bsky.social. Users register / recover their account on the PDS, not
 // in TorTok, which is why there's no sign-up link any more.
 export default function LoginScreen() {
-  const [handle, setHandle] = useState('');
+  const lastHandle = useAuthStore((s) => s.lastHandle);
+  const [handle, setHandle] = useState(lastHandle ?? '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const signInWithDid = useAuthStore((s) => s.signInWithDid);
@@ -35,7 +36,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const session = await atprotoSignIn(trimmed);
-      await signInWithDid(session.sub);
+      await signInWithDid(session.sub, trimmed);
       router.replace('/');
     } catch (e) {
       console.error('[oauth] signIn failed:', e);
@@ -75,6 +76,8 @@ export default function LoginScreen() {
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="email-address"
+          textContentType="username"
+          autoComplete="username"
           testID="handleTextField"
         />
 
