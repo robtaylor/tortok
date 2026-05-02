@@ -38,16 +38,27 @@ import clientMetadata from '../../assets/oauth-client-metadata.json';
 // `token_endpoint_auth_method` ("none" | "private_key_jwt" | ...).
 // Casting at the boundary is correct: the JSON file is the source of
 // truth and we're vouching for its shape.
-const oauthClient = new ExpoOAuthClient({
-  // Used to resolve atproto handles (foo.bsky.social) to DIDs and PDS
-  // URLs. Falling back to bsky.social matches the smoke test.
-  handleResolver: 'https://bsky.social',
-  clientMetadata: clientMetadata as Parameters<
-    typeof ExpoOAuthClient
-  >[0]['clientMetadata'],
-});
-
-export { oauthClient };
+//
+// IMPORTANT: lazy-construct. The .web variant of ExpoOAuthClient
+// reaches for `indexedDB` in its constructor, which doesn't exist in
+// Node. expo-router's static-render pass evaluates this module
+// server-side and would crash before the iOS bundle was emitted, taking
+// Metro down with it. The lazy getter ensures we only touch the
+// platform-specific OAuth machinery when something actually calls
+// signIn / restore / revoke from a runtime context.
+let _oauthClient: ExpoOAuthClient | null = null;
+function getOauthClient(): ExpoOAuthClient {
+  if (_oauthClient) return _oauthClient;
+  _oauthClient = new ExpoOAuthClient({
+    // Used to resolve atproto handles (foo.bsky.social) to DIDs and
+    // PDS URLs. Falling back to bsky.social matches the smoke test.
+    handleResolver: 'https://bsky.social',
+    clientMetadata: clientMetadata as Parameters<
+      typeof ExpoOAuthClient
+    >[0]['clientMetadata'],
+  });
+  return _oauthClient;
+}
 
 /**
  * Begin the OAuth sign-in flow. Opens the system auth browser (Sign In
@@ -58,7 +69,7 @@ export { oauthClient };
  * `input` may be a handle (e.g. `tortok-dev.bsky.social`) or a PDS host.
  */
 export function signIn(input: string): Promise<OAuthSession> {
-  return oauthClient.signIn(input);
+  return getOauthClient().signIn(input);
 }
 
 /**
@@ -67,7 +78,8 @@ export function signIn(input: string): Promise<OAuthSession> {
  * up. Used by auth-store hydration on cold start.
  */
 export function restore(did: string): Promise<OAuthSession> {
-  return oauthClient.restore(did as Parameters<typeof oauthClient.restore>[0]);
+  const c = getOauthClient();
+  return c.restore(did as Parameters<typeof c.restore>[0]);
 }
 
 /**
@@ -76,5 +88,6 @@ export function restore(did: string): Promise<OAuthSession> {
  * a token refresh first.
  */
 export function signOut(did: string): Promise<void> {
-  return oauthClient.revoke(did as Parameters<typeof oauthClient.revoke>[0]);
+  const c = getOauthClient();
+  return c.revoke(did as Parameters<typeof c.revoke>[0]);
 }
