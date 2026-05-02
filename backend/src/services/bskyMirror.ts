@@ -763,20 +763,36 @@ const defaultTorrentFromDir: TorrentFromDirFn = async (dir, name, opts) => {
   });
 };
 
-const defaultMagnetFromTorrent: MagnetFromTorrentFn = async (buf, _name) => {
+const defaultMagnetFromTorrent: MagnetFromTorrentFn = async (buf, name) => {
   const parseTorrent = await loadParseTorrent();
   // parse-torrent's API: pass a Buffer of the .torrent file. Older
   // versions return a plain object; newer versions return a Promise.
   // Normalize via Promise.resolve.
   const parsed = await Promise.resolve(parseTorrent(Buffer.from(buf)));
-  if (parsed?.magnetURI) return parsed.magnetURI as string;
-  // Build a magnet manually from the infoHash if magnetURI isn't on
-  // the object (older parse-torrent versions).
   const ih = parsed?.infoHash;
   if (typeof ih !== 'string') {
     throw new Error('parse-torrent did not return an infoHash');
   }
-  return `magnet:?xt=urn:btih:${ih}`;
+  // Always build the magnet manually so trackers + webseeds make
+  // it in. Newer parse-torrent versions don't populate `magnetURI`
+  // on the parsed object, and even when they do, it's safer to
+  // construct from the canonical fields ourselves than to depend
+  // on the package's serialization choices.
+  const params = [`xt=urn:btih:${ih}`];
+  if (name) params.push(`dn=${encodeURIComponent(name)}`);
+  const announce: unknown = parsed?.announce;
+  if (Array.isArray(announce)) {
+    for (const tr of announce) {
+      if (typeof tr === 'string') params.push(`tr=${encodeURIComponent(tr)}`);
+    }
+  }
+  const urlList: unknown = parsed?.urlList;
+  if (Array.isArray(urlList)) {
+    for (const ws of urlList) {
+      if (typeof ws === 'string') params.push(`ws=${encodeURIComponent(ws)}`);
+    }
+  }
+  return `magnet:?${params.join('&')}`;
 };
 
 // ─── Helpers ────────────────────────────────────────────────────
