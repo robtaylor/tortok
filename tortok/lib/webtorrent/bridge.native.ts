@@ -97,12 +97,27 @@ function ensureServer(): Promise<void> {
       let head = '';
       let parsed = false;
       let readStream: Readable | null = null;
+      // Per-request diagnostics. Lets us tell from logs alone
+      // whether AVPlayer is making range requests, the bridge is
+      // serving them, and they're completing — vs hanging mid-
+      // stream because webtorrent isn't producing piece data.
+      let logLine = '';
+      let bytesSent = 0;
+      let logStartMs = 0;
+      let logged = false;
+      const finishLog = (suffix: string) => {
+        if (logged || !logLine) return;
+        logged = true;
+        const dt = Date.now() - logStartMs;
+        console.log(`[bridge] ${logLine} → ${suffix} (${bytesSent}B in ${dt}ms)`);
+      };
 
       const destroyStream = () => {
         if (readStream) {
           try { readStream.destroy(); } catch { /* ignore */ }
           readStream = null;
         }
+        finishLog('closed');
       };
 
       sock.on('close', destroyStream);
@@ -135,10 +150,18 @@ function ensureServer(): Promise<void> {
         const infoHash = segments[0] ?? '';
         const filePath = segments.slice(1).join('/');
 
+        // Begin per-request diagnostic. Truncate the infoHash to
+        // 8 chars in the log line so multiple-request streams stay
+        // legible — full hash is in the URL above if needed.
+        logStartMs = Date.now();
+        const rangeRaw = headers.range ?? '';
+        logLine = `${method} /${infoHash.slice(0, 8)}…/${filePath}${rangeRaw ? ` range="${rangeRaw}"` : ''}`;
+
         const torrentEntry = registry.get(infoHash);
         if (!torrentEntry) {
           sock.write('HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n');
           sock.end();
+          finishLog('404 (no torrent in registry)');
           return;
         }
 
@@ -148,6 +171,7 @@ function ensureServer(): Promise<void> {
         if (!file) {
           sock.write('HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n');
           sock.end();
+          finishLog('404 (file not in torrent)');
           return;
         }
 
@@ -169,18 +193,23 @@ function ensureServer(): Promise<void> {
 
         if (method === 'HEAD') {
           sock.end();
+          finishLog(`${status} (HEAD)`);
           return;
         }
 
         const stream = file.createReadStream({ start, end: endByte });
         readStream = stream;
         stream.on('data', (buf: unknown) => {
-          sock.write(buf as Buffer);
+          const b = buf as Buffer;
+          bytesSent += b.length;
+          sock.write(b);
         });
         stream.on('end', () => {
           sock.end();
+          finishLog(status);
         });
-        stream.on('error', () => {
+        stream.on('error', (err: unknown) => {
+          finishLog(`stream error: ${(err as Error)?.message ?? err}`);
           sock.destroy();
         });
       });
