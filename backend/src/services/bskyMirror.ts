@@ -83,7 +83,7 @@ interface S3Like {
 type TorrentFromDirFn = (
   inputPath: string,
   name: string,
-  opts: { announce: string[]; urlList: string[] }
+  opts: { announce: string[]; urlList: string[]; pieceLength?: number }
 ) => Promise<Uint8Array>;
 
 // Remuxer — given an input HLS playlist on disk + an output MP4
@@ -142,6 +142,12 @@ const DEFAULT_MIRROR_INTERVAL_SEC = 60;
 const DEFAULT_MIRROR_BATCH = 1;
 const DEFAULT_DECAY_DAYS = 30;
 const DEFAULT_DECAY_INTERVAL_SEC = 3600;
+// 16 KB pieces. Smaller = faster first-piece-via-webseed (the
+// dominant cold-start cost for a brand-new swarm) at the cost of
+// a slightly larger .torrent metadata file (~20 bytes per piece,
+// so a 38MB MP4 → ~47KB of piece hashes — still tiny). 16384 is
+// the BitTorrent minimum.
+const DEFAULT_PIECE_LENGTH = 16384;
 
 // ─── Hot-reload-safe singleton state ─────────────────────────────
 
@@ -232,6 +238,7 @@ export class BskyMirrorService {
   private readonly mirrorBatch: number;
   private readonly decayDays: number;
   private readonly decayIntervalSec: number;
+  private readonly pieceLength: number;
 
   // Injectables — defaults wire to real prod deps; tests inject mocks.
   private readonly db: typeof query;
@@ -284,6 +291,7 @@ export class BskyMirrorService {
       DEFAULT_MIRROR_INTERVAL_SEC
     );
     this.mirrorBatch = readPositiveInt('BSKY_MIRROR_BATCH', DEFAULT_MIRROR_BATCH);
+    this.pieceLength = readPositiveInt('BSKY_PIECE_LENGTH', DEFAULT_PIECE_LENGTH);
     this.decayDays = readPositiveInt('BSKY_DECAY_DAYS', DEFAULT_DECAY_DAYS);
     this.decayIntervalSec = readPositiveInt(
       'BSKY_DECAY_INTERVAL_SEC',
@@ -510,6 +518,7 @@ export class BskyMirrorService {
       const torrentBytes = await this.torrentFromDir(mp4Path, torrentName, {
         announce: this.trackers,
         urlList: [webseedUrl],
+        pieceLength: this.pieceLength,
       });
 
       // 7. Upload the .torrent to R2, co-located with the MP4.
@@ -882,13 +891,20 @@ const defaultTorrentFromDir: TorrentFromDirFn = async (dir, name, opts) => {
   return new Promise<Uint8Array>((resolve, reject) => {
     // create-torrent's signature: createTorrent(input, opts, cb)
     // where input can be a path. Returns a Buffer of the .torrent.
+    // pieceLength forces a specific piece size; small pieces (16KB)
+    // dramatically reduce first-piece-fetch latency over webseed,
+    // which is the dominant cold-start cost for a brand-new swarm.
+    // Tradeoff: more piece hashes in the .torrent file (~20 bytes
+    // per piece × 38MB / 16KB ≈ 47KB) — still tiny.
+    const createOpts: Record<string, unknown> = {
+      name,
+      announce: opts.announce,
+      urlList: opts.urlList,
+    };
+    if (opts.pieceLength) createOpts.pieceLength = opts.pieceLength;
     createTorrent(
       dir,
-      {
-        name,
-        announce: opts.announce,
-        urlList: opts.urlList,
-      },
+      createOpts,
       (err: Error | null, torrent: Buffer) => {
         if (err) reject(err);
         else resolve(new Uint8Array(torrent));
