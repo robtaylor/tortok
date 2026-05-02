@@ -172,6 +172,31 @@ async function doAdd(
       t.on('error', onAddError);
     });
 
+    // One-line diagnostic so slow loads can be classified at a
+    // glance:
+    //   - pieceLen=16384 + ws shape "file" → current pipeline
+    //   - pieceLen >> 16K → stale pre-piece-shrink row
+    //   - ws shape "dir" → stale pre-MP4-pivot multi-file row
+    //   - sizeMB very large + new pipeline → genuinely huge source
+    const t2 = torrent as unknown as {
+      length?: number;
+      pieceLength?: number;
+      pieces?: { length: number };
+      urlList?: string[];
+      numPeers?: number;
+      name?: string;
+    };
+    const sizeMB = t2.length ? (t2.length / 1024 / 1024).toFixed(2) : '?';
+    const pieceKB = t2.pieceLength ? Math.round(t2.pieceLength / 1024) : '?';
+    const pieceCount = t2.pieces?.length ?? '?';
+    const ws = t2.urlList?.[0] ?? '';
+    const wsShape = !ws ? 'none' : ws.endsWith('/') ? 'dir(legacy)' : 'file(current)';
+    const wsCount = t2.urlList?.length ?? 0;
+    console.log(
+      `[webtorrent] meta: ${t2.name ?? '?'} size=${sizeMB}MB pieces=${pieceCount}×${pieceKB}KB ` +
+        `ws=${wsShape}(×${wsCount}) peers=${t2.numPeers ?? 0}`
+    );
+
     // Wait for the first piece before handing the URL to the video player.
     // Without this, the bridge serves an empty stream and the player errors.
     if (torrent.progress === 0) {
