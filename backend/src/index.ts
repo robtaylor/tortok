@@ -10,6 +10,7 @@ import authRoutes from './routes/auth';
 import videoRoutes from './routes/videos';
 import { seeder } from './services/seeder';
 import { bskyFirehose } from './services/bskyFirehose';
+import { bskyEngagementPoller } from './services/bskyEngagementPoller';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -142,6 +143,18 @@ async function start() {
       console.warn('⚠️ Failed to start Bluesky Jetstream subscriber:', err);
     }
 
+    // Phase 3 Unit 2.5 — start the engagement poller (slice 2).
+    // Promotes `pending` rows to `mirrored` once an engagement
+    // signal crosses threshold; declines rows older than
+    // BSKY_DECLINE_AFTER_DAYS that never qualified. Non-fatal on
+    // failure — feed degrades to native-only until poller recovers.
+    try {
+      bskyEngagementPoller.start();
+      console.log('📊 Bluesky engagement poller started');
+    } catch (err) {
+      console.warn('⚠️ Failed to start Bluesky engagement poller:', err);
+    }
+
     // Start listening
     app.listen(PORT, () => {
       console.log('');
@@ -162,6 +175,15 @@ async function start() {
 // Handle graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('Received SIGTERM, shutting down...');
+  bskyEngagementPoller.stop();
+  bskyFirehose.stop();
+  await seeder.destroy();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('Received SIGINT, shutting down...');
+  bskyEngagementPoller.stop();
   bskyFirehose.stop();
   await seeder.destroy();
   process.exit(0);
