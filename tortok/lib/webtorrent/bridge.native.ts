@@ -213,7 +213,22 @@ export async function registerTorrent(torrent: Torrent): Promise<string> {
 
   registry.set(torrent.infoHash, { byPath, entry });
 
-  return `http://127.0.0.1:${serverPort}/${torrent.infoHash}/${encodeURIComponent(entry.path)}`;
+  // Encode each path segment individually so internal `/`s stay as
+  // path separators in the URL (vs the whole entry.path being one
+  // %2F-encoded segment). This matters for multi-file torrents (e.g.
+  // bridged HLS, where entry.path is `<cid>/playlist.m3u8`): the
+  // player resolves segment URIs relative to the playlist URL, and
+  // if the path is encoded as one segment the "directory" for
+  // relative resolution is `/<infoHash>/`, so segment requests hit
+  // `/<infoHash>/<segName>` and miss byPath (which keys on
+  // `<cid>/<segName>`). Per-segment encoding keeps the URL shape
+  // `/<infoHash>/<cid>/playlist.m3u8`, so relative resolution lands
+  // on `/<infoHash>/<cid>/<segName>` ✓.
+  const encodedPath = entry.path
+    .split('/')
+    .map((seg) => encodeURIComponent(seg))
+    .join('/');
+  return `http://127.0.0.1:${serverPort}/${torrent.infoHash}/${encodedPath}`;
 }
 
 export function unregisterTorrent(infoHash: string): void {
