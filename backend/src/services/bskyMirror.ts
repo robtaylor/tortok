@@ -190,8 +190,9 @@ const UPDATE_MIRROR_SQL = `
      SET r2_path = $1,
          magnet_link = $2,
          torrent_file_url = $3,
+         poster_url = COALESCE($4, poster_url),
          mirrored_at = NOW()
-   WHERE id = $4
+   WHERE id = $5
 `;
 
 // Decay scan — `mirrored_at` is fall-back when `last_played_at` is
@@ -495,6 +496,23 @@ export class BskyMirrorService {
 
       const mp4Buf = await fsp.readFile(mp4Path);
 
+      // 4b. Extract a poster frame at 1s into the video. Best-effort
+      //     — failures don't block the mirror; poster_url stays null.
+      //     We use ffmpeg's seek-before-input form (`-ss` before
+      //     `-i`) which is fast (decoder seeks to nearest keyframe)
+      //     and good enough for thumbnail purposes.
+      const r2PosterKey = `bridged/${row.bsky_did}/${row.video_cid}.jpg`;
+      const posterPath = path.join(tmpDir, `${row.video_cid}.jpg`);
+      let posterBuf: Buffer | null = null;
+      try {
+        await defaultPosterFromMp4(this.ffmpegPath, mp4Path, posterPath);
+        posterBuf = await fsp.readFile(posterPath);
+      } catch (err) {
+        console.warn(
+          `[BskyMirror] poster extraction failed for ${row.bsky_at_uri}: ${err instanceof Error ? err.message : err}`
+        );
+      }
+
       // 5. Upload the muxed MP4 to R2 (single PutObject).
       const s3 = await this.getS3Client();
       const cmds = await this.getS3Commands();
@@ -506,6 +524,20 @@ export class BskyMirrorService {
           ContentType: 'video/mp4',
         })
       );
+
+      // 5b. Upload the poster if we got one.
+      let posterUrl: string | null = null;
+      if (posterBuf) {
+        await s3.send(
+          new cmds.PutObjectCommand({
+            Bucket: this.bucket,
+            Key: r2PosterKey,
+            Body: posterBuf,
+            ContentType: 'image/jpeg',
+          })
+        );
+        posterUrl = `${this.webseedBase.replace(/\/$/, '')}/${r2PosterKey}`;
+      }
 
       // 6. Generate the single-file .torrent. Pass the MP4 file
       //    path (not the dir) so create-torrent produces a
@@ -540,7 +572,7 @@ export class BskyMirrorService {
       //    trailing slash) — the schema column is unchanged (TEXT),
       //    only its semantics shift from "directory prefix" to "file
       //    key". Decay handles both shapes for backwards-compat.
-      await this.db(UPDATE_MIRROR_SQL, [r2Mp4Key, magnet, torrentFileUrl, row.id]);
+      await this.db(UPDATE_MIRROR_SQL, [r2Mp4Key, magnet, torrentFileUrl, posterUrl, row.id]);
 
       const totalSegBytes = segs.reduce((n, s) => n + s.byteLen, 0);
       console.log(
@@ -885,6 +917,41 @@ const defaultMuxFactory = (ffmpegPath: string): MuxFn => {
     });
   };
 };
+
+// Best-effort poster extraction. `-ss` before `-i` seeks first
+// (uses keyframe-only seek — fast, slightly less accurate, fine
+// for thumbnails). Outputs a single JPEG frame at 1s. If the
+// video is shorter than 1s the seek snaps to the start.
+async function defaultPosterFromMp4(
+  ffmpegPath: string,
+  mp4Path: string,
+  posterPath: string
+): Promise<void> {
+  const { spawn } = await import('child_process');
+  return new Promise<void>((resolve, reject) => {
+    const proc = spawn(
+      ffmpegPath,
+      [
+        '-y',
+        '-ss', '1',
+        '-i', mp4Path,
+        '-vframes', '1',
+        '-q:v', '5',
+        posterPath,
+      ],
+      { stdio: ['ignore', 'ignore', 'pipe'] }
+    );
+    let stderr = '';
+    proc.stderr?.on('data', (chunk: Buffer | string) => {
+      stderr += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+    });
+    proc.on('error', (err) => reject(err));
+    proc.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`poster ffmpeg exited code ${code}\n${stderr.split('\n').slice(-5).join('\n')}`));
+    });
+  });
+}
 
 const defaultTorrentFromDir: TorrentFromDirFn = async (dir, name, opts) => {
   const createTorrent = await loadCreateTorrent();

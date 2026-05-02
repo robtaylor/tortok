@@ -41,6 +41,17 @@ const DEFAULT_MIN_REPOSTS = 10;
 const DEFAULT_MIN_FOLLOWERS = 5000;
 const DEFAULT_DECLINE_AFTER_DAYS = 7;
 
+// Labels (creator self-labels + Bluesky's AppView labeler set)
+// that cause a row to be demoted to `declined` on the next poll.
+// Override per-deploy via BSKY_NSFW_LABELS (comma-separated).
+const DEFAULT_NSFW_LABELS = new Set([
+  'porn',
+  'sexual',
+  'nudity',
+  'graphic-media',
+  'gore',
+]);
+
 // Back-pressure tuning (per spec): 3 consecutive rate-limit ticks
 // → double the next delay.
 const RATE_LIMIT_BACKOFF_THRESHOLD = 3;
@@ -63,12 +74,25 @@ interface AppViewAuthor {
   avatar?: string;
 }
 
+// `labels` on the AppView's post view is the *aggregated* label set
+// — both creator self-labels and labels from labelers Bluesky's
+// AppView subscribes to (their first-party moderation labeler is
+// included by default). Each entry has `src` (labeler DID), `val`
+// (label value), `uri` (post). Piggy-backing on this gives us
+// labeler coverage without standing up our own subscription.
+interface AppViewLabel {
+  src?: string;
+  val?: string;
+  uri?: string;
+}
+
 interface AppViewPost {
   uri?: string;
   author?: AppViewAuthor;
   likeCount?: number;
   repostCount?: number;
   replyCount?: number;
+  labels?: AppViewLabel[];
 }
 
 interface GetPostsResponse {
@@ -166,6 +190,7 @@ export class BskyEngagementPoller {
   private readonly minFollowers: number;
   private readonly declineAfterDays: number;
   private readonly pollIntervalSec: number;
+  private readonly nsfwLabels: Set<string>;
 
   // Injectable for unit tests.
   constructor(
@@ -178,6 +203,10 @@ export class BskyEngagementPoller {
     this.minFollowers = readPositiveInt('BSKY_MIN_FOLLOWERS', DEFAULT_MIN_FOLLOWERS);
     this.declineAfterDays = readPositiveInt('BSKY_DECLINE_AFTER_DAYS', DEFAULT_DECLINE_AFTER_DAYS);
     this.pollIntervalSec = readPositiveInt('BSKY_POLL_INTERVAL_SEC', DEFAULT_POLL_INTERVAL_SEC);
+    const labelsEnv = process.env.BSKY_NSFW_LABELS;
+    this.nsfwLabels = labelsEnv
+      ? new Set(labelsEnv.split(',').map((s) => s.trim()).filter(Boolean))
+      : DEFAULT_NSFW_LABELS;
   }
 
   start(): void {
@@ -308,6 +337,33 @@ export class BskyEngagementPoller {
         updates.push({ row, engagement: null, author: null, newState });
         continue;
       }
+      // Labeler check first. The `labels` array on a postView is
+      // the AppView's aggregated view (creator self-labels + any
+      // labelers Bluesky's AppView subscribes to, including their
+      // first-party moderation labeler). If a post is tagged NSFW,
+      // demote/decline it regardless of engagement.
+      const labels = post.labels ?? [];
+      const labelHit = labels.some((lbl) => lbl?.val && this.nsfwLabels.has(lbl.val));
+      if (labelHit) {
+        declined += 1;
+        updates.push({
+          row,
+          engagement: {
+            likeCount: post.likeCount ?? 0,
+            repostCount: post.repostCount ?? 0,
+            replyCount: post.replyCount ?? 0,
+          },
+          author: {
+            handle: post.author?.handle ?? '',
+            displayName: post.author?.displayName ?? null,
+            avatar: post.author?.avatar ?? null,
+            followersCount: followersByDid.get(row.bsky_did) ?? row.author_followers_count ?? null,
+          },
+          newState: 'declined',
+        });
+        continue;
+      }
+
       const likeCount = post.likeCount ?? 0;
       const repostCount = post.repostCount ?? 0;
       const replyCount = post.replyCount ?? 0;

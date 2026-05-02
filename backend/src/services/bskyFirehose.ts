@@ -46,11 +46,22 @@ interface JetstreamVideoEmbed {
   aspectRatio?: JetstreamAspectRatio;
 }
 
+// Per `com.atproto.label.defs#selfLabels` — creators self-apply
+// labels like "porn" / "sexual" / "nudity" / "graphic-media".
+// Bluesky's TOS requires labelling and the firehose carries them
+// directly on the record, so we can drop NSFW posts at index time
+// without subscribing to a separate labeler service.
+interface JetstreamSelfLabels {
+  $type?: string;
+  values?: { val?: string }[];
+}
+
 interface JetstreamPostRecord {
   $type?: string;
   text?: string;
   createdAt?: string;
   embed?: JetstreamVideoEmbed;
+  labels?: JetstreamSelfLabels;
 }
 
 interface JetstreamCommit {
@@ -79,6 +90,19 @@ const JETSTREAM_BASE_URL =
 // Default reject horizontal videos. Tuneable per ADR-010-A; see
 // BSKY_ASPECT_MIN env var note in `.env.example`.
 const DEFAULT_ASPECT_MIN = 1.0;
+
+// Self-applied labels that cause the post to be rejected at index
+// time. Bluesky's TOS + first-party app push creators to self-label
+// NSFW content; the firehose carries those labels on the record
+// itself so we can filter without a separate labeler subscription.
+// Override per-deploy via BSKY_NSFW_LABELS (comma-separated).
+const DEFAULT_NSFW_LABELS = new Set([
+  'porn',
+  'sexual',
+  'nudity',
+  'graphic-media',
+  'gore',
+]);
 
 const RECONNECT_INITIAL_MS = 1_000;
 const RECONNECT_MAX_MS = 30_000;
@@ -119,7 +143,8 @@ export interface FilteredVideoEvent {
 
 export function filterEvent(
   event: JetstreamEvent,
-  aspectMin: number = DEFAULT_ASPECT_MIN
+  aspectMin: number = DEFAULT_ASPECT_MIN,
+  nsfwLabels: Set<string> = DEFAULT_NSFW_LABELS
 ): FilteredVideoEvent | null {
   if (event.kind !== 'commit') return null;
   if (event.commit?.operation !== 'create') return null;
@@ -127,6 +152,16 @@ export function filterEvent(
 
   const embed = event.commit.record?.embed;
   if (embed?.$type !== 'app.bsky.embed.video') return null;
+
+  // Self-label NSFW reject. Catches creator-tagged
+  // porn/sexual/nudity/graphic-media at index time; doesn't catch
+  // unlabeled NSFW (that's the engagement poller's job — its
+  // getPosts response carries labels too, including ones added by
+  // labelers post-publish).
+  const labelValues = event.commit.record?.labels?.values ?? [];
+  for (const lbl of labelValues) {
+    if (lbl?.val && nsfwLabels.has(lbl.val)) return null;
+  }
 
   // No aspectRatio → reject. A vertical feed cannot render an
   // unsized video; same call the sampler makes (no_aspect bucket
@@ -212,6 +247,7 @@ export class BskyFirehoseService {
   private reconnectDelayMs = RECONNECT_INITIAL_MS;
   private cursor: string | null = null;
   private aspectMin: number;
+  private nsfwLabels: Set<string>;
 
   // Injectable for the unit test (default uses real `query`).
   constructor(
@@ -221,6 +257,11 @@ export class BskyFirehoseService {
     const envVal = process.env.BSKY_ASPECT_MIN;
     const parsed = envVal !== undefined ? Number(envVal) : NaN;
     this.aspectMin = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_ASPECT_MIN;
+
+    const labelsEnv = process.env.BSKY_NSFW_LABELS;
+    this.nsfwLabels = labelsEnv
+      ? new Set(labelsEnv.split(',').map((s) => s.trim()).filter(Boolean))
+      : DEFAULT_NSFW_LABELS;
   }
 
   async start(): Promise<void> {
@@ -319,7 +360,7 @@ export class BskyFirehoseService {
       return;
     }
 
-    const filtered = filterEvent(event, this.aspectMin);
+    const filtered = filterEvent(event, this.aspectMin, this.nsfwLabels);
     if (!filtered) return;
 
     try {
