@@ -9,6 +9,7 @@ import { initializeDatabase } from './db';
 import authRoutes from './routes/auth';
 import videoRoutes from './routes/videos';
 import { seeder } from './services/seeder';
+import { bskyFirehose } from './services/bskyFirehose';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -131,6 +132,16 @@ async function start() {
       // Continue without seeder - not critical
     }
 
+    // Phase 3 Unit 2.5 — start the Bluesky Jetstream subscriber.
+    // Indexes inbound video posts into `bridged_posts (state=pending)`.
+    // Failures here are non-fatal; bridge can come up later.
+    try {
+      await bskyFirehose.start();
+      console.log('🔵 Bluesky Jetstream subscriber started');
+    } catch (err) {
+      console.warn('⚠️ Failed to start Bluesky Jetstream subscriber:', err);
+    }
+
     // Start listening
     app.listen(PORT, () => {
       console.log('');
@@ -151,6 +162,7 @@ async function start() {
 // Handle graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('Received SIGTERM, shutting down...');
+  bskyFirehose.stop();
   await seeder.destroy();
   process.exit(0);
 });

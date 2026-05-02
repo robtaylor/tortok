@@ -145,3 +145,73 @@ DROP TRIGGER IF EXISTS update_video_count_trigger ON videos;
 CREATE TRIGGER update_video_count_trigger
 AFTER INSERT OR DELETE ON videos
 FOR EACH ROW EXECUTE FUNCTION update_video_count();
+
+-- ─── Phase 3 Unit 2.5 — inbound Bluesky bridge (ADR-010 + ADR-010-A) ───
+-- Indexes posts from Bluesky's Jetstream that match the v1 filter stack
+-- (aspect ratio + opt-out + popularity + labelers). Mirror-state machine
+-- governs which rows surface in the feed:
+--   pending  — passed index filters, awaiting engagement promotion
+--   mirrored — promoted, bytes copied to R2, magnet generated
+--   declined — never qualified within decline window
+--   expired  — mirror decayed (re-mirror on re-promotion)
+-- Only `mirrored` rows appear in the feed (single-playback-path
+-- invariant). Engagement + mirror columns null/default until the
+-- engagement poller and mirror pipeline (later slices) populate them.
+-- Schema separate from `videos` per ADR-010-A; Unit 4 may merge later.
+CREATE TABLE IF NOT EXISTS bridged_posts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    -- Identity / dedup
+    bsky_at_uri TEXT NOT NULL UNIQUE,
+    bsky_did TEXT NOT NULL,
+    bsky_handle TEXT,
+    bsky_display_name TEXT,
+    bsky_avatar_url TEXT,
+    -- Record content
+    text TEXT,
+    video_cid TEXT NOT NULL,
+    video_bsky_playlist_url TEXT NOT NULL,
+    poster_url TEXT,
+    duration_ms INTEGER,
+    width INTEGER,
+    height INTEGER,
+    aspect_ratio_w INTEGER,
+    aspect_ratio_h INTEGER,
+    -- Filter signals (opt-out check stubbed in this slice — always-false)
+    author_excluded BOOLEAN DEFAULT FALSE,
+    -- Timestamps
+    record_created_at TIMESTAMPTZ,
+    indexed_at TIMESTAMPTZ DEFAULT NOW(),
+    -- Engagement (poller writes; null until first poll)
+    like_count INTEGER,
+    repost_count INTEGER,
+    reply_count INTEGER,
+    author_followers_count INTEGER,
+    engagement_polled_at TIMESTAMPTZ,
+    -- Mirror state machine
+    mirror_state TEXT NOT NULL DEFAULT 'pending'
+        CHECK (mirror_state IN ('pending', 'mirrored', 'declined', 'expired')),
+    mirrored_at TIMESTAMPTZ,
+    r2_path TEXT,
+    magnet_link TEXT,
+    torrent_file_url TEXT,
+    last_played_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_bridged_posts_state_indexed_at
+    ON bridged_posts(mirror_state, indexed_at);
+CREATE INDEX IF NOT EXISTS idx_bridged_posts_state_record_created_at
+    ON bridged_posts(mirror_state, record_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_bridged_posts_bsky_did
+    ON bridged_posts(bsky_did);
+CREATE INDEX IF NOT EXISTS idx_bridged_posts_state_last_played_at
+    ON bridged_posts(mirror_state, last_played_at);
+
+-- Single-row table for the Jetstream cursor (atproto `time_us` value).
+-- Persisted as TEXT to side-step int width concerns on BIGINT-ish values.
+-- Cursor is updated AFTER successful inserts so a crash mid-insert
+-- replays from the last committed event on restart.
+CREATE TABLE IF NOT EXISTS bridge_cursor (
+    key TEXT PRIMARY KEY,
+    cursor TEXT,
+    updated_at TIMESTAMPTZ
+);
