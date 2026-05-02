@@ -1,6 +1,7 @@
 {
   "private": true,
   "scripts": {
+    "deploy:web": "bash scripts/deploy-web.sh",
     "smoke:atproto": "node scripts/atproto-smoke-test.mjs",
     "smoke:r2": "node scripts/r2-smoke-test.mjs"
   },
@@ -10,6 +11,6 @@
     "dotenv": "^16.4.0"
   },
   "devDependencies": {
-    "wrangler": "^4.83.0"
+    "wrangler": "^4.87.0"
   }
 }
