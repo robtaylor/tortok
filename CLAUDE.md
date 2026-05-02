@@ -9,25 +9,41 @@ with the user rather than pushing forward on your own.
 
 Before doing any non-trivial work, read (in this order):
 
-1. **`docs/architecture/decisions.md`** — The source of truth for
-   every architectural decision. Nine ADRs + a Phase 0 punch list
-   appendix + an "Unresolved design problems" section + an
-   "Execution risks" section, each with resolve-by phases. If a
-   decision is recorded here, it is the decision; do not re-litigate
-   it without a reason.
+1. **`docs/architecture/decisions.md`** — Index of all ADRs.
+   Each ADR lives as its own file at `docs/architecture/adr/NNNN-*.md`.
+   The index also collects "Unresolved design problems",
+   "Execution risks", "Deferred decisions", and Appendix A. If a
+   decision is recorded under `adr/`, it is the decision; do not
+   re-litigate without a reason.
 2. **`docs/architecture/open-problems/`** — Things we have
-   deliberately *not* decided yet. Three files (`view-counting.md`,
-   `seeding-policy.md`, `monetization.md`), each with a
-   `Must resolve by:` header stating which phase forces the
-   decision. (`moderation.md` was resolved 2026-04-29 by ADR-013;
-   `own-pds.md` is parked.)
-3. **Appendix A in `decisions.md`** — The Phase 0 punch list: bugs
-   (B1–B6), security footguns (S1–S4), libtorrent cleanup, doc
-   cleanup. This is the concrete work Phase 0a consumes.
+   deliberately *not* decided yet. Each file has a `Must resolve by:`
+   header stating which phase forces the decision.
+3. **`docs/plans/<phase>.md`** — The active phase plan with units,
+   status annotations, and exit criteria. Currently
+   `docs/plans/phase-3-atproto.md`.
+4. **`docs/handoffs/`** — In-flight working memory (zero or one
+   file). See `docs/handoff-discipline.md` for the rules.
 
 These four locations are the whole map. If you find yourself looking
 elsewhere for architectural intent, something is missing from the
 map — tell the user so we can fix it.
+
+## Handoffs
+
+This project treats handoffs as ephemeral working memory, not
+historical record. When you write one, follow
+`docs/handoff-discipline.md` — markdown at
+`docs/handoffs/<topic>-handoff.md`, sibling to (not inside)
+`docs/plans/`. At resolution, fold the content into ADRs / plan docs
+/ open-problems / code comments, then delete the handoff file.
+Exactly one handoff exists at a time; resolved ones are removed,
+not archived. The `git log -- docs/handoffs/` history is the audit
+trail.
+
+Skill activations for `create_handoff` / `resume_handoff` from
+external Claude Code toolkits will sometimes default to YAML under
+`thoughts/shared/handoffs/` with database indexing — that doesn't
+apply here. Override and follow the project convention.
 
 ## Phases of development
 
@@ -93,20 +109,32 @@ Most changes don't need a checkpoint. These do:
 When you make an architectural decision or learn something that
 changes one:
 
-- **New decision** → add an ADR to `decisions.md`. Number it
-  sequentially. Include Status, Context, Decision, Consequences,
-  Alternatives ruled out.
-- **Open problem resolved** → write the ADR, then *delete* the file
-  in `open-problems/` (don't leave a stale stub). Update the Open
-  questions list in `decisions.md` to mark it resolved.
+- **New decision** → add a new file at
+  `docs/architecture/adr/NNNN-slug.md` (number sequentially after the
+  highest existing). Include Status, Context, Decision, Consequences,
+  Alternatives ruled out. Add a row to the ADR table in
+  `decisions.md`.
+- **Amend an existing ADR** → edit that ADR's file directly with a
+  dated Amendment block. Update the Status line in both the ADR and
+  the index row in `decisions.md`.
+- **Supersede an ADR** → write a new ADR with `Supersedes: ADR-NNN`
+  in the Status line. Mark the old ADR's Status as `Superseded by
+  ADR-MMM`.
+- **Open problem resolved** → write the ADR (per above), then
+  *delete* the file in `open-problems/` (don't leave a stale stub).
+  Update the "Unresolved design problems" section in `decisions.md`
+  to mark it resolved.
 - **New open problem** → add a file in `open-problems/` with the
   standard header (Status, Must resolve by, Blocks, Related ADRs)
-  and add a pointer in the Open questions section of `decisions.md`.
-- **Phase complete** → update ADR-006's phase status and this
-  CLAUDE.md's "currently entering" line.
+  and add a bullet in the "Unresolved design problems" section of
+  `decisions.md`.
+- **Phase complete** → update ADR-006's phase status, this CLAUDE.md's
+  "currently entering" line, and the active plan in
+  `docs/plans/<phase>.md`.
 
-## The decisions doc is not frozen
+## ADRs are not frozen
 
 If you find a real reason to revisit a decision, say so. "ADR-004
 assumed X; we now know Y; here's what changes" is a valid move. The
-rule is that changes are deliberate and written down, not silent.
+rule is that changes are deliberate and written down (as Amendments
+or new superseding ADRs), not silent.
