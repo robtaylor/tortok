@@ -1349,6 +1349,21 @@ inverted by this amendment.
      content does **not** appear with a Bluesky-CDN fallback —
      preserving the "single playback path" invariant.
 
+**Mirror format note (added 2026-05-02 follow-up).** Bridged
+content is remuxed from HLS to single-file MP4 at mirror time
+(`ffmpeg -c copy -bsf:a aac_adtstoasc`, no re-encode — ~1s per
+video). The resulting torrent has one file, matching the native
+pipeline. This avoids unreliable multi-file webseed behaviour in
+webtorrent.js on Hermes and unifies the playback path with
+native videos. Bytes are still ours (R2-hosted), the
+streaming-start benefit of HLS segments is irrelevant for ≤60s
+vertical-feed video, and adaptive bitrate isn't a thing here
+(Bluesky CDN serves a single bitrate per post). Storage cost of
+one MP4 ≈ sum of HLS segments minus segment-overhead — effectively
+a wash. R2 layout shifts from `bridged/<did>/<cid>/` (a directory)
+to `bridged/<did>/<cid>.mp4` (a file); decay handles both shapes
+for backwards-compatibility with rows mirrored before this change.
+
 **Consequence deltas (from the original ADR-010 Consequences
 section).**
 

@@ -36,19 +36,20 @@ function parseRange(
 }
 
 function contentTypeFor(name: string): string {
-  if (name.endsWith('.m3u8')) return 'application/vnd.apple.mpegurl';
-  if (name.endsWith('.ts')) return 'video/mp2t';
   if (name.endsWith('.mp4')) return 'video/mp4';
   if (name.endsWith('.webm')) return 'video/webm';
   return 'application/octet-stream';
 }
 
-/** Pick the best "entry" file: prefer .m3u8 playlist, else largest file. */
+// All torrents flowing through the app are single-file MP4s now —
+// native fixtures are pre-muxed MP4s, and bridged Bluesky content is
+// remuxed from HLS to single-file MP4 at mirror time per ADR-010
+// Amendment 2026-05-02 (multi-file webseed via webtorrent.js was
+// unreliable on Hermes; single-file pipeline avoids the issue
+// entirely). pickEntry stays simple: largest file wins, which for
+// a single-file torrent is just the only file.
 function pickEntry(files: TorrentFile[]): TorrentFile | undefined {
-  return (
-    files.find((f) => f.name.endsWith('.m3u8')) ??
-    [...files].sort((a, b) => b.length - a.length)[0]
-  );
+  return [...files].sort((a, b) => b.length - a.length)[0];
 }
 
 // ---------------------------------------------------------------------------

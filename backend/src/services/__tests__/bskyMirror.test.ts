@@ -60,6 +60,8 @@ interface MockEnv {
   // Torrent generation:
   torrentBytes?: Uint8Array;
   torrentGenFails?: boolean;
+  // ffmpeg mux:
+  muxFails?: boolean;
 }
 
 interface S3Call {
@@ -207,6 +209,7 @@ interface Built {
   calls: QueryCall[];
   s3Calls: S3Call[];
   mockFetch: jest.Mock;
+  muxFn: jest.Mock;
 }
 
 function buildService(env: MockEnv): Built {
@@ -220,6 +223,15 @@ function buildService(env: MockEnv): Built {
   const magnetFromTorrent = jest.fn((_buf: Uint8Array, _name: string) => {
     return 'magnet:?xt=urn:btih:deadbeef0000000000000000000000000000beef';
   });
+  // Default mux: write a tiny fake MP4 at the output path so the
+  // production code's subsequent fsp.readFile + R2 PutObject + torrent
+  // generation steps have something to operate on. Tests that want
+  // to exercise the ffmpeg-fail branch set env.muxFails.
+  const muxFn = jest.fn(async (_inPath: string, outPath: string) => {
+    if (env.muxFails) throw new Error('ffmpeg exited with code 183');
+    const fsp = await import('fs/promises');
+    await fsp.writeFile(outPath, Buffer.from([0x00, 0x00, 0x00, 0x18])); // 4 bytes
+  });
   const svc = new BskyMirrorService({
     db: mockDb as any,
     fetchFn: mockFetch as any,
@@ -229,10 +241,11 @@ function buildService(env: MockEnv): Built {
     webseedBase: 'https://pub-test.r2.dev',
     torrentFromDir: torrentGen as any,
     magnetFromTorrent: magnetFromTorrent as any,
+    muxFn: muxFn as any,
     nowFn: () => NOW,
     trackers: ['wss://tracker.test'],
   });
-  return { svc, calls, s3Calls, mockFetch };
+  return { svc, calls, s3Calls, mockFetch, muxFn };
 }
 
 // ─── Tests: mirror tick ──────────────────────────────────────────
@@ -256,7 +269,7 @@ describe('BskyMirrorService.runMirrorOnce', () => {
     expect(calls.filter((c) => /UPDATE\s+bridged_posts/i.test(c.sql))).toHaveLength(0);
   });
 
-  test('healthy mirror: playlist + 2 segments → uploads playlist + segments + .torrent, UPDATEs row', async () => {
+  test('healthy mirror: HLS remuxed to single MP4 → uploads MP4 + .torrent, UPDATEs row', async () => {
     const row = makeRow();
     const playlist =
       '#EXTM3U\n' +
@@ -267,36 +280,53 @@ describe('BskyMirrorService.runMirrorOnce', () => {
       '#EXTINF:6.0,\n' +
       'segment1.ts\n' +
       '#EXT-X-ENDLIST\n';
-    const { svc, calls, s3Calls } = buildService({
+    const { svc, calls, s3Calls, muxFn } = buildService({
       mirrorRows: [row],
       playlistResponse: { body: playlist },
     });
 
     await svc.runMirrorOnce();
 
-    // S3 upload calls: 2 segments + 1 playlist + 1 .torrent = 4 PutObject.
-    const puts = s3Calls.filter((c) => c.command === 'PutObjectCommand');
-    expect(puts).toHaveLength(4);
-    const keys = puts.map((p) => p.input.Key);
-    expect(keys).toContain('bridged/did:plc:abc/bafkreVideoCid/playlist.m3u8');
-    expect(keys).toContain('bridged/did:plc:abc/bafkreVideoCid/segment0.ts');
-    expect(keys).toContain('bridged/did:plc:abc/bafkreVideoCid/segment1.ts');
-    expect(keys.some((k) => k.endsWith('.torrent'))).toBe(true);
+    // ffmpeg muxer was called exactly once with playlist input and
+    // .mp4 output (both are tmp paths; we just verify the suffixes).
+    expect(muxFn).toHaveBeenCalledTimes(1);
+    const [muxIn, muxOut] = muxFn.mock.calls[0]!;
+    expect(String(muxIn)).toMatch(/playlist\.m3u8$/);
+    expect(String(muxOut)).toMatch(/bafkreVideoCid\.mp4$/);
 
-    // UPDATE row.
+    // S3 uploads: 1 MP4 + 1 .torrent (no per-segment uploads).
+    const puts = s3Calls.filter((c) => c.command === 'PutObjectCommand');
+    expect(puts).toHaveLength(2);
+    const keys = puts.map((p) => p.input.Key);
+    expect(keys).toContain('bridged/did:plc:abc/bafkreVideoCid.mp4');
+    expect(keys).toContain('bridged/did:plc:abc/bafkreVideoCid.mp4.torrent');
+
+    // UPDATE row writes r2_path = file key (no trailing slash; ends .mp4).
     const updates = calls.filter((c) => /UPDATE\s+bridged_posts/i.test(c.sql));
     expect(updates).toHaveLength(1);
     const params = updates[0]!.params!;
-    // r2_path
-    expect(params).toContain('bridged/did:plc:abc/bafkreVideoCid/');
-    // magnet_link
+    expect(params).toContain('bridged/did:plc:abc/bafkreVideoCid.mp4');
     expect(params.some((p: any) => typeof p === 'string' && p.startsWith('magnet:?xt='))).toBe(true);
-    // torrent_file_url (R2 public URL of .torrent)
     expect(
-      params.some((p: any) => typeof p === 'string' && p.includes('.torrent'))
+      params.some((p: any) => typeof p === 'string' && p.endsWith('.mp4.torrent'))
     ).toBe(true);
-    // The id is in the params.
     expect(params).toContain('row-1');
+  });
+
+  test('ffmpeg mux failure → no R2 calls, no UPDATE; row left for retry', async () => {
+    const row = makeRow();
+    const playlist = '#EXTM3U\n#EXTINF:6.0,\nsegment0.ts\n#EXT-X-ENDLIST\n';
+    const { svc, calls, s3Calls, muxFn } = buildService({
+      mirrorRows: [row],
+      playlistResponse: { body: playlist },
+      muxFails: true,
+    });
+
+    await svc.runMirrorOnce();
+
+    expect(muxFn).toHaveBeenCalledTimes(1);
+    expect(s3Calls.filter((c) => c.command === 'PutObjectCommand')).toHaveLength(0);
+    expect(calls.filter((c) => /UPDATE\s+bridged_posts/i.test(c.sql))).toHaveLength(0);
   });
 
   test('playlist 404 → no R2 calls, no UPDATE; row unchanged for retry', async () => {
@@ -354,11 +384,14 @@ describe('BskyMirrorService.runMirrorOnce', () => {
 
     await svc.runMirrorOnce();
 
-    // R2 should contain the high-variant segment, not the low one.
+    // After the variant pivot the resolved sub-playlist is muxed and
+    // a single MP4 + .torrent are uploaded — exactly two PutObjects,
+    // both keyed under the row's cid, no per-segment uploads.
     const puts = s3Calls.filter((c) => c.command === 'PutObjectCommand');
+    expect(puts).toHaveLength(2);
     const keys = puts.map((p) => p.input.Key);
-    expect(keys.some((k) => k.includes('high-seg0.ts'))).toBe(true);
-    expect(keys.some((k) => k.includes('low'))).toBe(false);
+    expect(keys).toContain('bridged/did:plc:abc/bafkreVideoCid.mp4');
+    expect(keys).toContain('bridged/did:plc:abc/bafkreVideoCid.mp4.torrent');
 
     const updates = calls.filter((c) => /UPDATE\s+bridged_posts/i.test(c.sql));
     expect(updates).toHaveLength(1);

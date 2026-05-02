@@ -3,13 +3,26 @@
 // Consumes `bridged_posts` rows in `mirror_state = 'mirrored' AND
 // r2_path IS NULL` (newly-promoted by the engagement poller, no
 // bytes copied yet), fetches the source HLS playlist + segments
-// from Bluesky's video CDN, re-uploads them to R2 under
-// `bridged/{did}/{cid}/`, generates a `.torrent` whose webseed
-// points at the R2-fronted public URL, and writes the result back
-// onto the row. After this, client playback uses ADR-008's
-// pipeline (R2 = origin, our trackers = discovery, webseed via
-// the R2 public host) — one playback path for both native and
-// bridged content.
+// from Bluesky's video CDN, remuxes them into a single-file MP4
+// with ffmpeg (no re-encode — `-c copy -bsf:a aac_adtstoasc`),
+// uploads that MP4 to R2 at `bridged/{did}/{cid}.mp4`, generates a
+// single-file `.torrent` whose webseed points at the R2-fronted
+// public URL of the MP4, and writes the result back onto the row.
+// After this, client playback uses ADR-008's pipeline (R2 =
+// origin, our trackers = discovery, webseed via the R2 public
+// host) — one playback path for both native and bridged content.
+//
+// Why MP4, not HLS? WebTorrent's multi-file webseed path on
+// Hermes (the React Native JS engine) has been observed to never
+// download segment data from R2 — AVPlayer hangs forever after
+// the playlist loads. Native test fixtures already work because
+// they're pre-muxed single-file MP4s. Remuxing bridged content
+// at mirror time brings it into the same shape, keeping ADR-010-A's
+// "single playback path" goal intact in practice. ffmpeg `-c copy`
+// just repackages the codec data, completes in ~1s, and HLS adds
+// nothing for ≤60s vertical-feed video (no adaptive bitrate —
+// Bluesky CDN serves a single bitrate; "streaming start" is
+// irrelevant at this duration).
 //
 // Pipeline (per ADR-010-A Decision 4''):
 //   firehose → pending → poller → [mirror: this file] → r2_path set
@@ -20,7 +33,7 @@
 //
 // A separate decay loop walks `mirrored AND r2_path IS NOT NULL`
 // rows whose `last_played_at` (or `mirrored_at` for never-played)
-// is older than `BSKY_DECAY_DAYS`, deletes the R2 prefix, and
+// is older than `BSKY_DECAY_DAYS`, deletes the R2 object(s), and
 // transitions the row to `expired`. Re-mirror on demand from
 // `expired` is slice 4's responsibility (the feed endpoint will
 // touch `last_played_at` and flip `expired → mirrored AND r2_path
@@ -39,6 +52,7 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs';
 import { promises as fsp } from 'fs';
+import { spawn } from 'child_process';
 import { query } from '../db';
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -60,14 +74,27 @@ interface S3Like {
   send(cmd: any): Promise<any>;
 }
 
-// Torrent generator — given a directory + a torrent name + tracker
-// config, return the .torrent file bytes. Default uses
-// `create-torrent` (dynamically imported). Test injects a stub.
+// Torrent generator — given an input path (file OR directory) + a
+// torrent name + tracker config, return the .torrent file bytes.
+// Default uses `create-torrent` (dynamically imported). Test
+// injects a stub. After the 2026-05-02 follow-up the production
+// path always passes a single MP4 file path (single-file torrent);
+// the type stays generic so test stubs don't have to care.
 type TorrentFromDirFn = (
-  dir: string,
+  inputPath: string,
   name: string,
   opts: { announce: string[]; urlList: string[] }
 ) => Promise<Uint8Array>;
+
+// Remuxer — given an input HLS playlist on disk + an output MP4
+// path, run ffmpeg `-c copy -bsf:a aac_adtstoasc` and return when
+// the file exists on disk (or reject with stderr if ffmpeg failed).
+// Default uses `child_process.spawn`; tests inject a stub that
+// records the args and writes a fake output file.
+type MuxFn = (
+  inputPlaylistPath: string,
+  outputMp4Path: string
+) => Promise<void>;
 
 // Torrent → magnet helper. Default uses `parse-torrent`. Async to
 // accommodate both sync test stubs (returning a string directly)
@@ -94,6 +121,8 @@ interface BskyMirrorOpts {
   webseedBase?: string;
   torrentFromDir?: TorrentFromDirFn;
   magnetFromTorrent?: MagnetFromTorrentFn;
+  muxFn?: MuxFn;
+  ffmpegPath?: string;
   nowFn?: () => Date;
   trackers?: string[];
 }
@@ -217,6 +246,8 @@ export class BskyMirrorService {
   private readonly webseedBase: string;
   private readonly torrentFromDir: TorrentFromDirFn;
   private readonly magnetFromTorrent: MagnetFromTorrentFn;
+  private readonly muxFn: MuxFn;
+  private readonly ffmpegPath: string;
   private readonly nowFn: () => Date;
   private readonly trackers: string[];
 
@@ -240,6 +271,13 @@ export class BskyMirrorService {
     // a wrapper that does the dynamic import once and caches it.
     this.torrentFromDir = opts.torrentFromDir ?? defaultTorrentFromDir;
     this.magnetFromTorrent = opts.magnetFromTorrent ?? defaultMagnetFromTorrent;
+
+    // ffmpeg remux: default uses child_process.spawn against
+    // BSKY_FFMPEG_PATH (or `ffmpeg` on PATH). Tests inject a stub
+    // that writes a fake output and resolves.
+    this.ffmpegPath =
+      opts.ffmpegPath ?? process.env.BSKY_FFMPEG_PATH ?? 'ffmpeg';
+    this.muxFn = opts.muxFn ?? defaultMuxFactory(this.ffmpegPath);
 
     this.mirrorIntervalSec = readPositiveInt(
       'BSKY_MIRROR_INTERVAL_SEC',
@@ -277,11 +315,37 @@ export class BskyMirrorService {
       `[BskyMirror] started (mirror_interval=${this.mirrorIntervalSec}s, ` +
         `mirror_batch=${this.mirrorBatch}, decay_days=${this.decayDays}, ` +
         `decay_interval=${this.decayIntervalSec}s, bucket=${this.bucket}, ` +
-        `webseed_base=${this.webseedBase})`
+        `webseed_base=${this.webseedBase}, ffmpeg=${this.ffmpegPath})`
     );
+    // Best-effort ffmpeg reachability check. Non-fatal: if ffmpeg
+    // is missing the engagement poller still does useful work; we
+    // just log a clear warning so it's obvious why mirror ticks
+    // start failing.
+    void this.checkFfmpegReachable();
     // Fire one tick immediately on boot for fast feedback in dev.
     void this.mirrorTick();
     void this.decayTick();
+  }
+
+  private async checkFfmpegReachable(): Promise<void> {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn(this.ffmpegPath, ['-version']);
+        child.on('error', (err) => reject(err));
+        child.on('close', (code) => {
+          if (code === 0) resolve();
+          else reject(new Error(`ffmpeg -version exited ${code}`));
+        });
+      });
+      console.log(`[BskyMirror] ffmpeg reachable at ${this.ffmpegPath}`);
+    } catch (err) {
+      console.warn(
+        `[BskyMirror] ffmpeg NOT reachable at ${this.ffmpegPath} ` +
+          `(${(err as Error)?.message ?? err}). ` +
+          `Mirror pipeline will fail until ffmpeg is installed. ` +
+          `Set BSKY_FFMPEG_PATH or install ffmpeg on PATH.`
+      );
+    }
   }
 
   stop(): void {
@@ -356,7 +420,11 @@ export class BskyMirrorService {
   }
 
   private async mirrorOne(row: MirrorRow): Promise<void> {
-    const r2Prefix = `bridged/${row.bsky_did}/${row.video_cid}/`;
+    // r2_path is the FULL OBJECT KEY of the muxed MP4 (no trailing
+    // slash). The .torrent is co-located at `<r2Path>.torrent`.
+    const r2Mp4Key = `bridged/${row.bsky_did}/${row.video_cid}.mp4`;
+    const r2TorrentKey = `${r2Mp4Key}.torrent`;
+    const torrentName = `${row.video_cid}.mp4`;
     const playlistUrl = row.video_bsky_playlist_url;
 
     // 1. Fetch + parse the source playlist. Resolve variant playlists
@@ -366,19 +434,20 @@ export class BskyMirrorService {
       playlistUrl
     );
 
-    // 2. Stage to a temp dir on disk so create-torrent can hash a
-    //    contiguous file set. (create-torrent supports streams in
-    //    theory, but the directory-based path is much simpler and
-    //    matches what `seeder.ts` does for native uploads.)
+    // 2. Stage to a temp dir on disk so ffmpeg has a coherent input
+    //    tree (playlist + segments resolved by relative URI).
     const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'bsky-mirror-'));
     try {
       // Write the playlist file with the same basename as the source
-      // (`playlist.m3u8`) so its relative segment paths resolve when
-      // served from R2. Don't rewrite the playlist text.
+      // (`playlist.m3u8`) so its relative segment paths resolve from
+      // disk for ffmpeg's input. Don't rewrite the playlist text.
       const playlistBasename = basenameFromUrl(playlistUrl);
-      await fsp.writeFile(path.join(tmpDir, playlistBasename), playlistText);
+      const playlistPath = path.join(tmpDir, playlistBasename);
+      await fsp.writeFile(playlistPath, playlistText);
 
-      // 3. Stream each segment to disk + R2 in parallel.
+      // 3. Stream each segment to disk in parallel. Segments are
+      //    NOT uploaded to R2 directly anymore — only the resulting
+      //    muxed MP4 is.
       const segDownloads = segmentUrls.map(async (segUrl) => {
         const res = await this.fetchFn(segUrl);
         if (!res.ok) {
@@ -387,57 +456,50 @@ export class BskyMirrorService {
         const buf = Buffer.from(await res.arrayBuffer());
         const segName = basenameFromUrl(segUrl);
         await fsp.writeFile(path.join(tmpDir, segName), buf);
-        return { segName, buf };
+        return { segName, byteLen: buf.length };
       });
       const segs = await Promise.all(segDownloads);
 
-      // 4. Upload playlist + every segment to R2.
-      const s3 = await this.getS3Client();
-      // Lazy-import the S3 commands so test doubles don't need them.
-      const cmds = await this.getS3Commands();
+      // 4. Remux HLS → single-file MP4. `-c copy` keeps the codec
+      //    bytes intact (no re-encode); `-bsf:a aac_adtstoasc` is
+      //    required when going from .ts (ADTS framing) to .mp4
+      //    (ASC framing). If ffmpeg fails, we throw and the row is
+      //    left unchanged for next-tick retry.
+      const mp4Path = path.join(tmpDir, torrentName);
+      await this.muxFn(playlistPath, mp4Path);
 
-      const playlistBytes = Buffer.from(playlistText, 'utf-8');
+      const mp4Buf = await fsp.readFile(mp4Path);
+
+      // 5. Upload the muxed MP4 to R2 (single PutObject).
+      const s3 = await this.getS3Client();
+      const cmds = await this.getS3Commands();
       await s3.send(
         new cmds.PutObjectCommand({
           Bucket: this.bucket,
-          Key: `${r2Prefix}${playlistBasename}`,
-          Body: playlistBytes,
-          ContentType: 'application/vnd.apple.mpegurl',
+          Key: r2Mp4Key,
+          Body: mp4Buf,
+          ContentType: 'video/mp4',
         })
       );
-      for (const { segName, buf } of segs) {
-        await s3.send(
-          new cmds.PutObjectCommand({
-            Bucket: this.bucket,
-            Key: `${r2Prefix}${segName}`,
-            Body: buf,
-            ContentType: contentTypeForSegment(segName),
-          })
-        );
-      }
 
-      // 5. Generate the .torrent. Webseed = the R2 public-URL prefix
-      //    so WebTorrent peers without seeders fall back to HTTP.
-      const torrentName = row.video_cid; // unique-per-video; collision-safe.
-      // BEP-19 multi-file webseed: when urlList ends in `/`, clients
-      // construct `<urlList><name>/<filePath>` — i.e. they re-insert
-      // the torrent name as a path segment. So the webseed URL must
-      // be the *parent* of the cid directory, not the cid itself, or
-      // we'd end up requesting `bridged/<did>/<cid>/<cid>/playlist.m3u8`
-      // (doubled cid — 404 in R2).
-      const r2Parent = r2Prefix.replace(/[^/]+\/$/, ''); // drop last segment
-      const webseedUrl = `${this.webseedBase.replace(/\/$/, '')}/${r2Parent}`;
-      const torrentBytes = await this.torrentFromDir(tmpDir, torrentName, {
+      // 6. Generate the single-file .torrent. Pass the MP4 file
+      //    path (not the dir) so create-torrent produces a
+      //    single-file torrent with `info.name = <cid>.mp4` and
+      //    one file entry. Webseed URL is the FULL FILE URL —
+      //    BEP-19 single-file mode. (Multi-file mode appends the
+      //    torrent name + internal path; single-file mode points
+      //    directly at the file's HTTP location.)
+      const webseedUrl = `${this.webseedBase.replace(/\/$/, '')}/${r2Mp4Key}`;
+      const torrentBytes = await this.torrentFromDir(mp4Path, torrentName, {
         announce: this.trackers,
         urlList: [webseedUrl],
       });
 
-      // 6. Upload the .torrent to R2 alongside the segments.
-      const torrentKey = `${r2Prefix}${torrentName}.torrent`;
+      // 7. Upload the .torrent to R2, co-located with the MP4.
       await s3.send(
         new cmds.PutObjectCommand({
           Bucket: this.bucket,
-          Key: torrentKey,
+          Key: r2TorrentKey,
           Body: Buffer.from(torrentBytes),
           ContentType: 'application/x-bittorrent',
         })
@@ -446,17 +508,19 @@ export class BskyMirrorService {
       const magnet = await Promise.resolve(
         this.magnetFromTorrent(torrentBytes, torrentName)
       );
-      const torrentFileUrl = `${this.webseedBase.replace(/\/$/, '')}/${torrentKey}`;
+      const torrentFileUrl = `${this.webseedBase.replace(/\/$/, '')}/${r2TorrentKey}`;
 
-      // 7. Write the row.
-      await this.db(UPDATE_MIRROR_SQL, [r2Prefix, magnet, torrentFileUrl, row.id]);
+      // 8. Write the row. r2_path is the MP4's full object key (no
+      //    trailing slash) — the schema column is unchanged (TEXT),
+      //    only its semantics shift from "directory prefix" to "file
+      //    key". Decay handles both shapes for backwards-compat.
+      await this.db(UPDATE_MIRROR_SQL, [r2Mp4Key, magnet, torrentFileUrl, row.id]);
 
+      const totalSegBytes = segs.reduce((n, s) => n + s.byteLen, 0);
       console.log(
-        `[BskyMirror] mirrored ${row.bsky_at_uri} → ${r2Prefix} ` +
-          `(${segs.length} segments, ${segs.reduce(
-            (n, s) => n + s.buf.length,
-            0
-          )} bytes)`
+        `[BskyMirror] mirrored ${row.bsky_at_uri} → ${r2Mp4Key} ` +
+          `(${segs.length} segments → ${mp4Buf.length} bytes mp4, ` +
+          `${totalSegBytes} bytes raw segments)`
       );
     } finally {
       // Always clean up the temp staging dir.
@@ -749,6 +813,41 @@ async function loadParseTorrent(): Promise<any> {
   parseTorrentCache = mod.default ?? mod;
   return parseTorrentCache;
 }
+
+// Default ffmpeg-based mux. Reads the local HLS playlist (with its
+// segments already on disk in the same dir, downloaded by mirrorOne),
+// runs `ffmpeg -y -i <playlist> -c copy -bsf:a aac_adtstoasc <out.mp4>`,
+// and resolves on exit code 0. The bitstream filter is required when
+// remuxing AAC from .ts (ADTS framing) to .mp4 (ASC framing); without
+// it, AVPlayer plays video silently. `-c copy` skips re-encode — just
+// repackages the container — so the call returns in ~1s for short clips.
+const defaultMuxFactory = (ffmpegPath: string): MuxFn => {
+  return async (inputPlaylistPath, outputMp4Path) => {
+    const { spawn } = await import('child_process');
+    return new Promise<void>((resolve, reject) => {
+      const args = [
+        '-y',
+        '-i', inputPlaylistPath,
+        '-c', 'copy',
+        '-bsf:a', 'aac_adtstoasc',
+        outputMp4Path,
+      ];
+      const proc = spawn(ffmpegPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+      let stderr = '';
+      proc.stderr?.on('data', (chunk: Buffer | string) => {
+        stderr += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+      });
+      proc.on('error', (err) => reject(err));
+      proc.on('close', (code) => {
+        if (code === 0) resolve();
+        else {
+          const tail = stderr.split('\n').slice(-10).join('\n');
+          reject(new Error(`ffmpeg exited with code ${code}\n${tail}`));
+        }
+      });
+    });
+  };
+};
 
 const defaultTorrentFromDir: TorrentFromDirFn = async (dir, name, opts) => {
   const createTorrent = await loadCreateTorrent();
