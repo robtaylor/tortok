@@ -2070,6 +2070,12 @@ header stating the phase that forces the decision.
   identities (typically `bsky.social`); no TorTok PDS is in scope.
   Documents the costs we're avoiding, the risks we've taken on, and
   the triggers that would force us to revisit and write a new ADR.
+- **`in-app-editor.md`** — designed, not scheduled. Trim + on-device
+  Whisper captions + 9:16-only. All architecture and model choices
+  settled (whisper.cpp runtime, locale-aware bundles with
+  kotoba-whisper for JP, Skia preview, native AVFoundation /
+  MediaCodec export). No phase currently forces it; promote to ADR
+  when the editor enters the roadmap (plausibly Phase 3.5 or post-launch v1.1).
 
 ## Execution risks
 
