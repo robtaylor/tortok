@@ -1114,7 +1114,10 @@ downloads them for its own torrent seeding).
 
 ## ADR-010: Bridge Bluesky video posts into the tortok feed (inbound federation)
 
-**Status:** Accepted — 2026-04-17
+**Status:** Accepted — 2026-04-17. Amended 2026-05-02 — v1 mirrors
+bridged content through tortok seeders (Decision #4 reversed),
+gated by a labeler + opt-out + popularity + aspect-ratio filter
+stack. See "Amendment 2026-05-02" at the end of this ADR.
 
 **Context.** The chicken-and-egg problem at launch is severe: a new
 short-form video app shipping with an empty feed dies on day one.
@@ -1275,6 +1278,164 @@ cold-start solution for the open beta launch.
 - Opt-out test: include at least one no-bridge-labeled author in
   CI fixtures. The bridge must filter them out at index time, not
   just at render time.
+
+**Amendment 2026-05-02.** Decision #4 above ("v1 does not re-host
+bridged content on tortok seeders") is reversed. v1 mirrors
+bridged content end-to-end: Bluesky CDN → our R2 → tortok
+seeders + clients via WebTorrent + webseed (ADR-008's pipeline,
+unchanged). Single playback path with native content. The
+"Alternatives ruled out" entry "Bridge bytes as well as
+records — auto-mirror Bluesky video to tortok seeders" is also
+inverted by this amendment.
+
+**Reasons for reversal.**
+- The "two playback paths" cost in the client (Bluesky-CDN HLS
+  direct vs. our magnet+webseed) is a hidden tax on every Phase 3+
+  feature that touches the player. ADR-010 didn't price it because
+  the player surface hadn't yet been built; with Phase 2 closed,
+  the cost is now visible.
+- ADR-013 (Moderation, accepted 2026-04-29 — two weeks after
+  ADR-010) supplies the legitimacy filter (default labelers,
+  illegal-content floor, opt-out detection). With that stack
+  already launch-blocking, mirroring within the same filter is
+  no riskier than rendering. The "consent-fraught" framing in the
+  original Alternatives entry assumed mirroring needed a *separate*
+  consent surface from rendering; the protocol-aligned answer
+  (federation thesis + opt-out via self-label) handles both.
+- The "v2 feature, gated on creator opt-in" path scales poorly:
+  most Bluesky creators won't know about us, won't opt in, the
+  bridge becomes empty. Default-mirror with opt-out matches how
+  Bridgy Fed and other established atproto bridges already work.
+- ADR-010's revisit trigger ("if bridged consumption at scale
+  becomes a point of friction") is forecast-met. Open beta is the
+  correct moment to set the architecture; rewriting later means
+  data migration and client churn.
+
+**Decision (amended).**
+
+4'. **v1 mirrors bridged content through tortok seeders, gated by
+    a filter stack at index time and a state machine at promotion
+    time.** Bytes flow Bluesky CDN → R2 → swarm. Single playback
+    path with native (`app.tortok.video.post`) content via the
+    ADR-008 pipeline (HLS in R2 + magnet + webseed). The filter
+    stack:
+    - **Author opt-out**: skip authors carrying the `!no-bridge`
+      label (per Decision #5 above; existing requirement).
+    - **Aspect ratio**: index only videos with `height >= width`
+      (portrait + square). Rationale: tortok's vertical feed cannot
+      cleanly render 16:9. Threshold tunable per env var; default
+      `height/width >= 1.0`.
+    - **Default labeler set**: filter at index time per Decision #6
+      and ADR-013 (existing requirement).
+    - **Popularity threshold**: index everything passing the above
+      into `bridged_posts (mirror_state = 'pending')`. Promote to
+      `mirrored` only when an engagement signal crosses a tunable
+      threshold (initial: ≥ 50 likes OR ≥ 10 reposts OR author
+      with ≥ 5k followers). Engagement is polled via
+      `app.bsky.feed.getPosts` on `public.api.bsky.app` (batched,
+      up to 25 at-uris per call, ~30 min cadence).
+    - **Storage decay**: drop mirrors not played for N days
+      (initial: 30 days). Re-fetch on demand if a `pending` row
+      qualifies again.
+
+4''. **Mirror state machine** on `bridged_posts`:
+     `pending` (passes index filters, awaiting engagement)
+     → `mirrored` (engagement promoted; pipeline copied bytes to R2,
+       generated magnet, registered with our trackers)
+     → `expired` (decay; can re-mirror on demand);
+     `pending` → `declined` (older than N days without ever
+     qualifying; soft-deleted from index).
+     Feed endpoint surfaces only `mirrored` rows. Pending/declined
+     content does **not** appear with a Bluesky-CDN fallback —
+     preserving the "single playback path" invariant.
+
+**Consequence deltas (from the original ADR-010 Consequences
+section).**
+
+- The "Bandwidth asymmetry. v1 ships Bluesky's bytes through our
+  app without contributing to their costs" consequence flips:
+  we now bear bandwidth + storage cost for bridged content.
+  Storage on R2 is $0.015/GB/month with free egress on
+  Cloudflare's network; with the filter stack above, projected
+  steady-state storage is bounded at $5–50/month. Trade
+  acknowledged: federation thesis, single playback path, and
+  P2P offload-everywhere are worth it.
+- The "P2P story (ADR-008) does not apply to bridged content"
+  consequence reverses: ADR-008's pipeline now handles all video,
+  bridged or native. Swarm health benefits propagate to bridged
+  content (peers contribute bandwidth back; CDN egress declines
+  as offload ratio rises).
+- ADR-010 risk #2 (Bluesky CDN URL pattern stability) becomes a
+  *one-time mirror-pipeline concern* rather than a per-playback
+  fragility. If Bluesky changes the CDN URL pattern, our mirror
+  pipeline breaks at index time and we adapt; existing mirrored
+  content keeps playing because the bytes are in R2.
+- New risk: **mirror latency.** First-time viewer of a freshly-
+  promoted post waits for the mirror pipeline. v1 accepts this as
+  a single-page transient (player shows loading spinner; resolves
+  in seconds). If the latency proves user-visible, switch the
+  pipeline to eager pre-mirror at promotion time rather than
+  lazy.
+- New risk: **mirror legitimacy at scale.** A bridged post that
+  passes filters at index time but accrues a labeler-flagged
+  signal *after* mirroring needs to be unmirrored. The mirror
+  state machine should support `mirrored → expired` triggered by
+  a labeler update, not just by storage decay.
+
+**Operational note.** The mirror pipeline shares deployment with
+the firehose subscriber and the existing seeder service. Phase 0b's
+seeder extraction (per ADR-008) should now subsume both: the
+extracted seeder Docker image runs in `subscribe`, `mirror`, or
+`cache` mode depending on environment. Spec to be detailed in
+the Phase 0b plan.
+
+**Empirical evidence — Bluesky video composition (2026-05-02 sampler).**
+A 30-minute Jetstream sample (`scripts/bsky-video-aspect-sampler.mjs`)
+characterizes the actual content profile this filter stack must
+handle:
+
+- 55,274 `app.bsky.feed.post` records observed in 30 minutes
+- 794 carried `app.bsky.embed.video` (1.44% of all posts)
+- Sustained rate: ~26.5 video posts/min ≈ ~38k/day on the firehose
+
+Aspect-ratio breakdown of the 794 video posts:
+
+|                                      | count | share  |
+|--------------------------------------|-------|--------|
+| `h/w >= 1.7` (strict 9:16)           | 306   | 38.5%  |
+| `1.0 < h/w < 1.7` (4:5, 3:4 portrait)|  83   | 10.5%  |
+| `h/w == 1.0` (square)                |  36   |  4.5%  |
+| `h/w < 1.0` (horizontal)             | 324   | 40.8%  |
+| no `aspectRatio` field               |  45   |  5.7%  |
+
+Bluesky video is roughly half horizontal — heavier than expected
+(TV clips, screen recordings, cross-posts from horizontal-default
+platforms). The `h/w >= 1.0` filter (portrait + square, the v1
+default) cuts ~46% of video volume at zero quality cost — a
+vertical feed cannot cleanly render 16:9 content anyway.
+
+Volume after each filter (assuming ~38k video posts/day):
+
+- After aspect filter (`h/w >= 1.0`): ~20.5k/day candidate posts
+- After popularity threshold (rough 5% pass-rate at default
+  thresholds, power-law engagement): ~1k/day promoted to
+  `mirrored`
+- At ~20MB avg per video: ~20GB/day ingest, ~600GB rolling 30-day
+  cache (decay)
+- R2 storage: ~$9/month at default thresholds. Bounded.
+
+These numbers inform the initial threshold defaults
+(`BSKY_ASPECT_MIN=1.0`, `BSKY_MIN_LIKES=50`, `BSKY_MIN_REPOSTS=10`,
+`BSKY_MIN_FOLLOWERS=5000`, `BSKY_DECAY_DAYS=30`). All env-tunable;
+revisit in Unit 2.5 week 1 against real volume.
+
+**What does not change.** Decisions #1, #2, #3, #5, #6, #7, #8
+above stand as written. Bridged posts remain first-class feed
+items, display-only for engagement, with opt-out and labeler
+filtering, and a native-upgrade affordance once Phase 3 ships.
+The amendment touches the *bytes pathway* (#4 + the bandwidth-
+asymmetry consequence + the auto-mirror alternative), not the
+ADR's editorial framing.
 
 ---
 
