@@ -245,14 +245,17 @@ subscriber for `app.tortok.*` records on PDSes other than
 Reset already done. This phase removes the database + R2 detritus
 left by attempt 1 so Phase A starts clean.
 
-1. **Drop the attempt-1 tables** via a new SQL migration
-   `backend/src/db/migrations/0xx_drop_bridged_posts.sql`:
+1. **Drop the attempt-1 tables** by appending to
+   `backend/src/db/schema.sql` (the project keeps schema as a single
+   append-only idempotent SQL file, run via `initializeDatabase()` on
+   backend boot — there is no `migrations/` directory):
    ```sql
    DROP TABLE IF EXISTS bridged_posts;
    DROP TABLE IF EXISTS bridge_cursor;
    ```
-   (Schema is append-only idempotent SQL per CLAUDE.md style;
-   even though main is reset, dev DBs still carry the tables.)
+   Even though main is reset, dev DBs still carry the tables; the
+   next `npm run dev` will drop them. The DROPs stay in the file
+   permanently — idempotent, and the table names will not be reused.
 
 2. **R2 cleanup** — list and delete `bridged/` prefix in the R2
    content bucket. ~2,669 mirrored objects from the NSFW cleanup
@@ -281,7 +284,7 @@ flow into a unified `posts` table that the feed reads from.
 Native legacy `videos` table still exists at end of this phase
 (Phase C drops it) — Phase A operates in parallel.
 
-5. **CREATE migration `0xx_posts.sql`** — the unified posts table:
+5. **APPEND to `backend/src/db/schema.sql`** — the unified posts table:
    ```sql
    CREATE TABLE IF NOT EXISTS posts (
      at_uri TEXT PRIMARY KEY,            -- at://did/collection/rkey
@@ -389,8 +392,8 @@ reaches the app is via atproto.
     `POST /videos`, `POST /videos/:id/like`, `POST /videos/:id/view`,
     `PATCH /videos/:id/urls`. Likewise the corresponding service
     code.
-12. **DROP legacy tables** via migration: `users`, `videos`,
-    `hashtags`, `video_hashtags`, `follows`, `likes`. Keep `views`
+12. **DROP legacy tables** by appending to `schema.sql`: `users`,
+    `videos`, `hashtags`, `video_hashtags`, `follows`, `likes`. Keep `views`
     (we own view counts; not federated; will be repurposed in
     Phase 4).
 13. **MODIFY `tortok/stores/auth.ts:18`** — drop the email/password
@@ -416,7 +419,7 @@ unified `posts` table architecture rather than a sidecar.
       `at_uri`, with `state = 'pending'`. Does NOT touch `posts`
       yet.
 
-16. **CREATE migration `0xx_mirror_state.sql`**:
+16. **APPEND to `backend/src/db/schema.sql`**:
     ```sql
     CREATE TABLE IF NOT EXISTS mirror_state (
       at_uri TEXT PRIMARY KEY,

@@ -145,3 +145,10 @@ DROP TRIGGER IF EXISTS update_video_count_trigger ON videos;
 CREATE TRIGGER update_video_count_trigger
 AFTER INSERT OR DELETE ON videos
 FOR EACH ROW EXECUTE FUNCTION update_video_count();
+
+-- Unit 2.5 (v2) Phase 0: drop attempt-1 bridge tables. Main is reset
+-- to pre-attempt-1, but dev DBs still carry these tables; running the
+-- schema on boot will drop them. Safe to keep here permanently — the
+-- DROPs are idempotent and these table names will not be reused.
+DROP TABLE IF EXISTS bridged_posts;
+DROP TABLE IF EXISTS bridge_cursor;
