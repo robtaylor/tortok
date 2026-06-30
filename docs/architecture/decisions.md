@@ -30,6 +30,7 @@ with a `Must resolve by:` header stating the phase that forces the decision.
 | [ADR-011](./adr/0011-monetization-architecture.md) | Monetization architecture — interface-first payout, first-party pool committed | Accepted (V1 rail gated on Apple guidance + US-incorporation) |
 | [ADR-012](./adr/0012-lexicon-namespace.md) | Lexicon namespace governance | Accepted |
 | [ADR-013](./adr/0013-moderation-strategy.md) | Moderation strategy — atproto labelers, illegal-content floor, UK age-verification gate | Accepted |
+| [ADR-014](./adr/0014-device-testing-strategy.md) | Device testing strategy — self-hosted emulators for CI, real devices for video/P2P | Accepted |
 
 ---
 
