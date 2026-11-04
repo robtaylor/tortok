@@ -34,7 +34,7 @@ const LAST_HANDLE_KEY = 'tortok_last_handle';
 
 // On web, expo-secure-store falls back to localStorage, which is readable
 // by any XSS on the domain. Tokens stored here are effectively bearer
-// credentials exposed to script injection. See ADR-006 Phase 3 for the
+// credentials exposed to script injection. See Decision 0006 Phase 3 for the
 // planned migration to HttpOnly session cookies.
 async function secureGet(key: string): Promise<string | null> {
   if (Platform.OS === 'web') {

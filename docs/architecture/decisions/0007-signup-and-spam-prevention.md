@@ -1,17 +1,19 @@
-# ADR-007: Signup UX and spam prevention
+# Decision 0007: Signup UX and spam prevention
+
+**Current architecture:** [Auth & signup](../auth-signup.md)
 
 **Status:** Accepted. Amended 2026-04-29 — signup is now atproto OAuth
 against the user's existing PDS, not a custodial email + password flow.
 See "Amendment 2026-04-29" below.
 
-**Amendment 2026-04-29.** This ADR originally specified a clean,
+**Amendment 2026-04-29.** This decision originally specified a clean,
 TorTok-branded signup with atproto as invisible backend plumbing. That
 stance has been reversed. The new flow is atproto OAuth against the
 user's existing PDS — typically `bsky.social`. The spam-prevention
 ladder below largely becomes N/A: the user's PDS handles signup spam
 for us. Per-user rate limits at our AppView remain in scope.
 
-The product hypothesis underlying the original ADR ("exposing Bluesky
+The product hypothesis underlying the original decision record ("exposing Bluesky
 at the user level is what we don't want") has flipped. The new
 hypothesis is that surfacing Bluesky on signup is a *credibility*
 signal — established protocol, recognised brand, real account, you
@@ -35,8 +37,8 @@ way. We do not run an auth endpoint of our own; we do not store
 passwords; we do not generate `did:plc` identities; we do not hold
 rotation keys.
 
-We still publish a `app.tortok.video.post` Lexicon (ADR-002), still run our
-own AppView (ADR-005), and still write video records signed by the
+We still publish a `app.tortok.video.post` Lexicon (Decision 0002), still run our
+own AppView (Decision 0005), and still write video records signed by the
 user's repo key into the user's PDS via `@atproto/api`.
 
 **Spam prevention (as amended).**
@@ -49,14 +51,14 @@ a reference for the AppView surface, not the signup surface.
 
 ---
 
-**Original Context (pre-amendment).** Earlier drafts of ADR-005 assumed
+**Original Context (pre-amendment).** Earlier drafts of Decision 0005 assumed
 users would bring their own atproto identity from an existing PDS
 (typically bsky.social) and log in via atproto OAuth. Research
 confirmed Bluesky themselves dropped SMS verification in February 2024
 in favour of CAPTCHA-only signup, and exposing Bluesky at the user
 level is explicitly not what we want for TorTok — we want a clean,
 familiar, branded experience where atproto is backend plumbing the
-user never sees. This ADR defines the signup flow and the
+user never sees. This decision defines the signup flow and the
 spam-prevention strategy that sits in front of it.
 
 **Original Decision (pre-amendment).**
@@ -83,7 +85,7 @@ switching later is a one-day job.
 2. Backend verifies the Turnstile token with Cloudflare
 3. Backend creates a `did:plc` identity via our PDS
 4. Backend generates the rotation key server-side (custodial per
-   ADR-003) and stores it in a dedicated secrets store (not the main
+   Decision 0003) and stores it in a dedicated secrets store (not the main
    application database)
 5. Backend hashes the password with argon2id and stores the credential
 6. Backend sends a verification email containing a one-time activation
@@ -136,7 +138,7 @@ consumer apps of TorTok's shape and scale live comfortably at rung 1–3.
   if we decide passwords are the wrong call.
 - **Social login (Google, Apple).** Adds platform dependencies and
   complicates the "cross-platform, own the UX" story. Defer to a
-  later ADR if user research suggests it matters.
+  later decision record if user research suggests it matters.
 
 **Concrete defaults for the escalation ladder.**
 
@@ -157,4 +159,4 @@ without a code change.
 
 Broader content-moderation policy (reporting, NSFW classification,
 labeler integration, UK age-verification gating) is resolved in
-ADR-013.
+Decision 0013.

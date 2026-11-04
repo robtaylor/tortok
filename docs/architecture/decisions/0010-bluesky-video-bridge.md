@@ -1,4 +1,6 @@
-# ADR-010: Bridge Bluesky video posts into the tortok feed (inbound federation)
+# Decision 0010: Bridge Bluesky video posts into the tortok feed (inbound federation)
+
+**Current architecture:** [Federation](../federation.md)
 
 **Status:** Accepted — 2026-04-17
 
@@ -11,12 +13,12 @@ survived showing a new user a blank follow feed. We have no ad
 budget for the TikTok approach and no team to scale the Instagram
 approach beyond its absolute Halo tier.
 
-ADR-002 commits us to AT Protocol. Bluesky added native video posts
+Decision 0002 commits us to AT Protocol. Bluesky added native video posts
 in late 2024 (`app.bsky.embed.video`), and they federate over the
 standard atproto firehose like every other record. The data is open
 by design.
 
-The current ADR-006 phase plan defers all federation work to Phase 3
+The current Decision 0006 phase plan defers all federation work to Phase 3
 (PDS standoff). That ordering is correct for the *outbound* direction
 — publishing signed `app.tortok.video.post` records requires our own PDS.
 But the *inbound* direction — consuming and rendering existing
@@ -25,7 +27,7 @@ infrastructure. It can run as a read-only firehose subscriber,
 parallel to the Phase 2 P2P client work, with no dependencies on
 Phases 3–4.
 
-This ADR pulls inbound federation forward and treats it as the
+This decision pulls inbound federation forward and treats it as the
 cold-start solution for the open beta launch.
 
 **Decision.**
@@ -50,7 +52,7 @@ cold-start solution for the open beta launch.
    actor) and avoids duplicating Bluesky's social graph.
 
 4. **Bytes come from Bluesky's video CDN.** v1 does not re-host
-   bridged content on tortok seeders. The P2P story (ADR-008) does
+   bridged content on tortok seeders. The P2P story (Decision 0008) does
    not apply to bridged content — it is the lure, not the conversion.
    Bandwidth for bridged content is Bluesky's cost, not ours.
 
@@ -63,7 +65,7 @@ cold-start solution for the open beta launch.
 
 6. **Inherit moderation via labelers.** Subscribe to the same default
    labeler set Bluesky's first-party app uses, plus our first-party
-   labeler (ADR-013). Bridged posts carry their labels into the
+   labeler (Decision 0013). Bridged posts carry their labels into the
    tortok client and are filtered/hidden according to user moderation
    preferences.
 
@@ -104,15 +106,15 @@ cold-start solution for the open beta launch.
 - Moderation surface area grows. We are now responsible for filtering
   bridged content according to our own policy *plus* inheriting
   Bluesky's labeler signals. The default labeler subscription set
-  becomes a launch-blocking decision, formalized by ADR-013 and
-  raised in urgency by this ADR.
+  becomes a launch-blocking decision, formalized by Decision 0013 and
+  raised in urgency by this decision.
 - Opt-out must work flawlessly from launch. Creators who self-label
   as no-bridge and find their content bridged anyway is the kind of
   trust failure that lights up Bluesky within hours. Opt-out
   correctness is a launch criterion, not a polish item.
-- ADR-006's Phase 3 ordering is unaffected for *outbound* federation
+- Decision 0006's Phase 3 ordering is unaffected for *outbound* federation
   (publishing signed `app.tortok.video.post` records still requires the
-  PDS). Inbound is decoupled from that timeline. ADR-005's AppView
+  PDS). Inbound is decoupled from that timeline. Decision 0005's AppView
   effectively starts here in pull-only mode — Phase 3/4 work then
   extends it to subscribe to our own PDS as well.
 
@@ -124,7 +126,7 @@ cold-start solution for the open beta launch.
   graveyard.
 - **Scrape TikTok / Instagram and rehost.** Legally hostile,
   creator-hostile, contradicts the wedge. Ruled out in release-plan
-  discussion regardless of ADR-010.
+  discussion regardless of Decision 0010.
 - **Show bridged content in a separate "explore Bluesky" tab.**
   Defeats the federation pitch. The whole point is that the network
   is shared — segregating bridged content into a side surface
@@ -153,7 +155,7 @@ cold-start solution for the open beta launch.
   direct HLS playback from Bluesky CDN (bridged) without UI
   difference.
 - Firehose subscription is a long-lived process — fits in the
-  AppView service plan from ADR-005, started early in pull-only
+  AppView service plan from Decision 0005, started early in pull-only
   mode here.
 - Cost: one persistent WebSocket plus a small Postgres write rate.
   Negligible at v1 scale; revisit if the index outgrows the existing

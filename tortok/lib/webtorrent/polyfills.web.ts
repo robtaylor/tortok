@@ -3,7 +3,7 @@
 // SubtleCrypto + getRandomValues, etc.) — and `app/+html.tsx` injects a
 // `process` shim into globalThis BEFORE the Metro bundle preamble runs, so
 // by the time this module loads the only thing still missing is `Buffer`.
-// See `polyfills.native.ts` for the much larger Hermes setup and ADR-009
+// See `polyfills.native.ts` for the much larger Hermes setup and Decision 0009
 // for context.
 
 import { Buffer } from 'buffer';

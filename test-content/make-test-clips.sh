@@ -8,7 +8,7 @@
 # Output: test-content/clips/bbb-01.mp4 … bbb-05.mp4 (608×1080, H.264, faststart)
 #
 # Phase 0b note: these clips live in-repo for spike convenience. Production
-# seeding will serve from R2 (ADR-006 Phase 0b L1), at which point this script
+# seeding will serve from R2 (Decision 0006 Phase 0b L1), at which point this script
 # can graduate into a CI step that uploads the results.
 
 set -euo pipefail

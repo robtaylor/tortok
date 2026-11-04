@@ -1,6 +1,6 @@
 # web/
 
-Static site for `tortok.app`. Intended deploy target: **Cloudflare Pages** (consistent with our existing Cloudflare/R2 footprint from ADR-008). Hosts the atproto OAuth client metadata document, the OAuth auth callback shim, and a placeholder marketing page. Cloudflare Pages deploy is not yet configured — that is a separate follow-up task.
+Static site for `tortok.app`. Intended deploy target: **Cloudflare Pages** (consistent with our existing Cloudflare/R2 footprint from Decision 0008). Hosts the atproto OAuth client metadata document, the OAuth auth callback shim, and a placeholder marketing page. Cloudflare Pages deploy is not yet configured — that is a separate follow-up task.
 
 The Expo web build deploys separately to the `app.tortok.app` subdomain (option (a) in the Phase 3 plan). That build is not part of this directory.
 

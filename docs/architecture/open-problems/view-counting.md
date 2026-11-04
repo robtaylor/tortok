@@ -10,7 +10,7 @@ sell deals on numbers nobody trusts. Treat this as load-bearing.
 **Blocks:** any feed ranking that uses views; any creator's ability
 to negotiate external sponsorships using our numbers; any federated
 pool→payout formula that distributes by view share.
-**Related ADRs:** ADR-002 (AT Protocol federation), ADR-005 (AppView).
+**Related decision records:** Decision 0002 (AT Protocol federation), Decision 0005 (AppView).
 **Related open problems:** `monetization.md` (the central reason this
 problem is load-bearing).
 
@@ -101,7 +101,7 @@ that's a view.
 **Cons.** Sybil risk is load-bearing and unsolved. This approach is
 unsafe until we have a credible Sybil-resistance answer, which
 probably means tying peer identity to the atproto DID + rotation key,
-which means custodial accounts (ADR-003) weaken the property. Deferred.
+which means custodial accounts (Decision 0003) weaken the property. Deferred.
 
 ### 4. Blockchain settlement layer
 
@@ -143,7 +143,7 @@ These weights are a starting point, not a decision.
    views from the publisher's own DID.
 5. **Sybil fleet.** One operator runs 10k cheap accounts. Approaches
    1, 2, and 3 all break here without account-creation friction; that
-   friction is ADR-007's job.
+   friction is Decision 0007's job.
 
 ## Unresolved sub-questions
 
@@ -161,7 +161,7 @@ These weights are a starting point, not a decision.
 
 ## What a resolved version looks like
 
-An ADR that:
+A decision record that:
 - Picks one primary approach (or a hybrid) with explicit trade-offs
 - States the watch-threshold, rate-limit, and eligibility numbers
 - States whether views are federated or local

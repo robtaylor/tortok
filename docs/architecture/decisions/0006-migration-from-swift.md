@@ -1,4 +1,6 @@
-# ADR-006: Migration path from the Swift prototype
+# Decision 0006: Migration path from the Swift prototype
+
+**Current architecture:** [Architecture overview](../README.md)
 
 **Status:** Accepted
 
@@ -23,11 +25,11 @@ phase, we have a working product; we just have fewer of the features.
 - Keep the Swift app runnable as a reference implementation while the
   rewrite proceeds.
 
-**Phase 0b — Deploy to Fly.io and stand up seeder infrastructure (per ADR-008).**
+**Phase 0b — Deploy to Fly.io and stand up seeder infrastructure (per Decision 0008).**
 
 Status: **Complete** — 2026-04-12
 
-All four layers of ADR-008 are deployed and verified:
+All four layers of Decision 0008 are deployed and verified:
 
 - ✅ **Backend monolith on Fly.io** — `tortok-api.fly.dev` (lhr).
   Express + embedded seeder, Fly Postgres. Expand to additional
@@ -89,7 +91,7 @@ marking the phase complete.
 - Confirm iOS, Android, and web all play the same video.
 - At this point we have a working cross-platform TorTok with no federation.
   Shippable as an alpha.
-- **Cleanup gate:** delete the ADR-009 WebTorrent spike route
+- **Cleanup gate:** delete the Decision 0009 WebTorrent spike route
   (`tortok/app/spike.tsx`) and its auth-guard exemption in
   `tortok/app/_layout.tsx` once real playback is wired up. The spike
   exists only to de-risk the engine-compat question; it has no purpose
@@ -105,7 +107,7 @@ peers (per-torrent log line `[webtorrent] offload: …` added in
 `tortok/lib/webtorrent/client.ts`). Spike route deleted. Real-device
 P2P validation (mobile data + NAT) was deferred — an execution risk
 to revisit when we have devices in hand. Client seeding policy
-(ADR-009 v1) was scoped out of Phase 2 by mutual agreement; the
+(Decision 0009 v1) was scoped out of Phase 2 by mutual agreement; the
 plan in `tortok/lib/webtorrent/seedPolicy.ts` and `useSeedPolicy.ts`
 will land post-Phase 3 once we know how PDS-driven session lifetimes
 interact with foreground-only seeding.
@@ -114,9 +116,9 @@ interact with foreground-only seeding.
 
 Scope changed 2026-04-29: the original Phase 3 forked our own PDS and
 ran a custodial signup. That has been reversed (see amendments to
-ADR-003 and ADR-007). Phase 3 now leverages users' existing atproto
+Decision 0003 and Decision 0007). Phase 3 now leverages users' existing atproto
 identities and ships materially smaller.
-- Define and publish the `app.tortok.video.post` Lexicon (ADR-002).
+- Define and publish the `app.tortok.video.post` Lexicon (Decision 0002).
 - Add `@atproto/api` to the client. Login becomes atproto OAuth against
   the user's PDS (typically `bsky.social`).
 - Publish video as a signed `app.tortok.video.post` record into the user's
@@ -152,7 +154,7 @@ than carried as a reference implementation through Phases 2–4. Rationale:
 the project was never released, so there are no "remaining consumers" to
 migrate and no value in a live reference implementation — the Expo app
 reached Swift parity in Phase 1, the Swift prototype's architectural
-intent is captured in the ADRs and `designs/` specs, and keeping a dead
+intent is captured in the decision records and `designs/` specs, and keeping a dead
 tree of ~230KB of Swift adds navigation friction for every future
 session. Originally-planned `TorTok/` removal deferred until now so the
 parity audit at Phase 1 closeout had a reference to check against; once

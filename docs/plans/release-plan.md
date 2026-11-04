@@ -1,17 +1,17 @@
 # tortok release plan
 
-Status: **Draft** — 2026-04-17
+**Status:** Active — launch plan, first dated 2026-04-17.
 
 This document is the operational launch plan for tortok. It sits
-underneath the architecture decisions in `architecture/decisions.md`
-and consumes them; if a release-plan choice contradicts an ADR, the
-ADR wins or gets amended.
+underneath the architecture decisions in [`../architecture/decisions/README.md`](../architecture/decisions/README.md)
+and consumes them; if a release-plan choice contradicts a decision record, the
+decision record wins or gets superseded.
 
 Companion documents:
-- `architecture/decisions.md` — the architecture this plan launches.
-- `architecture/decisions.md` ADR-010 — the inbound Bluesky bridge,
+- [`../architecture/README.md`](../architecture/README.md) — the architecture this plan launches.
+- [Decision 0010](../architecture/decisions/0010-bluesky-video-bridge.md) — the inbound Bluesky bridge,
   load-bearing for the cold-start solution below.
-- `architecture/open-problems/monetization.md` — the monetization
+- `../architecture/open-problems/monetization.md` — the monetization
   philosophy and the in-progress first-party pool design.
 
 ---
@@ -23,7 +23,7 @@ Companion documents:
 The frame: *creators and audiences in control*. The substrate
 (AT Protocol, BitTorrent, no platform takes from creators) is
 implementation detail the user never has to care about — the proof
-is shown, not told. The Bluesky bridge (ADR-010) is how we show it
+is shown, not told. The Bluesky bridge (Decision 0010) is how we show it
 visually within seconds of opening the app.
 
 What we **don't** lead with publicly:
@@ -40,7 +40,7 @@ What the architecture lets us prove if asked:
 - Creator's content is durable beyond any single company (P2P + R2)
 - Platform doesn't take a cut of creator earnings (monetization
   philosophy + Sub-problem C of `monetization.md`)
-- Federated with Bluesky (ADR-010)
+- Federated with Bluesky (Decision 0010)
 
 ---
 
@@ -67,7 +67,7 @@ exodus catalyst.)
 ### Phase B — Engine ramp (overlapping Phase A from day one)
 
 - Hand-emailed creator outreach (Track 1 below)
-- Bluesky bridge (ADR-010) carries the cold-start load
+- Bluesky bridge (Decision 0010) carries the cold-start load
 - Iterate UX based on real usage; ship fast
 - Load test seeder fleet under simulated catalyst load
 - Build and tune the native upgrade funnel from bridged content
@@ -90,7 +90,7 @@ Substack/long-form essay, seed creators amplifying.
 
 ### Phase A launch criteria (must be true before opening the link)
 
-- ADR-010 inbound bridge live, with opt-out tested in CI
+- Decision 0010 inbound bridge live, with opt-out tested in CI
 - Web client production-grade (not a stub) — primary share surface
 - Seeder fleet load-tested at 10k concurrent peers on a single
   torrent
@@ -132,7 +132,7 @@ publicly complaining about TikTok and Instagram suppression.
 
 Outreach script lives in **section "Outreach copy" below**.
 
-ADR-010 changes the ask economics. We are *not* asking creators to
+Decision 0010 changes the ask economics. We are *not* asking creators to
 move — we are showing them their content already plays in tortok.
 The hand-email is closer to "would you also post natively for the
 durability/portability upgrade?" — much smaller commitment.
@@ -172,7 +172,7 @@ Explicitly **not** doing:
 
 Two directions, both load-bearing.
 
-**Inbound (ADR-010, Phase 2.5):** Bluesky video posts render natively
+**Inbound (Decision 0010, Phase 2.5):** Bluesky video posts render natively
 in the tortok feed. This is the cold-start solution — a new tortok
 user sees real content from real creators on day one without us
 having onboarded a single tortok-native creator.
@@ -198,7 +198,7 @@ Two failure modes to plan against:
 
 **Cash burn before catalyst.** Solo dev, no salary burn. Floor is
 infra: R2 + Fly.io seeders + tracker + coturn + domain + Apple/Play
-developer accounts + a small dev sandbox. Per ADR-008 the idle
+developer accounts + a small dev sandbox. Per Decision 0008 the idle
 floor is roughly $30–$50/mo at zero users. Add Apple ($99/yr) and
 Play ($25 once) and you're looking at ~$50/mo durable.
 
@@ -225,7 +225,7 @@ firehose-event spike conditions.
 ### Track 5 — Creator monetization
 
 Stub. Detailed design lives in
-`architecture/open-problems/monetization.md`. Today's release-plan
+`../architecture/open-problems/monetization.md`. Today's release-plan
 discussion contributed Sub-problem C (the first-party PWYW
 "support open content" pool with fan-allocated distribution).
 
@@ -233,7 +233,7 @@ What this track needs to deliver before Phase B graduates:
 - Sub-problem A shipped: `app.tortok.payout.destination` lexicon for
   external-link payout surfaces (Patreon, Substack, etc.) on
   creator profiles
-- Sub-problem C designed: the first-party pool ADR landed,
+- Sub-problem C designed: the first-party pool decision record landed,
   operating mechanism chosen (likely fiscal-host or Lightning,
   per the open file)
 
@@ -250,16 +250,16 @@ Hard dependencies (must be true before the named milestone):
 
 | Milestone | Hard dependencies |
 |-----------|-------------------|
-| Phase A open beta | ADR-010 bridge live; web client prod-grade; seeder load test passed; outbound embed prototype working in Bluesky |
-| Phase B graduation | Sub-problem A shipped; first-party pool ADR landed; engine creators (50+) actively posting native content |
+| Phase A open beta | Decision 0010 bridge live; web client prod-grade; seeder load test passed; outbound embed prototype working in Bluesky |
+| Phase B graduation | Sub-problem A shipped; first-party pool decision record landed; engine creators (50+) actively posting native content |
 | Phase C 1.0 promotion | Catalyst window OR ≥3 months of stable Phase B operation; App Review pre-clearance; HN/essay launch coordinated |
 
 Soft dependencies (nice to have, not blocking):
 
-- ADR-006 Phase 3 PDS work — nice to have for outbound federation,
+- Decision 0006 Phase 3 PDS work — nice to have for outbound federation,
   but the outbound embed prototype can run against a reference PDS
   instance pre-launch
-- ADR-006 Phase 4 AppView cutover — completes the "we run our own
+- Decision 0006 Phase 4 AppView cutover — completes the "we run our own
   infra end-to-end" story but isn't user-visible
 - `view-counting.md` resolution — needed for external monetization
   trust; not needed for Sub-problem C's fan-allocated pool
@@ -272,7 +272,7 @@ Source: 2026-04-17 oracle research on TikTok, Instagram, and
 Bluesky launches.
 
 1. **The empty-feed problem is the only problem; everything else
-   is downstream.** Solved here by ADR-010, full stop.
+   is downstream.** Solved here by Decision 0010, full stop.
 2. **Hand-curated taste-maker seeding beats broad acquisition for
    tiny teams.** Instagram's model, not TikTok's. We have no ad
    budget; the Halo + Engine outreach is the only acquisition
@@ -337,8 +337,8 @@ Key properties:
 - **App Review pre-clearance.** Worth a low-stakes inquiry before
   Phase C — ask Apple Developer Relations whether bridged-content
   rendering raises any §5.2 IP flags.
-- **Monetization ADR ordering.** Sub-problem A and Sub-problem C
-  ADRs both want to ship before Phase B graduates. Which goes
+- **Monetization decision record ordering.** Sub-problem A and Sub-problem C
+  decision records both want to ship before Phase B graduates. Which goes
   first? Depends on whether the operating-mechanism research for
   Sub-problem C has a clear answer.
 

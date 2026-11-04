@@ -1,4 +1,4 @@
-// Client-side seeding policy (ADR-009).
+// Client-side seeding policy (Decision 0009).
 //
 // Holds recently-watched torrents alive via the existing refcount system
 // in client.ts. Each held torrent has refCount bumped by 1; when the
@@ -8,7 +8,7 @@ import { Platform } from 'react-native';
 import { requestUrl, release } from './client';
 
 // ---------------------------------------------------------------------------
-// Constants (ADR-009 starting numbers)
+// Constants (Decision 0009 starting numbers)
 // ---------------------------------------------------------------------------
 
 const isMobile = Platform.OS === 'ios' || Platform.OS === 'android';

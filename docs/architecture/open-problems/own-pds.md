@@ -4,11 +4,11 @@
 (typically `bsky.social`); no TorTok PDS is in scope.
 **Must resolve by:** No phase forces this currently. Revisited when one
 of the trigger conditions below fires — at which point this becomes a
-new ADR, not a sketch.
+new decision record, not a sketch.
 **Blocks:** nothing in the v1 phase plan.
-**Related ADRs:** ADR-002 (federation protocol), ADR-003 (identity, as
-amended 2026-04-29), ADR-005 (backend evolves to AppView), ADR-006
-(Phase 3 scope, as amended 2026-04-29), ADR-007 (signup UX, as amended
+**Related decision records:** Decision 0002 (federation protocol), Decision 0003 (identity, as
+amended 2026-04-29), Decision 0005 (backend evolves to AppView), Decision 0006
+(Phase 3 scope, as amended 2026-04-29), Decision 0007 (signup UX, as amended
 2026-04-29).
 
 ## The question
@@ -34,7 +34,7 @@ would the cost of running our own PDS become worth it again?**
 - Email/password auth: argon2id, email delivery on critical path,
   reset tokens, verification.
 - Signup spam ladder (Turnstile, rate limits, account-age gating;
-  ADR-007's original escalation ladder).
+  Decision 0007's original escalation ladder).
 - Lexicon governance — already an issue, but more pressing if we
   sole-source storage.
 
@@ -55,7 +55,7 @@ would the cost of running our own PDS become worth it again?**
   migrate PDS. Conversely, we cannot deplatform a TorTok-problematic
   user at the protocol layer; only at our AppView (refuse to index).
 - **Brand surface.** "Sign in with Bluesky" is visible at signup. We
-  currently believe this is a credibility signal (see ADR-007
+  currently believe this is a credibility signal (see Decision 0007
   amendment). If the data shows otherwise, that's a trigger to
   revisit.
 
@@ -90,9 +90,9 @@ Listed roughly in increasing investment.
 - **Run our own PDS as an alternative auth source.** "Sign up with
   TorTok" alongside "sign in with Bluesky." Adds branded signup; keeps
   the easy on-ramp for existing atproto users. Ratchets up cost
-  significantly (most of original ADR-003/007 surface returns).
+  significantly (most of original Decision 0003/007 surface returns).
 - **Run our own PDS as the default, with Bluesky OAuth as a
-  shortcut.** The original ADR-006 Phase 3 plan, with an OAuth side
+  shortcut.** The original Decision 0006 Phase 3 plan, with an OAuth side
   door. Most expensive; gives us the most control.
 - **Pick a different sovereignty model (e.g., `did:web` for
   TorTok-hosted users).** Sidesteps PLC dependency too. Higher cost

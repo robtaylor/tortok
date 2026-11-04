@@ -1,7 +1,7 @@
 # Open problem: Monetization
 
 **Status:** Philosophy decided. Architecture direction set in
-ADR-011 (interface-first payout, first-party pool committed,
+Decision 0011 (interface-first payout, first-party pool committed,
 Stripe+USDC-on-Base leading V1 rail candidate). Rail commitment
 gated on two prerequisites.
 **Must resolve by:** Sub-problem A (payout-destination Lexicon) —
@@ -11,8 +11,8 @@ P2 (US-incorporation decision). Sub-problem B (general pool
 primitive) — deferred to V2.
 **Blocks:** First-party pool implementation; in-app surfacing of
 creator payout destinations.
-**Related ADRs:** ADR-002 (AT Protocol + Lexicons), ADR-005 (own PDS
-+ AppView), **ADR-011 (monetization architecture)**.
+**Related decision records:** Decision 0002 (AT Protocol + Lexicons), Decision 0005 (own PDS
++ AppView), **Decision 0011 (monetization architecture)**.
 
 ## The philosophy (decided)
 
@@ -30,7 +30,7 @@ This choice is load-bearing. It means TorTok:
   creators use host-read ads recorded into the video itself.
 - **Does not host paid content.** Every video is public, torrentable,
   and streamable from the R2 origin. No paywalls, no DRM, no gated
-  feeds. Paid content would break the ADR-008 R2+P2P model and force
+  feeds. Paid content would break the Decision 0008 R2+P2P model and force
   an entirely different auth-gated origin path; the simplest way to
   avoid that cost is to not build paid content.
 - **Does not custody creator money.** No Stripe Connect account, no
@@ -117,7 +117,7 @@ provides the substrate the pool operator reads from.
 
 What TorTok needs to expose for this to work:
 
-1. **Stable creator identity** — already handled by DIDs (ADR-003).
+1. **Stable creator identity** — already handled by DIDs (Decision 0003).
 2. **Trustworthy engagement data** — depends on `view-counting.md`.
    A pool operator distributing by view count needs numbers they
    can defend to contributors. This is the same trust problem
@@ -218,7 +218,7 @@ a pool" model: this one is *first-party*. TorTok would publish it,
 brand it, and onboard fans into it as the default monetization
 surface. That contradicts the existing principle in this file that
 "TorTok does not operate the pool." The contradiction is genuine
-and needs resolving in the eventual monetization ADR.
+and needs resolving in the eventual monetization decision record.
 
 **Resolution candidates for the operating mechanism (preserves
 "TorTok does not custody creator money"):**
@@ -247,7 +247,7 @@ and needs resolving in the eventual monetization ADR.
 5. **Smart contract (Ethereum / Solana) pool.** Fan funds, on-chain
    distribution by signed allocation. Fully non-custodial for tortok.
    Punishingly narrow user base; introduces crypto-UX that
-   contradicts "frictionless familiar signup" from ADR-007.
+   contradicts "frictionless familiar signup" from Decision 0007.
 
 ### Research findings (2026-04-17)
 
@@ -347,14 +347,14 @@ Lightning (candidate 3) was not researched in this pass because its
 small audience is well-understood; it remains a parallel optional
 rail for crypto-native creators rather than a V1 primary candidate.
 
-### V1 direction (recorded in ADR-011, 2026-04-17)
+### V1 direction (recorded in Decision 0011, 2026-04-17)
 
 **Architect the payout layer behind an interface. Commit to the
 first-party pool as a product. Defer the V1 rail commitment pending
 two explicit prerequisites.**
 
-ADR-011 in `decisions.md` is the authoritative record of the
-decision. The summary below reflects what ADR-011 commits to.
+Decision 0011 is the authoritative record of the
+decision. The summary below reflects what Decision 0011 commits to.
 
 1. The *interface* is the stable primitive. Sub-problem A's
    `app.tortok.payout.destination` Lexicon is the contract; which backend
@@ -374,7 +374,7 @@ decision. The summary below reflects what ADR-011 commits to.
    implications beyond monetization. The Stripe+USDC rail requires
    it; the Lightning rail doesn't; the OC rail depends on the host's
    requirements.
-5. After P1 and P2 resolve, the monetization ADR picks the V1 rail.
+5. After P1 and P2 resolve, the monetization decision record picks the V1 rail.
    Leading candidate is Stripe+USDC-on-Base, with explicit
    acceptance of: softened custody principle (transient Stripe
    float), creator KYC (accepted as acceptable friction), and a
@@ -400,7 +400,7 @@ decision. The summary below reflects what ADR-011 commits to.
   depend on extracting from creators or running ads. Defer to its
   own decision; not blocking the release plan.
 
-**Open sub-questions for the eventual ADR:**
+**Open sub-questions for the eventual decision record:**
 
 1. Operating mechanism choice (1 vs 2 vs hybrid above).
 2. Default fan behaviour if they don't manually allocate — split
@@ -421,7 +421,7 @@ trustworthy view counts** (`view-counting.md`) for its primary
 distribution mechanic — fan-allocated distribution sidesteps the
 view-count trust problem. View counts remain critical for external
 monetization but are no longer a prerequisite for shipping the pool.
-This loosens the monetization-ADR sequencing.
+This loosens the monetization-decision record sequencing.
 
 ## What the current architecture already supports
 
@@ -432,19 +432,19 @@ Confirming the philosophy-decided part doesn't need any new infra:
 - **Trustworthy view counts** → open problem, already tracked in
   `view-counting.md`. The resolve-by trigger is already "before
   monetization," which this file confirms.
-- **No payment processor** → not needed, no ADR change required.
+- **No payment processor** → not needed, no decision record change required.
 - **No KYC/PII separation** → not needed, the `monetization-PII`
   concern I flagged in an earlier draft of this file has been
   retracted.
-- **No paid content gating** → not needed, ADR-008's R2+P2P model
+- **No paid content gating** → not needed, Decision 0008's R2+P2P model
   is untouched.
 - **No ad serving** → not needed, not built, not planned.
 
-## DMCA and copyright (now resolved in ADR-013)
+## DMCA and copyright (now resolved in Decision 0013)
 
 Copyright hygiene is legally required regardless of monetization —
 DMCA safe harbor needs a repeat-infringer policy and a takedown
-pipeline. ADR-013 resolves this: registered DMCA agent, takedown
+pipeline. Decision 0013 resolves this: registered DMCA agent, takedown
 endpoint, 3-strikes-in-12-months suspension policy. Under external
 monetization, this is *not* gated by a monetization launch (we're
 not paying creators, so the "money flows → legal exposure
@@ -455,16 +455,16 @@ when we open signup beyond the team.
 
 A resolved `monetization.md` splits into three (updated 2026-04-17):
 
-1. **An ADR (or a small set of profile-record additions)** that
+1. **A decision record (or a small set of profile-record additions)** that
    ships the `app.tortok.payout.destination` lexicon and the baseline
    external-link surfacing (Sub-problem A). This unblocks creators
    monetizing off-platform on day one.
-2. **A first-party-pool ADR** that picks an operating mechanism for
+2. **A first-party-pool decision record** that picks an operating mechanism for
    the PWYW "support open content" pool (Sub-problem C), defines
    fan UX, and resolves the contradiction with the existing
    "TorTok does not operate the pool" principle. Likely the next
-   monetization ADR after the inbound-federation work in ADR-010.
-3. **A third-party-pool ADR** (possibly much later) that ships the
+   monetization decision record after the inbound-federation work in Decision 0010.
+3. **A third-party-pool decision record** (possibly much later) that ships the
    `app.tortok.payout.pool` + `poolAcceptance` lexicons, the pool
    discovery UX, and the abuse/trust story (Sub-problem B). This
    one is optional — we can ship TorTok without it and add it when
@@ -473,4 +473,4 @@ A resolved `monetization.md` splits into three (updated 2026-04-17):
 Sub-problem A and the external-monetization philosophy depend on
 `view-counting.md` resolving first. **Sub-problem C does not** —
 fan-allocated distribution sidesteps the view-count trust problem,
-which loosens the sequencing on the first-party pool ADR.
+which loosens the sequencing on the first-party pool decision record.

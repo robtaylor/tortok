@@ -1,9 +1,11 @@
 # Phase 3 — atproto integration
 
+**Status:** Active — the current phase (Decision 0006 Phase 3).
+
 ## Previous plan (parked)
 
 The previous content of this plan file scoped **Unit 5 — Client seeding
-policy (ADR-009)** for Phase 2. That work is now parked: the user and I
+policy (Decision 0009)** for Phase 2. That work is now parked: the user and I
 agreed to defer the client seeding policy until post-Phase 3, once we
 know how PDS-driven session lifetimes interact with foreground-only
 seeding. The previous plan has been backed up at
@@ -13,14 +15,14 @@ referenced there were never implemented; nothing to clean up.
 
 ## Status (2026-05-02 evening — Unit 2.5 replanned)
 
-- ✅ **Unit 0** — ADR-012 (Lexicon namespace governance) merged; canonical NSID is **`app.tortok.*`** (reverse-DNS rooted at `tortok.app`); schema lives at `lexicons/app/tortok/video/post.json`; AppView+PDS cost note added to Deferred Decisions in `decisions.md`.
+- ✅ **Unit 0** — Decision 0012 (Lexicon namespace governance) merged; canonical NSID is **`app.tortok.*`** (reverse-DNS rooted at `tortok.app`); schema lives at `lexicons/app/tortok/video/post.json`; AppView+PDS cost note added to Deferred Decisions in [`open-problems/README.md`](../architecture/open-problems/README.md).
 - ✅ **Unit 1** — Standalone Node smoke test (`scripts/atproto-smoke-test.mjs`) round-trips an `app.tortok.video.post` record against `bsky.social` using app-password auth.
 - ✅ **Unit 2** — End-to-end OAuth round-trip verified on iOS sim. `tortok.app` Cloudflare Pages live. `@atproto/oauth-client-expo` integrated. Hermes polyfills (`AbortSignal.timeout`, `AbortSignal.prototype.throwIfAborted`) at `tortok/lib/polyfills.ts`. Last-handle pre-fill + iOS autofill hints. 7 auth-store tests.
 - 🔁 **Unit 2.5 — REPLANNED 2026-05-02 evening.** First attempt (4 slices, 13 fixes, ~30 commits) preserved on `unit-2.5-attempt-1` tag. `main` reset to `670061a` (pre-Unit-2.5). Architectural takeaways from the attempt: (1) `bridged_posts` as a separate table was a defensive kludge; the right model is one `posts` table holding atproto records of either lexicon, with mirror state in a sidecar. (2) The `source` discriminator column was redundant — at-uri's collection segment carries the same info. (3) Most issues were bridged-content-specific data-shape problems; the bridge.native.ts + WebTorrent-on-Hermes infrastructure itself is healthy (Phase 2 measured 89–91% P2P offload between two sims; native at this commit cold-starts in ~413ms). The byte-level fixes from the attempt (HLS→MP4 ffmpeg remux with `-movflags +faststart`, 16K piece size, query-string strip from playlist, NSFW self-label filter, listener leak fixes, lazy-init OAuth client, per-request bridge logging) carry forward — only the table architecture and integration shape get rewritten.
 - ➡️ **Unit 2.5 (v2)** — see "Replanned Unit 2.5" below. Phase 0 cleanup → Phase A atproto-native ingestion → Phase B feed cutover → Phase C retire legacy → Phase D bring back bridge → Phase E final cleanup. Absorbs Unit 4 (partial), Unit 5, Unit 6 from the original plan.
 - **Unit 3** — after Unit 2.5 (v2); client publishes `app.tortok.video.post` via the user's PDS.
 - **Unit 7** — web cookie auth (still pending; unchanged).
-- ✅ **Moderation parallel track** — ADR-013 landed 2026-04-29 (atproto labelers + illegal-content floor + UK age-verification gate); `open-problems/moderation.md` deleted.
+- ✅ **Moderation parallel track** — Decision 0013 landed 2026-04-29 (atproto labelers + illegal-content floor + UK age-verification gate); `open-problems/moderation.md` deleted.
 
 **The meta-lesson from attempt 1.** Coding was the easy bit — the day was 80% problem identification, 20% code. Each new bug-fix layer revealed the next misalignment with end-state architecture. The replan absorbs end-state into Unit 2.5 directly so we stop building toward a target we'd have to demolish in Unit 4 anyway.
 
@@ -37,15 +39,15 @@ the active phase.
 
 The original Phase 3 scope ("fork our own atproto PDS, custodial
 signup, migrate users") was reversed in the same session — see the
-2026-04-29 amendments to ADR-003 and ADR-007, plus
+2026-04-29 amendments to Decision 0003 and Decision 0007, plus
 `docs/architecture/open-problems/own-pds.md`. The current Phase 3
 leverages users' existing atproto identities (typically `bsky.social`)
 and is materially smaller.
 
 ## Going-in answers (decisions reached in 2026-04-29 conversation)
 
-These are not ADRs yet — they're working decisions that should harden
-into ADRs as we hit them.
+These are not decision records yet — they're working decisions that should harden
+into decision records as we hit them.
 
 1. **Relay vs poll for AppView ingest.** Poll a known list of PDS
    hosts for v0 (probably just `bsky.social`). Switch to relay
@@ -77,20 +79,20 @@ gut-feeling estimates, not commitments.
 
 ### Unit 0 — Pre-work *(decisions, ~half day)* ✅ DONE 2026-04-29
 
-- **ADR: Lexicon namespace governance.** ✅ ADR-012. Canonical NSID
+- **decision record: Lexicon namespace governance.** ✅ Decision 0012. Canonical NSID
   prefix is `app.tortok.*` (reverse-DNS rooted at `tortok.app`, matching
   the `app.bsky.*` convention). Schema repo layout, Bluesky-shape reuse
   policy documented.
 - **`lexicons/app/tortok/video/post.json`.** ✅ Live. Shape diverged
-  from the ADR-002 draft in two ways worth noting:
+  from the Decision 0002 draft in two ways worth noting:
   - `aspectRatio` is `{width, height}` (matching
     `app.bsky.embed.defs#aspectRatio`), not the draft's `"9:16"` string —
-    interop with ADR-010 inbound bridge.
+    interop with Decision 0010 inbound bridge.
   - The shape is **inlined**, not `ref`'d to `app.bsky.embed.defs`,
     avoiding a runtime dependency on Bluesky lexicons being loaded in
     our validator.
 - **AppView + PDS cost back-of-envelope.** ✅ Added to
-  `decisions.md` Deferred Decisions.
+  the Deferred Decisions in `open-problems/README.md`.
 
 ### Unit 1 — Round-trip smoke test *(out-of-app, ~half day)* ✅ DONE 2026-04-30
 
@@ -141,7 +143,7 @@ npx expo install @atproto/oauth-client-expo @atproto/api expo-web-browser react-
    (Skylight is the canonical live example since Bluesky's own RN
    client doesn't yet use OAuth — see "Reference apps" below).
    - DNS + static hosting decision is open; Cloudflare Pages is the
-     obvious fit given we already use Cloudflare for R2 (ADR-008), but
+     obvious fit given we already use Cloudflare for R2 (Decision 0008), but
      not committed.
    - Web build's redirect URI also needs to live on `tortok.app`
      (e.g. `https://tortok.app/auth/callback`), so this hosting needs
@@ -187,7 +189,7 @@ npx expo install @atproto/oauth-client-expo @atproto/api expo-web-browser react-
 #### Risks
 
 - **Pre-1.0 lib.** `0.0.10`, sub-fortnightly cadence, single primary
-  maintainer. Pin a version, watch the CHANGELOG. ADR-012's vendor-risk
+  maintainer. Pin a version, watch the CHANGELOG. Decision 0012's vendor-risk
   caveat applies here too.
 - **No first-party reference.** Bluesky's own `social-app` still uses
   App Passwords (`agent.login(identifier, password)` —
@@ -491,7 +493,7 @@ unified `posts` table architecture rather than a sidecar.
 21. **MODIFY `backend/src/index.ts`** — boot
     `bskyFirehose` + `bskyEngagementPoller` + `bskyMirror`
     alongside `atprotoIngest` and the seeder. Single process for
-    v1; Phase 0b extracts per ADR-010-A operational note.
+    v1; Phase 0b extracts per Decision 0010-A operational note.
 
 **Done =** Jetstream subscriber connects, filters fire, NSFW
 gets demoted. Promoted posts get mirrored to R2 as MP4, written
@@ -506,12 +508,14 @@ native. No R2 429s on `.torrent` fetches (served by backend).
     migrations clean, restart backend, run `seed-fixtures.mjs`,
     let firehose run for ~10 min, confirm both native + bridged
     rows in feed, scroll the iOS sim feed without errors.
-23. **Update `docs/architecture/decisions.md`** — append a note
-    to ADR-010 (the Path 2 amendment block) recording the
-    architectural change: "Mirror state lives in a sidecar
-    `mirror_state` table; bridged posts coexist with native posts
-    in `posts` discriminated by collection NSID. No `source`
-    column."
+23. **Record the mirror-state architecture.** Its present-tense
+    current state ("Mirror state lives in a sidecar `mirror_state`
+    table; bridged posts coexist with native posts in `posts`
+    discriminated by collection NSID. No `source` column.") belongs
+    in the federation area doc (`docs/architecture/federation.md`).
+    If it changes the choice Decision 0010 made, write a *superseding*
+    decision record rather than editing 0010 — decisions are
+    immutable.
 24. **Delete `unit-2.5-attempt-1` tag** (or keep as historical
     reference — user's call). The byte-level fix lessons are
     captured in this plan + ported code; the tag can stay if it
@@ -606,7 +610,7 @@ remains for **multi-PDS scale**:
 
 **Risk.** Same as before: a `app.tortok.video.post` record that
 references a dead magnet produces a dead feed entry. Out-of-band
-ingest path may need to tickle L1 origin (ADR-008). Folds into
+ingest path may need to tickle L1 origin (Decision 0008). Folds into
 this unit.
 
 **Done =** a user signing in from a non-`bsky.social` PDS sees
@@ -627,7 +631,7 @@ surface for auth tokens reduced.
 
 ## Parallel track (does not block dev work)
 
-**Moderation ADR.** ✅ Resolved 2026-04-29 by ADR-013. Default
+**Moderation decision record.** ✅ Resolved 2026-04-29 by Decision 0013. Default
 labeler subscription set + opt-out detection for bridged content
 remain Phase A launch criteria, tracked in `release-plan.md`.
 
@@ -650,14 +654,14 @@ Unit 7 (web cookie auth) is independent of all of the above.
 
 - Likes / follows (deferred per going-in answer #3, will reuse
   Bluesky lexicons).
-- Self-custody upgrade flow (deferred ADR).
-- `did:web` opt-in (deferred ADR).
-- ADR-009 client seeding policy (parked, post-Phase 3).
+- Self-custody upgrade flow (deferred decision record).
+- `did:web` opt-in (deferred decision record).
+- Decision 0009 client seeding policy (parked, post-Phase 3).
 - AppView firehose subscriber at full Bluesky scale (Phase 4).
 - View counts / view ranking (Phase 4 per `view-counting.md`).
 - Custom PDS in any form (parked per `open-problems/own-pds.md`).
 - Mid-phase scope changes back to a custom PDS — if a trigger from
-  `own-pds.md` fires, it becomes a separate ADR + new phase, not a
+  `own-pds.md` fires, it becomes a separate decision record + new phase, not a
   Phase 3 amendment.
 
 ## Open questions before kicking off
@@ -669,7 +673,7 @@ Unit 7 (web cookie auth) is independent of all of the above.
    test created a record without a thumbnail blob, so this isn't yet
    verified end-to-end). Confirm `bsky.social`'s thumbnail blob limit
    before Unit 3 starts uploading real thumbnails.
-3. ✅ **Order of moderation ADR vs Unit 0.** Resolved — ADR-013 landed
+3. ✅ **Order of moderation decision record vs Unit 0.** Resolved — Decision 0013 landed
    2026-04-29 ahead of Unit 1.
 4. **Deletion / mutation story.** Still open — what happens when a
    user deletes an `app.tortok.video.post` record from their PDS?
@@ -678,7 +682,7 @@ Unit 7 (web cookie auth) is independent of all of the above.
 5. **`tortok.app` hosting** *(new, 2026-05-01)*. Where does the
    `oauth-client-metadata.json` file live, and where does the web
    build's `auth/callback` route live? Cloudflare Pages is the
-   obvious fit (we already use Cloudflare for R2 per ADR-008) but
+   obvious fit (we already use Cloudflare for R2 per Decision 0008) but
    not yet committed. Blocks Unit 2 from talking to a real PDS;
    doesn't block writing the client code locally against a
    loopback `client_id`.

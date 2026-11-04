@@ -1,4 +1,6 @@
-# ADR-005: Backend stays Node + TypeScript; evolves into an AppView
+# Decision 0005: Backend stays Node + TypeScript; evolves into an AppView
+
+**Current architecture:** [Backend / AppView](../backend.md)
 
 **Status:** Accepted
 
@@ -21,7 +23,7 @@ token, and like-counter bugs need fixing regardless.
 
 **v1: host our own PDS.** We run a TorTok-branded PDS from day 1. This
 reverses my earlier instinct to defer PDS hosting. The reason is UX: the
-only way to keep atproto plumbing invisible to users (ADR-007) is to
+only way to keep atproto plumbing invisible to users (Decision 0007) is to
 own the signup surface ourselves. Users do not pick a PDS, never see
 "atproto" or "Bluesky", and never need to know what a DID is. TorTok
 looks and feels like a normal short-form video app.

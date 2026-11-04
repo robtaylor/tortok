@@ -3,7 +3,7 @@
 // WebTorrent and its dependency chain were written for Node. Running them on
 // Hermes requires Node-core shims wired through Metro's resolver. See
 // `lib/webtorrent/polyfills.ts` for the matching runtime global setup, and
-// ADR-009 for the Phase 2 WebTorrent spike context.
+// Decision 0009 for the Phase 2 WebTorrent spike context.
 
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');

@@ -1,8 +1,10 @@
-# ADR-011: Monetization architecture — interface-first payout, first-party pool committed, V1 rail gated on Apple + US-incorporation prerequisites
+# Decision 0011: Monetization architecture — interface-first payout, first-party pool committed, V1 rail gated on Apple + US-incorporation prerequisites
+
+**Current architecture:** [Monetization](../monetization.md)
 
 **Status:** Accepted — 2026-04-17. Amended 2026-04-29 — NSIDs are
 `app.tortok.payout.destination` and `app.tortok.payout.pool` (reverse-
-DNS rooted at `tortok.app`); see ADR-012.
+DNS rooted at `tortok.app`); see Decision 0012.
 
 **Context.** The release-plan discussion forced the monetization
 question earlier than expected. The public wedge settled as "your
@@ -75,7 +77,7 @@ fully knowable yet?
    watched follows (exact rule deferred to implementation). This
    sidesteps the view-count trust problem — `view-counting.md` is
    *not* a prerequisite for this pool mechanism, which loosens the
-   sequencing on this ADR.
+   sequencing on this decision.
 
 4. **Leading V1 rail candidate is Stripe + USDC-on-Base,** with
    explicit acceptance of: creator KYC via Stripe Connect Express
@@ -101,7 +103,7 @@ fully knowable yet?
    implications beyond monetization (tax residency, legal exposure,
    App Store entity requirements). Stripe+USDC requires it;
    Lightning doesn't. The decision is deferred to its own
-   discussion; this ADR only notes that the leading V1 rail depends
+   discussion; this decision only notes that the leading V1 rail depends
    on it.
 
 7. **Lightning is a parallel optional rail, not the V1 primary.**
@@ -159,7 +161,7 @@ fully knowable yet?
 - Creator KYC becomes a documented V1 requirement for the first-
   party pool. Creators who want to receive from the pool complete
   Stripe Connect Express onboarding (identity + tax). Earlier drafts
-  framed this as wedge-breaking; this ADR records that it is not —
+  framed this as wedge-breaking; this decision records that it is not —
   it is identical friction to Patreon/YouTube, does not compromise
   the "yours to take anywhere" wedge, and nothing prevents a later
   non-KYC rail from being added in parallel.
@@ -176,7 +178,7 @@ fully knowable yet?
   creators creates a stronger "tortok endorses these creators by
   paying them" signal than a neutral hosting platform creates, even
   if the distribution is fan-allocated. This increases pressure on
-  ADR-013's labeler/queue capacity but does not block this ADR.
+  Decision 0013's labeler/queue capacity but does not block this decision.
 - Sub-problem B ("click to create your own pool") being V2 softens
   the federation pitch slightly — third parties can still run pools
   via the Lexicon, but tortok won't surface them. Revisit when the
@@ -184,10 +186,10 @@ fully knowable yet?
 
 **Alternatives ruled out.**
 
-- **Pick a rail now and write the ADR around it.** Tempting but
+- **Pick a rail now and write the decision around it.** Tempting but
   premature: neither researched rail is fully knowable without
   Apple's position (P1) and the US-incorporation decision (P2).
-  Writing the ADR around Stripe+USDC today forces commitment to
+  Writing the decision around Stripe+USDC today forces commitment to
   P1 and P2 outcomes that haven't been obtained. Interface-first
   lets the product commitment land while rail commitment waits.
 - **Fiscal host (Open Collective) as V1.** Ruled out by research
@@ -202,7 +204,7 @@ fully knowable yet?
   principle explicitly rejects.
 - **Smart contract on-chain pool (Ethereum / Solana).** Non-
   custodial for tortok but forces crypto UX on every fan.
-  Contradicts ADR-007's "frictionless familiar signup."
+  Contradicts Decision 0007's "frictionless familiar signup."
 - **Abandon the first-party pool and keep only the general
   primitive.** Possible but the release-plan discussion settled
   that the first-party pool is the product-market-fit answer to

@@ -1,4 +1,6 @@
-# ADR-003: Identity uses DIDs — `did:plc` default, `did:web` opt-in
+# Decision 0003: Identity uses DIDs — `did:plc` default, `did:web` opt-in
+
+**Current architecture:** [Federation](../federation.md)
 
 **Status:** Accepted. Amended 2026-04-29 — v1 no longer runs a custodial
 TorTok PDS; users authenticate via their existing atproto identity
@@ -16,7 +18,7 @@ assumes keys can rotate.
 - The user's home PDS holds their rotation key, password, recovery
   flow, and blob storage. We hold none of those.
 - We still build our own AppView and our own `app.tortok.video.post`
-  Lexicon (see ADR-002, ADR-005). Records live in the user's PDS
+  Lexicon (see Decision 0002, Decision 0005). Records live in the user's PDS
   repo; we index them in our AppView.
 - **`did:web` opt-in for sovereigns.** Power users who own a domain
   can opt into `did:web` per the standard atproto upgrade path. We
@@ -31,14 +33,14 @@ assumes keys can rotate.
 custodial v1 in which TorTok ran a PDS, generated `did:plc` identities
 on signup, and held rotation keys server-side. That model has been
 reversed. The reasoning, costs, and triggers for revisiting are in
-ADR-007's Amendment block and in `open-problems/own-pds.md`.
+Decision 0007's Amendment block and in `open-problems/own-pds.md`.
 
 **Original decision (pre-amendment, retained for context).**
 - Signup creates a `did:plc` identity behind the scenes. The user does
   not see this — the flow is email + password + captcha, with no
-  atproto terminology in the UI (see ADR-007).
+  atproto terminology in the UI (see Decision 0007).
 - **v1 is custodial.** Rotation keys are held server-side by our PDS
-  (see ADR-005). Users reset their password and recover their account
+  (see Decision 0005). Users reset their password and recover their account
   the same way they would on any standard app. Key material lives in a
   dedicated secrets store, not the primary application database.
 - **Post-v1: opt-in self-custody.** A settings screen lets users
@@ -51,7 +53,7 @@ ADR-007's Amendment block and in `open-problems/own-pds.md`.
 - v1 ships materially faster. No PDS fork, no custodial key store,
   no signup spam ladder, no email/password complexity.
 - We surface "sign in with Bluesky" at the user level. The product
-  hypothesis (see ADR-007 amendment) is that this is a credibility
+  hypothesis (see Decision 0007 amendment) is that this is a credibility
   and community signal, not a leak of plumbing.
 - We accept dependency on the user's PDS. If `bsky.social` rate-limits
   third-party Lexicons or refuses our records, our users can't post

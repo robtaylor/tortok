@@ -1,4 +1,6 @@
-# ADR-001: Torrent engine is WebTorrent, end to end
+# Decision 0001: Torrent engine is WebTorrent, end to end
+
+**Current architecture:** [P2P & torrent engine](../p2p-torrent.md)
 
 **Status:** Accepted
 
@@ -10,7 +12,7 @@ The backend seeder is also WebTorrent. The libtorrent path was aspirational
 and never functioned.
 
 **Decision.** Use WebTorrent exclusively across client and server. Delete the
-libtorrent stubs. In the new client (see ADR-004) WebTorrent will run in the
+libtorrent stubs. In the new client (see Decision 0004) WebTorrent will run in the
 host JavaScript runtime directly — no `WKWebView` bridge, no
 `AVAssetResourceLoaderDelegate` plumbing.
 

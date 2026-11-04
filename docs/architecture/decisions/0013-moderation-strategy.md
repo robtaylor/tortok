@@ -1,4 +1,6 @@
-# ADR-013: Moderation strategy — atproto labelers, illegal-content floor, UK age-verification gate
+# Decision 0013: Moderation strategy — atproto labelers, illegal-content floor, UK age-verification gate
+
+**Current architecture:** [Moderation](../moderation.md)
 
 **Status:** Accepted — 2026-04-29. Resolves
 `docs/architecture/open-problems/moderation.md`.
@@ -15,7 +17,7 @@ Three forces shape the answer:
    The platform's role is to surface signals (labels), not to enforce
    one viewing policy on everyone.
 3. **UK Online Safety Act.** TorTok is, or will be, UK-incorporated
-   (per the working ADR-011 P2 assumption). The OSA applies fully:
+   (per the working Decision 0011 P2 assumption). The OSA applies fully:
    illegal-content duties, "highly effective" age assurance for
    pornographic content, and reporting/transparency obligations
    scaling with user count.
@@ -23,7 +25,7 @@ Three forces shape the answer:
 The open-problem doc sketched a three-tier approach (auto signal at
 upload, user reports with auto-hide, community blocklists). atproto
 already has a primitive that unifies all three: **labelers**. This
-ADR adopts the labeler model end-to-end and adds the unavoidable
+decision adopts the labeler model end-to-end and adds the unavoidable
 platform-level layers (illegal-content floor, DMCA, OSA compliance)
 on top.
 
@@ -64,7 +66,7 @@ and what we *add* on top because it isn't in the protocol.
    subscribes by default to the same labeler set Bluesky's first-
    party app subscribes to (CSAM hash matching, etc.). This gives us
    protocol-floor moderation for free at v1 and avoids reinventing
-   perceptual-hash infrastructure. ADR-010 already made this
+   perceptual-hash infrastructure. Decision 0010 already made this
    commitment for bridged content; we extend it to native content.
 
 5. **Ozone for our first-party labeler operations.** Ozone is
@@ -179,7 +181,7 @@ Signup remains invite-only until **all** of:
   fees. None of these are large at v1 scale; all grow with users.
 - DMCA agent registration becomes a tracked legal action item with
   a hard dependency on Phase 3 signup launch. Lead time is 1–2
-  weeks; start in parallel with this ADR landing.
+  weeks; start in parallel with this decision landing.
 - UK age-verification provider integration is a Phase 3.5 item with
   per-check cost (~£0.20–£1) that scales with the fraction of UK
   users toggling NSFW on. Negligible at invite scale; budgeted
@@ -253,7 +255,7 @@ Signup remains invite-only until **all** of:
   tooling (a queue table + a small admin UI). Phase 4 cuts over to
   Ozone proper.
 
-**Open sub-questions deferred (do not block this ADR):**
+**Open sub-questions deferred (do not block this decision):**
 - Specific age-verification provider (provider-comparison task).
 - Exact Ozone deployment shape (Phase 4 question).
 - Trigger thresholds for hiring paid moderators (operational; tune
