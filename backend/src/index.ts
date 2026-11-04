@@ -4,14 +4,17 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import crypto from 'crypto';
+import http from 'http';
 import path from 'path';
-import { initializeDatabase } from './db';
+import { promisify } from 'util';
+import { initializeDatabase, closeDatabase } from './db';
 import authRoutes from './routes/auth';
 import videoRoutes from './routes/videos';
 import { seeder } from './services/seeder';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
+let server: http.Server | undefined;
 
 // Middleware
 app.use(helmet());
@@ -132,7 +135,7 @@ async function start() {
     }
 
     // Start listening
-    app.listen(PORT, () => {
+    server = app.listen(PORT, () => {
       console.log('');
       console.log('🚀 TorTok Metadata Server');
       console.log('==========================');
@@ -148,11 +151,40 @@ async function start() {
   }
 }
 
-// Handle graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('Received SIGTERM, shutting down...');
-  await seeder.destroy();
-  process.exit(0);
-});
+// Graceful shutdown. Fly.io sends SIGINT by default (fly.toml can
+// override it), docker/dev-down send SIGTERM, Ctrl+C sends SIGINT — handle
+// both. Order: stop accepting HTTP and stop seeding, then close the pool,
+// under a hard deadline so a stuck step can't block the platform's kill.
+const SHUTDOWN_DEADLINE_MS = 8000;
+let shuttingDown = false;
+
+async function shutdown(signal: NodeJS.Signals): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`Received ${signal}, shutting down...`);
+
+  setTimeout(() => {
+    console.error(`Shutdown exceeded ${SHUTDOWN_DEADLINE_MS}ms, forcing exit`);
+    process.exit(1);
+  }, SHUTDOWN_DEADLINE_MS).unref();
+
+  try {
+    // Stop accepting HTTP and tear down the seeder concurrently; only the
+    // DB pool has to wait for in-flight requests to drain.
+    const httpClosed = server ? promisify(server.close.bind(server))() : undefined;
+    // Idle keep-alive sockets would otherwise hold close() open.
+    server?.closeIdleConnections();
+    await Promise.all([httpClosed, seeder.destroy()]);
+    console.log('HTTP server closed');
+    await closeDatabase();
+    process.exit(0);
+  } catch (err) {
+    console.error('Error during shutdown:', err);
+    process.exit(1);
+  }
+}
+
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));
 
 start();

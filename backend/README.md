@@ -12,7 +12,7 @@ Federated metadata server for TorTok - handles user authentication, video metada
 - ✅ Hashtag support
 - ✅ PostgreSQL database
 - ✅ Docker containerization
-- ✅ Google Cloud Run deployment
+- ✅ Fly.io deployment
 
 ## Tech Stack
 
@@ -21,7 +21,7 @@ Federated metadata server for TorTok - handles user authentication, video metada
 - **Database**: PostgreSQL 15
 - **Authentication**: JWT (jsonwebtoken)
 - **Validation**: Joi
-- **Deployment**: Docker + Google Cloud Run
+- **Deployment**: Docker + Fly.io
 
 ## Local Development
 
@@ -162,86 +162,21 @@ Returns instance metadata for discovery
 **GET /health**
 Health check endpoint
 
-## Google Cloud Deployment
+## Deployment (Fly.io)
 
-### Prerequisites
-
-1. **Install Google Cloud CLI**:
-   ```bash
-   # macOS
-   brew install google-cloud-sdk
-
-   # Or download from https://cloud.google.com/sdk/docs/install
-   ```
-
-2. **Authenticate**:
-   ```bash
-   gcloud auth login
-   ```
-
-3. **Set account**:
-   ```bash
-   gcloud config set account rob@shape.build
-   ```
-
-### Deploy
-
-Run the deployment script:
+The backend deploys to Fly.io as app `tortok-api` (`fly.toml`), built from
+the `Dockerfile` in this directory.
 
 ```bash
-./deploy.sh
+fly auth login
+fly secrets set -a tortok-api JWT_SECRET=... DATABASE_URL=... TURN_SECRET=...
+fly deploy
 ```
 
-This will:
-1. ✅ Create Google Cloud project (if needed)
-2. ✅ Enable required APIs
-3. ✅ Build Docker image
-4. ✅ Create PostgreSQL Cloud SQL instance
-5. ✅ Deploy to Cloud Run
-6. ✅ Configure environment variables
-
-### Manual Deployment Steps
-
-If you prefer manual deployment:
-
-```bash
-# Set project
-gcloud config set project tortok-prod
-
-# Build image
-gcloud builds submit --tag gcr.io/tortok-prod/tortok-metadata-server
-
-# Deploy
-gcloud run deploy tortok-metadata-server \
-  --image gcr.io/tortok-prod/tortok-metadata-server \
-  --platform managed \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --set-env-vars "NODE_ENV=production" \
-  --set-env-vars "JWT_SECRET=your-secret" \
-  --set-cloudsql-instances "tortok-prod:us-central1:tortok-db"
-```
-
-### Database Setup
-
-1. **Create Cloud SQL instance**:
-   ```bash
-   gcloud sql instances create tortok-db \
-     --database-version=POSTGRES_15 \
-     --tier=db-f1-micro \
-     --region=us-central1
-   ```
-
-2. **Create database**:
-   ```bash
-   gcloud sql databases create tortok --instance=tortok-db
-   ```
-
-3. **Set up connection string as secret**:
-   ```bash
-   echo -n "postgresql://user:password@/tortok?host=/cloudsql/tortok-prod:us-central1:tortok-db" | \
-   gcloud secrets create tortok-db-url --data-file=-
-   ```
+`fly.toml` never auto-stops the machine (`auto_stop_machines = "off"`) because the origin WebTorrent seeder runs
+in this process and stops seeding if the machine idles out. Shutdown is
+graceful on SIGTERM/SIGINT (HTTP server, then seeder, then Postgres pool)
+within `kill_timeout`.
 
 ## Environment Variables
 
@@ -255,6 +190,9 @@ gcloud run deploy tortok-metadata-server \
 | `INSTANCE_DOMAIN` | Instance domain name | `localhost` |
 | `INSTANCE_NAME` | Display name | `TorTok Local` |
 | `ALLOWED_ORIGINS` | CORS origins (comma-separated) | `*` |
+| `CONTENT_ORIGIN_URL` | BEP-19 webseed origin | `http://localhost:8090` (dev), R2 bucket (prod) |
+| `TRACKER_URLS` | Trackers the seeder announces to (comma-separated) | `ws://localhost:8000` (dev), `wss://tortok-tracker.fly.dev` (prod) |
+| `TURN_SECRET` | coturn shared secret for `/turn/credentials` | unset → STUN only |
 
 ## Database Schema
 
@@ -298,53 +236,10 @@ curl http://localhost:8080/videos/feed
 
 ## Monitoring
 
-### Cloud Run Logs
-
 ```bash
-gcloud run services logs read tortok-metadata-server \
-  --region=us-central1 \
-  --limit=50
+fly logs -a tortok-api
+fly status -a tortok-api
 ```
-
-### Metrics
-
-Cloud Run console: https://console.cloud.google.com/run
-
-Monitor:
-- Request count
-- Latency
-- Error rate
-- Container instances
-
-## Scaling
-
-Cloud Run autoscales based on traffic:
-- **Min instances**: 0 (scales to zero)
-- **Max instances**: 10
-- **CPU**: 1 vCPU
-- **Memory**: 512 Mi
-
-Adjust in deployment:
-```bash
-gcloud run services update tortok-metadata-server \
-  --max-instances=20 \
-  --min-instances=1 \
-  --memory=1Gi
-```
-
-## Cost Estimation
-
-### Free Tier (Google Cloud)
-
-- Cloud Run: 2M requests/month free
-- Cloud SQL: db-f1-micro instance ~$10/month
-- Container Registry: 0.5GB storage free
-
-### Expected Costs (Low Traffic)
-
-- **Database**: ~$10/month (smallest instance)
-- **Cloud Run**: ~$0 (within free tier for <2M requests)
-- **Total**: ~$10-15/month
 
 ## Security
 
@@ -354,7 +249,7 @@ gcloud run services update tortok-metadata-server \
 - ✅ Password hashing (bcrypt)
 - ✅ SQL injection protection (parameterized queries)
 - ✅ Input validation (Joi)
-- ✅ HTTPS only (Cloud Run default)
+- ✅ HTTPS only (`force_https` in `fly.toml`)
 
 ## Future Enhancements
 

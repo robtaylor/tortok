@@ -171,13 +171,18 @@ httpServer.listen(httpPort, () => {
   console.log(`   Torrents: /bbb-01.torrent … /bbb-05.torrent\n`);
 });
 
-// Handle shutdown
-process.on('SIGINT', () => {
-  console.log('\n🛑 Shutting down…');
-  client.destroy(() => {
-    httpServer.close();
-    process.exit(0);
-  });
-});
+// Graceful shutdown on Ctrl+C (SIGINT) and scripts/dev-down.sh (SIGTERM),
+// with a hard deadline so a stuck destroy can't hang the process.
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n🛑 ${signal} — shutting down…`);
+  setTimeout(() => process.exit(1), 5000).unref();
+  httpServer.close();
+  client.destroy(() => process.exit(0));
+}
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 console.log('Press Ctrl+C to stop seeding.\n');
