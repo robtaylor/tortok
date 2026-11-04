@@ -12,7 +12,7 @@ describe('Navigation', () => {
 
   it('should navigate between all tabs', async () => {
     // Start on Home — should see feed content
-    await waitFor(element(by.text('@testuser3')))
+    await waitFor(element(by.text('@testuser')))
       .toBeVisible()
       .withTimeout(10000);
 
@@ -36,7 +36,7 @@ describe('Navigation', () => {
     await device.enableSynchronization();
     await element(by.label('Home, tab, 1 of 3')).tap();
     await device.disableSynchronization();
-    await waitFor(element(by.text('@testuser3')))
+    await waitFor(element(by.text('@testuser')))
       .toBeVisible()
       .withTimeout(5000);
   });
