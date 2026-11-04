@@ -101,7 +101,11 @@ class SeederService {
         // BEP-19 webseed: HTTP fallback for pieces when no P2P peers are
         // available. WebTorrent treats this as another peer — downloaded
         // pieces are re-shared to the swarm.
-        urlList: [`${this.contentOrigin}/videos/${name}`],
+        // These are directory (multi-file) torrents: WebTorrent appends
+        // each file's path, which already starts with the torrent name, so
+        // the webseed URL is the *parent* of the video directory. Pointing
+        // it at /videos/<name> doubles the name and every request 404s.
+        urlList: [`${this.contentOrigin}/videos`],
       };
 
       // Timeout after 30 seconds; cleared once seeding starts.
