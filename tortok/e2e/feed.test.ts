@@ -9,16 +9,18 @@ describe('Feed', () => {
 
   it('should display video with user overlay', async () => {
     // Video content should be visible with overlays
-    await waitFor(element(by.text('@testuser3')))
+    await waitFor(element(by.text('@testuser')))
       .toBeVisible()
       .withTimeout(10000);
 
-    await expect(element(by.text('Test video from R2 #tortok #test'))).toBeVisible();
-    await expect(element(by.text('#tortok #test'))).toBeVisible();
+    // Feed is the Big Buck Bunny test clips published by
+    // scripts/seed-prod-test-content.mjs; bbb-01 is newest, so it is first.
+    await expect(element(by.text('Big Buck Bunny — opening shot #bbb #test'))).toBeVisible();
+    await expect(element(by.text('#bbb #test'))).toBeVisible();
   });
 
   it('should show like button with count', async () => {
-    await waitFor(element(by.text('@testuser3')))
+    await waitFor(element(by.text('@testuser')))
       .toBeVisible()
       .withTimeout(10000);
 
