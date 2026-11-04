@@ -1,22 +1,135 @@
 # Backend / AppView
 
-*Reference doc — **stub.** The full present-tense write-up of the backend (HTTP
-routes, auth middleware, Postgres schema, the seeder service, and its evolution
-into an atproto AppView) is pending the post-migration area-doc backfill, which
-checks every claim against the code. The decision record below is authoritative
-for the design.*
+*Reference: the current design as it stands in the code. The why lives in the decision records linked from each section; the not-yet-built work is under [Implementation status](#implementation-status). Present tense means "true today". If a claim here is stale, the code moved and this doc didn't.*
 
-This area covers the Node + TypeScript backend (`backend/src/`) and its planned
-evolution into an AppView that subscribes to PDSes, indexes `app.tortok.video.*`
-records, and serves the feed. The origin WebTorrent seeder currently lives here
-and is documented in [p2p-torrent](p2p-torrent.md).
+The backend (`backend/`) is a single Node + TypeScript Express process backed by Postgres. Today it serves the **legacy email/password API**: JWT auth, video metadata, the feed, likes and views. It also hosts the origin WebTorrent seeder in-process and issues TURN credentials. It does not yet speak atproto; the AppView it is meant to become (subscribing to PDS repo events and indexing `app.tortok.video.*` records) is unbuilt. Rationale for staying on Node/TypeScript and growing into an AppView: [Decision 0005](decisions/0005-backend-node-appview.md).
+
+## Process and boot
+
+`backend/src/index.ts` builds the Express app and starts it. The middleware stack is `helmet`, `cors`, JSON and urlencoded body parsers (10 MB limit each), and `morgan` (`combined` in production, `dev` otherwise). CORS allows every origin when `ALLOWED_ORIGINS` is unset or `*`; otherwise it allows the comma-separated list, with credentials.
+
+`start()` runs in order:
+
+1. `initializeDatabase()` applies `db/schema.sql`. A failure here exits the process with code 1.
+2. `seeder.initialize()` starts the WebTorrent seeder. A failure here is logged as a warning and the server **continues without a seeder**.
+3. `app.listen(PORT)`, default port 8080.
+
+On `SIGTERM` the process destroys the seeder client and exits 0. It does not close the Postgres pool or drain HTTP connections (`closeDatabase()` exists in `db/index.ts` but nothing calls it). There is no `SIGINT` handler.
+
+Unmatched routes return `404 {"error":"Not found"}`. Uncaught route errors return `500 {"error":"Internal server error"}`; the underlying `message` is included only when `NODE_ENV=development`.
+
+## HTTP surface
+
+| Method | Path | Auth | Handler |
+|---|---|---|---|
+| GET | `/health` | none | `index.ts`: status, timestamp, `INSTANCE_DOMAIN` |
+| GET | `/.well-known/tortok` | none | `index.ts`: static instance info (`federationEnabled: false`, `supportedProtocols: ['tortok-v1']`) |
+| GET | `/seeder/stats` | none | `index.ts`: seeder torrent/peer counts, upload speed, seeded torrent list |
+| GET | `/turn/credentials` | none | `index.ts`: ICE servers (see [TURN credentials](#turn-credentials)) |
+| GET | `/content/*` | none | `express.static` over `backend/content/`, with HLS content types and `Access-Control-Allow-Origin: *` |
+| POST | `/auth/register` | none | `routes/auth.ts` |
+| POST | `/auth/login` | none | `routes/auth.ts` |
+| GET | `/auth/me` | JWT required | `routes/auth.ts` |
+| POST | `/videos` | JWT required | `routes/videos.ts`: create video + hashtags |
+| GET | `/videos/feed` | JWT optional | `routes/videos.ts`: the feed |
+| GET | `/videos/:id` | JWT optional | `routes/videos.ts`: one video |
+| POST | `/videos/:id/like` | JWT required | `routes/videos.ts`: like / unlike |
+| POST | `/videos/:id/view` | JWT optional | `routes/videos.ts`: record a view |
+| PATCH | `/videos/:id/urls` | JWT required, owner only | `routes/videos.ts`: rewrite `magnet_link` / `torrent_file_url` |
+
+The Expo client calls `/auth/login`, `/auth/register`, `/auth/me` and `/videos/feed` (`tortok/lib/api.ts`). It resolves the base URL from `EXPO_PUBLIC_API_URL`, falls back to the dev host on port 8080 in development, and uses `https://tortok-api.fly.dev` otherwise.
+
+### Videos and feed
+
+- **Create** (`POST /videos`) inserts the video and its hashtags in one transaction. Hashtags are lowercased and upserted into `hashtags`, incrementing `usage_count`, then linked through `video_hashtags`.
+- **Feed** (`GET /videos/feed`) returns every video, newest first (`ORDER BY created_at DESC`), with offset pagination: `limit` (default 20) and `offset` (default 0). The response carries `nextCursor` (the next offset as a string, or `null`) and `hasMore`. There is no ranking, following filter or personalisation. With a valid JWT, each item's `isLiked` reflects the caller's likes; without one it is `false`.
+- **Like** (`POST /videos/:id/like`, body `{liked}`) inserts or deletes the `likes` row in a transaction and changes `like_count` only when a row actually changed, so repeated likes or unlikes do not drift the counter.
+- **View** (`POST /videos/:id/view`) inserts a `views` row (`source` defaults to `http`) and increments `view_count`. The two statements are not in a transaction, and nothing deduplicates views. What a view *means* is unresolved: [`open-problems/view-counting.md`](open-problems/view-counting.md).
+- **URL rewrite** (`PATCH /videos/:id/urls`) returns 404 for an unknown video and 403 unless the caller uploaded it. There is no admin role.
+
+## Auth and validation
+
+The backend's auth is the **legacy** email/password + JWT path. atproto OAuth runs on the client and is documented in [auth-signup](auth-signup.md); this path is being retired in Phase 3.
+
+- **Register** checks that the username and email are each unused *on this instance* (`INSTANCE_DOMAIN`, default `localhost`), hashes the password with bcrypt (cost 10), inserts the user, and returns `{token, user}`.
+- **Login** looks the user up by email and instance, compares bcrypt hashes, and returns `{token, user}`. An unknown email and a wrong password both return the same 401.
+- **Tokens** (`middleware/auth.ts`) are HS256 JWTs signed with `JWT_SECRET`, carrying `{userId, username, instance}` and expiring after `JWT_EXPIRES_IN` (default `7d`). There are no refresh tokens. The module **throws at import time if `JWT_SECRET` is unset**, so the server will not boot without it.
+- `authenticateJWT` reads `Authorization: Bearer <token>`. It returns 401 for a missing header or token and for a token whose `instance` is not this instance, and 403 for a token that fails verification. `optionalAuth` sets `req.user` when a token verifies and silently continues otherwise; it does **not** check `instance`.
+- **Validation** (`middleware/validate.ts`) runs Joi schemas over `req.body` with `abortEarly: false` and `stripUnknown: true`, replaces the body with the validated value, and returns `400 {error: 'Validation failed', details: [{field, message}]}` on failure. Registration passwords must be 10–128 characters and not in a built-in list of about 30 common passwords.
+
+## Database
+
+`backend/src/db/index.ts` owns a single `pg` pool (max 20 connections, 30 s idle timeout, 2 s connect timeout). `DATABASE_URL` defaults to `postgresql://localhost:5432/tortok` outside production. In production the module throws at import time if `DATABASE_URL` is unset. SSL (with `rejectUnauthorized: false`) is used only in production over TCP; a Cloud SQL Unix-socket URL (`host=/cloudsql…`) skips it. A pool `error` event exits the process. In development every query is logged with its duration.
+
+**Schema** lives in one file, `db/schema.sql`, applied in full on every boot. There is no migrations directory; changes are idempotent statements appended to that file (`CREATE … IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, guarded renames, `DROP … IF EXISTS`). Tables:
+
+| Table | Holds |
+|---|---|
+| `users` | Legacy accounts: username, display name, email, bcrypt hash, bio, avatar, `instance_domain`, follower/following/video counts. Username and email are each unique per instance. |
+| `videos` | Caption, `magnet_link`, `torrent_file_url`, `poster_url`, duration, dimensions, like/view counts. Also an `hls_url` column that no route reads or writes. |
+| `hashtags`, `video_hashtags` | Hashtag names with `usage_count`, and the video↔hashtag join. |
+| `likes` | One row per (user, video). |
+| `views` | Append-only view events: optional user, watched duration, completion rate, `source` (`p2p` / `http` / `cache`). |
+| `follows` | Follower/followed pairs with remote-instance columns. No route reads or writes it. |
+
+Triggers keep `users.follower_count` / `following_count` in step with `follows`, and `users.video_count` in step with `videos`. The file ends by dropping the `bridged_posts` and `bridge_cursor` tables left by the abandoned first attempt at Phase 3 Unit 2.5.
+
+## Seeder
+
+The origin WebTorrent seeder runs **inside this process** as the `seeder` singleton (`services/seeder.ts`). Its role in P2P delivery (webseed, R2 origin, trackers) is described in [p2p-torrent](p2p-torrent.md). On the backend side:
+
+- `initialize()` loads `webtorrent` with a dynamic `import()` (it is ESM-only) and then seeds every subdirectory of `backend/content/` that contains a `playlist.m3u8`. That is the HLS layout; `backend/content/` holds one such fixture, `tortok-test-video`.
+- Each directory is seeded with `name` set to the directory name. It announces to `wss://tortok-tracker.fly.dev` plus three public `wss://` trackers, and gets a webseed URL of `${CONTENT_ORIGIN_URL}/videos/<name>` (defaults: `http://localhost:8090` outside production, the public R2 bucket in production).
+- Each directory has a 30 s seeding timeout. A timeout or error rejects `initialize()`, which skips any remaining directories; `start()` logs it and boots anyway.
+- `/seeder/stats` reports the live counts. Video records in Postgres do not reference the seeder: magnets are stored as whatever the uploader sent.
+
+In local development `scripts/dev-up.sh` starts the backend (`npm run dev` on :8080) alongside the spike tracker (:8000) and the spike content seeder (:8090) from `test-content/`. Those two are separate processes and are not this `SeederService`.
+
+## TURN credentials
+
+`GET /turn/credentials` issues coturn time-limited credentials. The username is `<expiry>:tortok` with a 24-hour TTL, and the credential is the base64 HMAC-SHA1 of the username keyed by `TURN_SECRET`. It returns STUN and TURN entries for `tortok-turn.fly.dev:3478`. With `TURN_SECRET` unset it returns the STUN entry only. The TURN server itself is covered in [p2p-torrent](p2p-torrent.md#trackers-and-turn).
+
+## Deployment and configuration
+
+- **Image:** `backend/Dockerfile` is a two-stage `node:18-alpine` build. It runs as a non-root user, copies `schema.sql` next to the compiled `dist/db/`, bakes `backend/content/` into the image, and health-checks `/health`.
+- **Fly.io:** `backend/fly.toml` deploys app `tortok-api` in `lhr` on one `shared-cpu-1x` / 512 MB VM, with HTTPS forced, a `/health` check, and `auto_stop_machines = "stop"` with `min_machines_running = 0`. This is the production URL the client defaults to; it answers `/health` as `tortok-api.fly.dev`.
+- **Cloud Run:** `backend/deploy.sh` is a separate script that deploys to Google Cloud Run with Cloud SQL. The client does not point at that target.
+- **Environment:** documented in `backend/.env.example`. Required: `JWT_SECRET` always, `DATABASE_URL` in production. Optional with code defaults: `PORT`, `NODE_ENV`, `JWT_EXPIRES_IN`, `INSTANCE_DOMAIN`, `INSTANCE_NAME`, `ALLOWED_ORIGINS`, `CONTENT_ORIGIN_URL`, `TURN_SECRET`. `scripts/init-dev-secrets.sh` (run by `dev-up.sh`) fills in `JWT_SECRET` and `TURN_SECRET` for local development.
+
+## Constraints
+
+- **Video metadata limits** (`schemas.createVideo`): caption ≤ 500 characters; `durationSeconds` 1–300; at most 10 hashtags, each ≤ 50 characters; `magnetLink` must start with `magnet:?`; `posterUrl` must be `https`; `torrentFileUrl` may be `http` or `https`.
+- **Accounts:** usernames are alphanumeric, 3–30 characters; display names 1–100 characters.
+- **Request bodies** are capped at 10 MB. The backend accepts metadata only; video bytes never pass through it.
+- **Single process:** the seeder, the API and the schema bootstrap share one process, and on Fly that machine stops when idle.
+- **Tests:** `npm test` runs Jest over `src/__tests__/`, which holds only a placeholder smoke test. No route, middleware or schema behaviour is under test.
 
 ## Implementation status
 
-The Express backend is live (auth, videos, seeder wiring). The AppView ingest and
-feed-generation path is Phase 3/4 work; the seeder is slated to extract into a
-standalone deployable (see [p2p-torrent](p2p-torrent.md) implementation status).
-Verified current-state write-up is part of the adoption follow-up.
+**Implemented:**
+
+| Part | Where |
+|---|---|
+| Legacy email/password auth, JWT issue/verify | `backend/src/routes/auth.ts`, `backend/src/middleware/auth.ts` |
+| Request validation | `backend/src/middleware/validate.ts` |
+| Video create, feed, single video, like, view, owner-only URL rewrite | `backend/src/routes/videos.ts` |
+| Postgres pool and boot-time schema | `backend/src/db/index.ts`, `backend/src/db/schema.sql` |
+| In-process origin seeder + stats | `backend/src/services/seeder.ts`, `backend/src/index.ts` |
+| TURN credential issuance | `backend/src/index.ts` |
+| Fly.io deployment | `backend/Dockerfile`, `backend/fly.toml` |
+
+**Deferred:**
+
+| Part | Gap | Tracking |
+|---|---|---|
+| AppView ingest | Nothing subscribes to or polls a PDS; no `app.tortok.video.post` records are indexed. The planned unified `posts` table and `services/atprotoIngest.ts` do not exist. | [`phase-3-atproto.md`](../plans/phase-3-atproto.md) Unit 2.5 (v2) Phase A |
+| Feed cutover | `/videos/feed` reads the legacy `videos` table, not atproto records. | Phase 3 Unit 2.5 (v2) Phase B; Phase 4 (Decision 0006) |
+| Retire legacy auth and write paths | `/auth/*`, `users`, `POST /videos` and the JWT middleware are still live. | Phase 3 Unit 2.5 (v2) Phase C |
+| Bluesky bridge | No bridge code on the backend; the attempt-1 tables are dropped on boot. | Phase 3 Unit 2.5 (v2) Phase D; [federation](federation.md) |
+| Seeder extraction | The seeder still runs in the API process rather than as a separate worker reached over an internal API. | [p2p-torrent](p2p-torrent.md#implementation-status) |
+| Own PDS | No PDS is run; users log in against their existing PDS. | [`open-problems/own-pds.md`](open-problems/own-pds.md) |
+| Social graph | `follows` table and count triggers exist, with no routes. | Later phase |
+| Tests | Placeholder smoke test only. | — |
 
 ## Decisions behind this
 
