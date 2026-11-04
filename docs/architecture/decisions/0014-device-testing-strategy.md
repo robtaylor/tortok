@@ -1,8 +1,8 @@
 # Decision 0014: Device testing strategy — self-hosted emulators for CI, real devices for video/P2P
 
-**Status:** Accepted — 2026-07-01 (amended 2026-07-20 — tier-3 primary flips
-to LambdaTest/TestMu after vendor-confirmed device↔device WebRTC; AWS Device
-Farm demoted to fallback)
+**Current architecture:** [P2P & torrent engine](../p2p-torrent.md)
+
+**Status:** Accepted — 2026-07-01. Tier-3 vendor choice revised by Decision 0015 (2026-11-04).
 
 **Context.** Decision 0009 deliberately scoped the Phase 2 WebTorrent spike
 to simulators only and deferred real-device validation to "the phase
@@ -153,74 +153,3 @@ where battery and carrier-network behaviour actually matter"). Decision 0009's
 decision point 1 (simulators-only) stands as the Phase 2 record; this decision
 defines what comes after it. The TURN/NetInfo Wi-Fi-gating quirks
 Decision 0009 predicted for real hardware are the substance of tier 3.
-
----
-
-**Amendment — 2026-07-20 (tier 3 vendor flips to LambdaTest/TestMu).**
-
-The original decision routed tier 3 (P2P × real-device composition) to
-AWS Device Farm private devices + VPC-ENI, on the grounds that it was
-"the one real-device option with documented P2P plumbing" and that
-generic farms were "unproven for device-to-device P2P." The
-LambdaTest/TestMu architecture team has now answered our open questions
-directly, and the answers remove the reason AWS was primary.
-
-*What TestMu confirmed:*
-
-- **Device egress for WebRTC is unrestricted.** Real devices in their
-  cloud allow outbound UDP and STUN/TURN connectivity from an installed
-  app (not just the browser); no firewall restrictions on the ports or
-  protocols WebRTC ICE uses. This retires the "farm-egress-dependent"
-  caveat that made generic farms a bet.
-- **Device↔device P2P works.** Two parallel automated Appium sessions on
-  two real devices establish an ICE connection to each other, both app
-  instances signaling through our common tracker. As expected for cloud
-  devices behind NAT, the path is **TURN-relayed** rather than a direct
-  link — the same TURN-relay path the AWS option would have used anyway.
-  This is precisely the thing the original decision record called "unproven" and
-  ruled out generic farms over; it is now vendor-confirmed.
-- **Tracker reachability via Tunnel.** A cloud device reaches a WebSocket
-  tracker on our local/staging network through their Tunnel — the
-  "device reaches our tracker" half the original decision record already credited
-  tunnels with. (Tunnels still do not put two devices on a shared subnet;
-  the device↔device link is TURN-relayed, per above, not tunnel-bridged.)
-
-*What constrains the approach (unchanged conclusions, now with a reason):*
-
-- **`appProfiling` network metrics are aggregate only.** Their network
-  metric reports total download/upload; it does **not** differentiate by
-  destination or protocol, so there is no WebRTC/UDP-vs-HTTP breakdown.
-  The farm metric therefore cannot measure the P2P-vs-CDN offload split.
-  This changes nothing in practice: the decision already names the local
-  two-device harness and tier-1 emulators as the source of truth for
-  headline offload numbers, and app-side instrumentation supplies the
-  split. Tier 3 validates that the number survives real NAT and real
-  playback; it was never going to source the number from farm telemetry.
-- **Bring your own TURN.** TestMu operate TURN servers and can provide
-  one, but expect us to bring our own. We stand up our own TURN server
-  regardless (it is also the production path), so this is a no-op for the
-  plan — tier 3 uses our TURN, not the vendor's.
-
-*Revised tier 3:*
-
-> **3. P2P × real-device composition → LambdaTest/TestMu, deferred.** The
-> one test that genuinely needs two real devices networked runs as two
-> parallel automated Appium sessions on LambdaTest real devices, both
-> signaling through our WebSocket tracker (reached via their Tunnel) and
-> connecting over a **TURN-relayed** ICE path using **our own TURN
-> server**. Offload is measured app-side, not from `appProfiling` (whose
-> network metric is aggregate-only). This runs at entry/low real-device
-> tier pricing rather than the ~$400+/mo AWS private rig, and is still
-> **stood up only after tiers 1 and 2 are independently green**. **AWS
-> Device Farm + VPC-ENI is retained as the documented fallback** if the
-> two-parallel-session approach proves flaky in practice, or if we later
-> want a direct (non-relayed) device↔device path that VPC-ENI's
-> shared-VPC model can offer.
-
-*Net effect on cost and risk.* Tier 3 drops from ~$400+/mo (AWS private,
-us-west-2-only) to entry-tier real-device pricing on a farm we already
-use for tier 2, on infrastructure (our tracker, our TURN) we control.
-The device↔device P2P question the decision treated as an open risk is now
-vendor-confirmed to be answerable on that farm; the residual risk is
-execution flakiness of two-parallel-session orchestration, for which AWS
-remains the documented backstop.
