@@ -30,7 +30,12 @@ local development the feed's magnets come instead from the spike seeder
 (`test-content/seeder.mjs`, seeding `test-content/clips/*.mp4`). The webseed
 origin is Cloudflare **R2** in production and a local content server
 (`http://localhost:8090`) in dev, overridable with `CONTENT_ORIGIN_URL`
-(Decision 0008's R2-origin layer).
+(Decision 0008's R2-origin layer). A webseed on R2 is sufficient on its own: with no
+seeder, tracker or DHT, a client downloads complete, verified content from R2
+([webseed-only spike](decisions/spikes/webseed-only-origin.md)). For a directory
+(multi-file) torrent the webseed URL is the *parent* of the torrent directory,
+because WebTorrent appends `<name>/<file>`; for a single-file torrent it is the
+file's URL.
 
 A seeded **file** is never renamed with `seed()`'s `name:` option: the default
 fs-chunk-store resolves pieces by torrent name, so a name that differs from the
@@ -82,9 +87,11 @@ Decision 0015:
   Hermes polyfills, client seeding policy with battery/network gating, the
   backend `SeederService` with R2 webseed, the own tracker, and the coturn TURN
   server. Two-simulator P2P offload measured at 89–91% in the Phase 2 spike.
-- **Pending:** The standalone `seeder/` package is unpopulated — the seeder still
-  runs inside the backend; unifying the dev-spike seeder and the production
-  seeder into one deployable is outstanding (tracked as a project goal). None of
+- **Pending:** There is no standalone seeder deployment: the `tortok-seeder` Fly
+  app was destroyed on 2026-11-04 after the webseed-only spike, and the only
+  origin seeder is the backend's in-process `SeederService`. Whether an
+  always-on origin peer is still wanted, given that webseed suffices, is
+  undecided; unifying the dev-spike and backend seeders waits on that. None of
   the three device-testing tiers is stood up yet; they begin once Phase 3 work
   clears, tiers 1 and 2 before the tier-3 rig (Decision 0014).
 - **Open:** real-device offload ratio and the client policy's starting numbers
