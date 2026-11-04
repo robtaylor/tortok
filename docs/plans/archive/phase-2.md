@@ -1,5 +1,7 @@
 # Phase 2 — Cross-platform P2P (status)
 
+**Status:** Implemented — Phase 2 closed 2026-04-29 (two-simulator P2P measured 89–91% offload; see [`../../architecture/decisions/spikes/phase-2-p2p-offload.md`](../../architecture/decisions/spikes/phase-2-p2p-offload.md)).
+
 Scope: Decision 0006 Phase 2 ("Cross-platform P2P").
 
 ## Completed

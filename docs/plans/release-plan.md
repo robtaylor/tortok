@@ -1,17 +1,17 @@
 # tortok release plan
 
-Status: **Draft** — 2026-04-17
+**Status:** Active — launch plan, first dated 2026-04-17.
 
 This document is the operational launch plan for tortok. It sits
-underneath the architecture decisions in `architecture/decisions.md`
+underneath the architecture decisions in [`../architecture/decisions/README.md`](../architecture/decisions/README.md)
 and consumes them; if a release-plan choice contradicts a decision record, the
-decision record wins or gets amended.
+decision record wins or gets superseded.
 
 Companion documents:
-- `architecture/decisions.md` — the architecture this plan launches.
-- `architecture/decisions.md` Decision 0010 — the inbound Bluesky bridge,
+- [`../architecture/README.md`](../architecture/README.md) — the architecture this plan launches.
+- [Decision 0010](../architecture/decisions/0010-bluesky-video-bridge.md) — the inbound Bluesky bridge,
   load-bearing for the cold-start solution below.
-- `architecture/open-problems/monetization.md` — the monetization
+- `../architecture/open-problems/monetization.md` — the monetization
   philosophy and the in-progress first-party pool design.
 
 ---
@@ -225,7 +225,7 @@ firehose-event spike conditions.
 ### Track 5 — Creator monetization
 
 Stub. Detailed design lives in
-`architecture/open-problems/monetization.md`. Today's release-plan
+`../architecture/open-problems/monetization.md`. Today's release-plan
 discussion contributed Sub-problem C (the first-party PWYW
 "support open content" pool with fan-allocated distribution).
 

@@ -1,5 +1,7 @@
 # Phase 3 — atproto integration
 
+**Status:** Active — the current phase (Decision 0006 Phase 3).
+
 ## Previous plan (parked)
 
 The previous content of this plan file scoped **Unit 5 — Client seeding
