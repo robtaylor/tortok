@@ -19,7 +19,9 @@ if (!databaseUrl) {
 
 const pool = new Pool({
   connectionString: databaseUrl,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
+  // SSL is governed by DATABASE_URL's `sslmode` (node-postgres lets the
+  // parsed connection string override this config). Production on Fly uses
+  // `sslmode=disable` over the private, WireGuard-encrypted 6PN network.
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
