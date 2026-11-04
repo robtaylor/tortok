@@ -2,7 +2,6 @@ import { Pool, PoolClient } from 'pg';
 import fs from 'fs';
 import path from 'path';
 
-// Cloud SQL via Unix socket (Cloud Run) doesn't use SSL.
 // Dev default matches scripts/dev-up.sh + test-content/seed-db.mjs;
 // prod must set DATABASE_URL explicitly (we'd rather fail fast than
 // silently connect to nothing).
@@ -17,12 +16,10 @@ if (!databaseUrl) {
       'or set DATABASE_URL explicitly).'
   );
 }
-const isUnixSocket = databaseUrl.includes('host=/cloudsql');
 
 const pool = new Pool({
   connectionString: databaseUrl,
-  // Only use SSL for TCP connections, not Unix sockets
-  ssl: !isUnixSocket && process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
