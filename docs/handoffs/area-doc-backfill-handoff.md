@@ -11,8 +11,9 @@ present-tense reference docs, each claim verified against the current code — t
 first follow-up from the claude-project-discipline adoption (see
 [`docs/architecture/README.md`](../architecture/README.md) § Follow-ups).
 
-**Next session should pick up:** start with **`backend.md`** (most code to
-anchor the others — auth, videos, seeder, schema), then `client.md`,
+**Progress:** `backend.md` ✅ done (branch `docs/area-backfill-backend`).
+
+**Next session should pick up:** `client.md`, then
 `auth-signup.md`, `federation.md`; do `monetization.md` and `moderation.md` last
 (mostly unbuilt — they stay thin, honestly marked). One area per branch/PR;
 don't batch all six.
@@ -43,7 +44,7 @@ uv run docs/scripts/doctool.py lint
 
 ## Open follow-ups (priority-ordered)
 
-### 1. `backend.md` — Backend / AppView (Decision 0005)
+### 1. ✅ `backend.md` — Backend / AppView (Decision 0005) — done
 
 Read `backend/src/index.ts` (route mounting, seeder init, graceful shutdown),
 `routes/auth.ts`, `routes/videos.ts`, `middleware/auth.ts` + `validate.ts`,
@@ -93,6 +94,12 @@ launch-blocking and tracked against release criteria
 ([`../plans/release-plan.md`](../plans/release-plan.md)).
 
 ## Critical context
+
+- **Doc/code mismatch found while writing `backend.md`:** `p2p-torrent.md`
+  says `webtorrent.seed()` is never passed `name:`. That holds for the spike
+  seeder (`test-content/seeder.mjs`), but the backend `SeederService` *does*
+  pass `name` and announces to public `wss://` trackers. Pending a user
+  decision: fix the code, or correct the p2p-torrent claim.
 
 - **Decision 0006's A002 warning is expected** (migration/phasing has no area
   doc). Backfilling the six areas won't touch it; leave it unless you give 0006 a
