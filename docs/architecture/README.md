@@ -16,4 +16,11 @@ If you're an agent or a new reader, start here: this page maps every area to its
 
 Decision 0006 (migration from the Swift prototype) is project history rather than an area of the live system; it lives in the phases table in [`CLAUDE.md`](../../CLAUDE.md) and the [plans](../plans/).
 
-Area docs are written incrementally. `p2p-torrent` is written in full; the rest are **stubs** (they carry their decision links and an Implementation-status note, but their present-tense write-up is pending a verified backfill against the current code — see the follow-up in the adoption plan). Copy `_template.md` to replace a stub as each one is written.
+Area docs are written incrementally. `p2p-torrent` is written in full; the rest are **stubs** (they carry their decision links and an Implementation-status note, but their present-tense write-up is pending a verified backfill against the current code — see [Follow-ups](#follow-ups) below). Copy `_template.md` to replace a stub as each one is written.
+
+## Follow-ups
+
+Open doc-maintenance threads from the [claude-project-discipline](https://robtaylor.github.io/claude-project-discipline/) adoption (PR #1):
+
+1. **Backfill the stub area docs** — write `federation`, `client`, `backend`, `auth-signup`, `monetization`, and `moderation` in full, present tense, each claim checked against the current code. Use [`p2p-torrent.md`](p2p-torrent.md) as the model for depth and file-referencing. As each decision's current-state claims move into its area doc, the decision record stays frozen.
+2. **Propose the `open-problem` kind upstream** — tortok keeps [`open-problems/`](open-problems/README.md) as an extension because stock claude-project-discipline has no phase-gated "forced decision" kind. Pitch it upstream (first-class kind, or a documented stock way to express it). Tracked in [`open-problems/README.md`](open-problems/README.md).
