@@ -30,7 +30,7 @@
           },
           "aspectRatio": {
             "type": "object",
-            "description": "Display dimensions of the video. Shape matches app.bsky.embed.defs#aspectRatio so ADR-010's inbound Bluesky-video bridge does not have to translate shapes.",
+            "description": "Display dimensions of the video. Shape matches app.bsky.embed.defs#aspectRatio so Decision 0010's inbound Bluesky-video bridge does not have to translate shapes.",
             "required": ["width", "height"],
             "properties": {
               "width": { "type": "integer", "minimum": 1 },

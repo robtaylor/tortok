@@ -1,6 +1,6 @@
 # Phase 2 — Cross-platform P2P (status)
 
-Scope: ADR-006 Phase 2 ("Cross-platform P2P").
+Scope: Decision 0006 Phase 2 ("Cross-platform P2P").
 
 ## Completed
 
@@ -33,7 +33,7 @@ Scope: ADR-006 Phase 2 ("Cross-platform P2P").
 - Android emulator: P2P init with defensive polyfills + expo-crypto
   fallback for Nitro timing race.
 - Expo web: bridge.web.ts stub (SW streamer deferred).
-- Results recorded in ADR-009.
+- Results recorded in Decision 0009.
 
 ### Additional work (not in original plan)
 - **Inline .torrent metadata**: `torrentFileUrl` field in DB/API,
@@ -54,14 +54,14 @@ Scope: ADR-006 Phase 2 ("Cross-platform P2P").
 - Removed `hlsUrl` from validation schemas and API responses.
 - `hls_url` DB column kept nullable (vestigial).
 - Removed standalone `seeder/` service (webseed makes it redundant).
-- Recorded as ADR-009 amendment.
+- Recorded as Decision 0009 amendment.
 
 ### Unit 6 — Cleanup gate
 - Deleted `tortok/app/spike.tsx`, `tortok/app/spike-bridge.tsx`.
 - Removed spike auth-guard exemption in `tortok/app/_layout.tsx`.
 - Flipped `EXPO_PUBLIC_USE_P2P` default to enabled (opt-out via `'0'`).
 
-### Unit 5 — Client seeding policy (ADR-009)
+### Unit 5 — Client seeding policy (Decision 0009)
 - `seedPolicy.ts` — core engine: refcount-based holds on recently-watched
   torrents, eviction by TTL (30 min), count (5 mobile / unlimited desktop),
   and byte budget (150 MB mobile / 500 MB desktop).

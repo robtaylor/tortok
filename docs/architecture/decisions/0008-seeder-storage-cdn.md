@@ -1,8 +1,8 @@
-# ADR-008: Seeder, storage, and CDN infrastructure
+# Decision 0008: Seeder, storage, and CDN infrastructure
 
 **Status:** Accepted
 
-**Context.** ADR-005 extracts the WebTorrent seeder from the Express
+**Context.** Decision 0005 extracts the WebTorrent seeder from the Express
 process but does not specify where it runs, how origin storage is
 hosted, or how users can contribute to the swarm. Cost, geographic
 diversity, and community runnability are explicit goals: the
@@ -91,7 +91,7 @@ established conventions for one-click app installation.
 
 Post-v1: a Tauri desktop app wraps the same seeder for
 non-technical users who want to contribute from a laptop. v2: a
-contributor-recognition system using the ADR-007 labeler framework
+contributor-recognition system using the Decision 0007 labeler framework
 to label seeders by their contribution level.
 
 **Supporting: STUN/TURN relay for WebRTC NAT traversal.**

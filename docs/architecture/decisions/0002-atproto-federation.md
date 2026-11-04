@@ -1,7 +1,7 @@
-# ADR-002: Federation protocol is AT Protocol
+# Decision 0002: Federation protocol is AT Protocol
 
 **Status:** Accepted. Amended 2026-04-29 — NSID is `app.tortok.video.post`
-(reverse-DNS rooted at `tortok.app`); see ADR-012. The example record
+(reverse-DNS rooted at `tortok.app`); see Decision 0012. The example record
 shape below has been updated to match the formal Lexicon definition in
 `lexicons/app/tortok/video/post.json` (notably `aspectRatio` is now
 `{width: int, height: int}` to match `app.bsky.embed.defs#aspectRatio`).

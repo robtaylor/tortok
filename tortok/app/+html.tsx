@@ -13,7 +13,7 @@
 // there is no module system — Metro's bundle (which provides CJS/ESM) hasn't
 // been loaded yet, and that's precisely the problem we're solving.
 //
-// See ADR-009 for the WebTorrent integration context.
+// See Decision 0009 for the WebTorrent integration context.
 
 import { ScrollViewStyleReset } from 'expo-router/html';
 import { type PropsWithChildren } from 'react';

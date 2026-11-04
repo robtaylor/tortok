@@ -108,7 +108,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Add torrent_file_url column (ADR-009 optimization: inline .torrent metadata)
+-- Add torrent_file_url column (Decision 0009 optimization: inline .torrent metadata)
 ALTER TABLE videos ADD COLUMN IF NOT EXISTS torrent_file_url TEXT;
 
 -- Rename thumbnail_url → poster_url (it's a full-res still frame, not a thumbnail)

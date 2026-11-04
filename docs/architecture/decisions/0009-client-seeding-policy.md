@@ -1,4 +1,4 @@
-# ADR-009: Phase 2 client seeding scope and policy
+# Decision 0009: Phase 2 client seeding scope and policy
 
 **Status:** Accepted — 2026-04-14
 
@@ -39,7 +39,7 @@ not decided here.
    concession. WebRTC on mobile requires TURN relay for any peer
    behind symmetric NAT, which is common on carrier networks.
    TURN relay bytes cost us money on our coturn box (deployed Phase
-   0b); if 20–40% of cellular peers end up relayed, the ADR-008
+   0b); if 20–40% of cellular peers end up relayed, the Decision 0008
    "~50% P2P offload" envelope collapses because the swarm's
    "free" bytes become paid relay bytes. Gating seeding to Wi-Fi
    keeps relay load bounded to home-router NAT (mostly cone NAT,
@@ -49,7 +49,7 @@ not decided here.
    calibrated against the 2024-era libtorrent battery table in
    `seeding-policy.md`. Validate during the spike: if policy 2
    costs more than ~5%/hour in practice, degrade to policy 1
-   (on-demand only) and record it as a new ADR.
+   (on-demand only) and record it as a new decision record.
 
 3. **Fallback if WebTorrent on Hermes fails: defer.** We have
    candidate fallbacks (desktop/web-only P2P with mobile as pure
@@ -64,14 +64,14 @@ not decided here.
   bytes through WebTorrent on Hermes, offload ratio measured.
 - The prototype has a defensible default seeding policy users can
   live with on mobile.
-- ADR-008's "~50% P2P offload" cost-envelope number stays
+- Decision 0008's "~50% P2P offload" cost-envelope number stays
   provisional until Phase 2 produces a measurement; nothing in
-  this ADR commits us to hitting that number.
+  this decision commits us to hitting that number.
 - `open-problems/seeding-policy.md` sub-problem B is now resolved
   — the open-problem file can be trimmed to server-side content
   (or deleted if server-side is also considered resolved).
 - The fallback question is left explicitly deferred rather than
-  silently ignored; a future ADR picks a direction if the spike
+  silently ignored; a future decision record picks a direction if the spike
   forces one.
 
 **Alternatives ruled out.**
@@ -82,7 +82,7 @@ not decided here.
   green.
 - **Policy 1 (on-demand only) as the default.** Lowest battery
   cost but also lowest P2P contribution — would likely invalidate
-  ADR-008's offload thesis before we even measure it. Keep as the
+  Decision 0008's offload thesis before we even measure it. Keep as the
   fallback if policy 2 is measurably too expensive.
 - **Policy 3 (battery-gated aggressive) on mobile.** Better for
   the swarm, but the 15–25%/hour battery cost in the "seed while
@@ -97,7 +97,7 @@ not decided here.
 - **Decide the WebTorrent-fails fallback now.** Tempting for
   completeness, but we'd be choosing between two bad options
   without the measurement that tells us which is less bad.
-  Deliberate "decide later" is cheaper than a premature ADR we
+  Deliberate "decide later" is cheaper than a premature decision record we
   then supersede.
 
 **Spike implementation notes (Hermes + web quirks, 2026-04-14).**

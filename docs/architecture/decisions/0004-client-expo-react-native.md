@@ -1,4 +1,4 @@
-# ADR-004: Client is Expo + React Native + TypeScript
+# Decision 0004: Client is Expo + React Native + TypeScript
 
 **Status:** Accepted
 
@@ -19,7 +19,7 @@ Targets: iOS, Android, and web via React Native Web / Expo Router.
   the app removes the `WKWebView` bridge entirely. The current Swift
   `P2PResourceLoader.swift` + `WebTorrentBridge.swift` (~1000 lines)
   disappears rather than being ported.
-- The backend is already TypeScript (ADR-005). One language across the stack
+- The backend is already TypeScript (Decision 0005). One language across the stack
   means shared types, shared validation, and a single hiring pool.
 - Expo gives us OTA updates, a managed workflow for the 80% case, and
   ejection to bare React Native when we need native modules.

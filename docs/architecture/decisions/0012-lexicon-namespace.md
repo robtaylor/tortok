@@ -1,23 +1,23 @@
-# ADR-012: Lexicon namespace governance
+# Decision 0012: Lexicon namespace governance
 
 **Status:** Accepted — 2026-04-29
 
-**Context.** ADR-002 commits us to AT Protocol and references a
-video-post Lexicon. ADR-011 references `payout.destination` and
+**Context.** Decision 0002 commits us to AT Protocol and references a
+video-post Lexicon. Decision 0011 references `payout.destination` and
 `payout.pool` Lexicons. Phase 3 is the first phase that actually
 publishes records under our namespace, which forces a small cluster of
 decisions:
 
 1. Where do our schema files live, and how are they versioned?
 2. What's our NSID? atproto's NSID convention is reverse-DNS-based and
-   the first segment is the TLD of an authority domain. Earlier ADR
+   the first segment is the TLD of an authority domain. Earlier decision record
    drafts wrote `tortok.video.post` as a shorthand, which doesn't
    conform.
 3. How do we relate to schemas owned by Bluesky (`app.bsky.*`)?
 4. What happens if a formal Lexicon registry / governance process
    emerges later?
 
-This ADR is deliberately small — we are not deciding the registry or
+This decision is deliberately small — we are not deciding the registry or
 the migration mechanism here. We are committing to a namespace, a
 layout, and a stance on reuse.
 
@@ -26,8 +26,8 @@ layout, and a stance on reuse.
 1. **Namespace.** TorTok's canonical domain is `tortok.app`, so NSIDs
    follow the strict reverse-DNS form rooted there. Records currently
    in scope: `app.tortok.video.post`, `app.tortok.payout.destination`
-   (ADR-011 Sub-problem A, ships in Phase 3 alongside this work),
-   `app.tortok.payout.pool` (ADR-011 Sub-problem B, deferred to V2).
+   (Decision 0011 Sub-problem A, ships in Phase 3 alongside this work),
+   `app.tortok.payout.pool` (Decision 0011 Sub-problem B, deferred to V2).
    Future schemas extend `app.tortok.*` along domain segments
    (`app.tortok.video.*`, `app.tortok.payout.*`, etc.). This matches
    the convention used by `app.bsky.*`, `chat.bsky.*`, `com.atproto.*`,
@@ -52,7 +52,7 @@ layout, and a stance on reuse.
 4. **Reuse Bluesky shapes inside our records where they exist.**
    `app.tortok.video.post` uses the Bluesky-shaped `aspectRatio`
    (`{width: int, height: int}`, matching
-   `app.bsky.embed.defs#aspectRatio`) so that ADR-010's inbound bridge
+   `app.bsky.embed.defs#aspectRatio`) so that Decision 0010's inbound bridge
    does not have to translate between shapes. Reuse is a per-field
    decision, not a blanket rule — we still own the schema; we copy
    shape only where interop matters.
@@ -64,14 +64,14 @@ layout, and a stance on reuse.
 
 6. **Governance posture.** No formal cross-app Lexicon registry exists
    yet. We follow whatever process atproto formalizes if and when one
-   lands. Until then, we treat the repo and this ADR as the canonical
+   lands. Until then, we treat the repo and this decision as the canonical
    source of `app.tortok.*` definitions.
 
 **Consequences.**
 
-- ADR-002's coupling caveat (Lexicon namespace governance is unsettled)
+- Decision 0002's coupling caveat (Lexicon namespace governance is unsettled)
   is now explicit, recorded, and bounded. We mitigated it by running
-  our own AppView; this ADR pins the rest.
+  our own AppView; this decision pins the rest.
 - Reuse of `app.bsky.*` for the social graph and selective shape
   reuse for embed metadata is intentional cross-pollination, not
   accident. We benefit from Bluesky's existing graph; we accept that
@@ -88,14 +88,14 @@ layout, and a stance on reuse.
 
 **Alternatives ruled out.**
 
-- **Use `app.bsky.feed.post` for video records.** ADR-002 ruled this
+- **Use `app.bsky.feed.post` for video records.** Decision 0002 ruled this
   out: we want our own schema for the magnet URI, info hash, and HLS
   fallback. Bluesky's video embed is a different shape with different
   goals.
 - **Wait for an atproto Lexicon registry before declaring our
   namespace.** No registry is on the roadmap. Waiting is indefinite.
 - **Use a non-reverse-DNS NSID like `tortok.video.post`.** Tempting
-  shorthand and what ADR-002 originally drafted, but it conflicts
+  shorthand and what Decision 0002 originally drafted, but it conflicts
   with the atproto NSID spec (first segment is the TLD of the
   authority domain). Rejected — `tortok.app` is locked in, no reason
   to ship a non-conforming NSID.

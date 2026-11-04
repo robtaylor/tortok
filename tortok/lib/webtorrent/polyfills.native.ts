@@ -3,7 +3,7 @@
 // `import WebTorrent` — the order matters because some deps capture globals
 // during their own module-init.
 //
-// See metro.config.js for the matching module-resolution side. ADR-009 for
+// See metro.config.js for the matching module-resolution side. Decision 0009 for
 // the Phase 2 spike context.
 
 import { Buffer } from 'buffer';
