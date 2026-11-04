@@ -14,7 +14,7 @@ The backend (`backend/`) is a single Node + TypeScript Express process backed by
 2. `seeder.initialize()` starts the WebTorrent seeder. A failure here is logged as a warning and the server **continues without a seeder**.
 3. `app.listen(PORT)`, default port 8080.
 
-On `SIGTERM` the process destroys the seeder client and exits 0. It does not close the Postgres pool or drain HTTP connections (`closeDatabase()` exists in `db/index.ts` but nothing calls it). There is no `SIGINT` handler.
+On `SIGTERM` or `SIGINT` the process shuts down once, in order: it stops the HTTP server (closing idle keep-alive connections) while destroying the seeder client, then closes the Postgres pool once in-flight requests have drained, and exits 0. An error in any step exits 1, and an 8-second deadline forces exit 1 if shutdown stalls.
 
 Unmatched routes return `404 {"error":"Not found"}`. Uncaught route errors return `500 {"error":"Internal server error"}`; the underlying `message` is included only when `NODE_ENV=development`.
 
@@ -59,7 +59,7 @@ The backend's auth is the **legacy** email/password + JWT path, inherited from t
 
 ## Database
 
-`backend/src/db/index.ts` owns a single `pg` pool (max 20 connections, 30 s idle timeout, 2 s connect timeout). `DATABASE_URL` defaults to `postgresql://localhost:5432/tortok` outside production. In production the module throws at import time if `DATABASE_URL` is unset. SSL (with `rejectUnauthorized: false`) is used only in production over TCP; a Cloud SQL Unix-socket URL (`host=/cloudsql…`) skips it. A pool `error` event exits the process. In development every query is logged with its duration.
+`backend/src/db/index.ts` owns a single `pg` pool (max 20 connections, 30 s idle timeout, 2 s connect timeout). `DATABASE_URL` defaults to `postgresql://localhost:5432/tortok` outside production. In production the module throws at import time if `DATABASE_URL` is unset, and connects with SSL (`rejectUnauthorized: false`); outside production it connects without SSL. A pool `error` event exits the process. In development every query is logged with its duration.
 
 **Schema** lives in one file, `db/schema.sql`, applied in full on every boot. There is no migrations directory; changes are idempotent statements appended to that file (`CREATE … IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, guarded renames, `DROP … IF EXISTS`). Tables:
 
@@ -79,8 +79,8 @@ Triggers keep `users.follower_count` / `following_count` in step with `follows`,
 The origin WebTorrent seeder runs **inside this process** as the `seeder` singleton (`services/seeder.ts`). Its role in P2P delivery (webseed, R2 origin, trackers) is described in [p2p-torrent](p2p-torrent.md). On the backend side:
 
 - `initialize()` loads `webtorrent` with a dynamic `import()` (it is ESM-only) and then seeds every subdirectory of `backend/content/` that contains a `playlist.m3u8`. That is the HLS layout; `backend/content/` holds one such fixture, `tortok-test-video`.
-- Each directory is seeded with `name` set to the directory name. It announces to `wss://tortok-tracker.fly.dev` plus three public `wss://` trackers, and gets a webseed URL of `${CONTENT_ORIGIN_URL}/videos/<name>` (defaults: `http://localhost:8090` outside production, the public R2 bucket in production).
-- Each directory has a 30 s seeding timeout. A timeout or error rejects `initialize()`, which skips any remaining directories; `start()` logs it and boots anyway.
+- Each directory is seeded by path alone, so the torrent name is the directory's basename. It announces only to tortok's own trackers: `TRACKER_URLS` (comma-separated), defaulting to `ws://localhost:8000` outside production and `wss://tortok-tracker.fly.dev` in production. An explicitly empty list throws when the seeder is constructed. Each torrent gets a webseed URL of `${CONTENT_ORIGIN_URL}/videos/<name>` (defaults: `http://localhost:8090` outside production, the public R2 bucket in production).
+- Each directory has a 30 s seeding timeout, cleared once seeding starts. A timeout or error rejects `initialize()`, which skips any remaining directories; `start()` logs it and boots anyway.
 - `/seeder/stats` reports the live counts. Video records in Postgres do not reference the seeder: magnets are stored as whatever the uploader sent.
 
 In local development `scripts/dev-up.sh` starts the backend (`npm run dev` on :8080) alongside the spike tracker (:8000) and the spike content seeder (:8090) from `test-content/`. Those two are separate processes and are not this `SeederService`.
@@ -92,16 +92,15 @@ In local development `scripts/dev-up.sh` starts the backend (`npm run dev` on :8
 ## Deployment and configuration
 
 - **Image:** `backend/Dockerfile` is a two-stage `node:18-alpine` build. It runs as a non-root user, copies `schema.sql` next to the compiled `dist/db/`, bakes `backend/content/` into the image, and health-checks `/health`.
-- **Fly.io:** `backend/fly.toml` deploys app `tortok-api` in `lhr` on one `shared-cpu-1x` / 512 MB VM, with HTTPS forced, a `/health` check, and `auto_stop_machines = "stop"` with `min_machines_running = 0`. This is the production URL the client defaults to; it answers `/health` as `tortok-api.fly.dev`.
-- **Cloud Run:** `backend/deploy.sh` is a separate script that deploys to Google Cloud Run with Cloud SQL. The client does not point at that target.
-- **Environment:** documented in `backend/.env.example`. Required: `JWT_SECRET` always, `DATABASE_URL` in production. Optional with code defaults: `PORT`, `NODE_ENV`, `JWT_EXPIRES_IN`, `INSTANCE_DOMAIN`, `INSTANCE_NAME`, `ALLOWED_ORIGINS`, `CONTENT_ORIGIN_URL`, `TURN_SECRET`. `scripts/init-dev-secrets.sh` (run by `dev-up.sh`) fills in `JWT_SECRET` and `TURN_SECRET` for local development.
+- **Fly.io** is the only deployment target. `backend/fly.toml` deploys app `tortok-api` in `lhr` on a `shared-cpu-1x` / 512 MB VM, with HTTPS forced and a `/health` check. It never auto-stops its machine (`auto_stop_machines = "off"`) so the in-process seeder never idles out, and stops machines with `SIGTERM` and a 10 s `kill_timeout`, inside which the 8 s shutdown deadline fits. This is the production URL the client defaults to; it answers `/health` as `tortok-api.fly.dev`.
+- **Environment:** documented in `backend/.env.example`. Required: `JWT_SECRET` always, `DATABASE_URL` in production. Optional with code defaults: `PORT`, `NODE_ENV`, `JWT_EXPIRES_IN`, `INSTANCE_DOMAIN`, `INSTANCE_NAME`, `ALLOWED_ORIGINS`, `CONTENT_ORIGIN_URL`, `TRACKER_URLS`, `TURN_SECRET`. `scripts/init-dev-secrets.sh` (run by `dev-up.sh`) fills in `JWT_SECRET` and `TURN_SECRET` for local development.
 
 ## Constraints
 
 - **Video metadata limits** (`schemas.createVideo`): caption ≤ 500 characters; `durationSeconds` 1–300; at most 10 hashtags, each ≤ 50 characters; `magnetLink` must start with `magnet:?`; `posterUrl` must be `https`; `torrentFileUrl` may be `http` or `https`.
 - **Accounts:** usernames are alphanumeric, 3–30 characters; display names 1–100 characters.
 - **Request bodies** are capped at 10 MB. The backend accepts metadata only; video bytes never pass through it.
-- **Single process:** the seeder, the API and the schema bootstrap share one process, and on Fly that machine stops when idle.
+- **Single process:** the seeder, the API and the schema bootstrap share one process, so the API machine is also the origin seeder and is kept always-on.
 - **Tests:** `npm test` runs Jest over `src/__tests__/`, which holds only a placeholder smoke test. No route, middleware or schema behaviour is under test.
 
 ## Implementation status
@@ -116,7 +115,8 @@ In local development `scripts/dev-up.sh` starts the backend (`npm run dev` on :8
 | Postgres pool and boot-time schema | `backend/src/db/index.ts`, `backend/src/db/schema.sql` |
 | In-process origin seeder + stats | `backend/src/services/seeder.ts`, `backend/src/index.ts` |
 | TURN credential issuance | `backend/src/index.ts` |
-| Fly.io deployment | `backend/Dockerfile`, `backend/fly.toml` |
+| Graceful shutdown (SIGTERM/SIGINT) | `backend/src/index.ts` |
+| Fly.io deployment, always-on | `backend/Dockerfile`, `backend/fly.toml` |
 
 **Deferred:**
 

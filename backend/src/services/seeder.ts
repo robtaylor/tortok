@@ -21,6 +21,7 @@ class SeederService {
   private seededTorrents: Map<string, TorrentInfo> = new Map();
   private contentDir: string;
   private contentOrigin: string;
+  private announce: string[];
 
   constructor() {
     this.contentDir = path.join(__dirname, '../../content');
@@ -32,6 +33,19 @@ class SeederService {
       ?? (process.env.NODE_ENV !== 'production'
         ? 'http://localhost:8090'
         : 'https://pub-96c2a0ac73ac40359616969672d5f67f.r2.dev');
+    // Own trackers only (Decision 0008 L3). Public wss:// trackers leak
+    // phantom peers from earlier sessions into the swarm. In dev, announce
+    // to the local tracker that scripts/dev-up.sh starts on :8000 so dev
+    // fixtures never reach the production tracker. Override with
+    // TRACKER_URLS (comma-separated).
+    this.announce = (process.env.TRACKER_URLS
+      ?? (process.env.NODE_ENV !== 'production'
+        ? 'ws://localhost:8000'
+        : 'wss://tortok-tracker.fly.dev'))
+      .split(',').map((u) => u.trim()).filter(Boolean);
+    if (this.announce.length === 0) {
+      throw new Error('TRACKER_URLS is set but contains no tracker URLs');
+    }
   }
 
   async initialize(): Promise<void> {
@@ -79,21 +93,24 @@ class SeederService {
     }
 
     return new Promise((resolve, reject) => {
+      // No `name:` — the torrent name defaults to the directory's basename,
+      // which is what fs-chunk-store resolves pieces by. Renaming a seeded
+      // path via `name:` makes every piece read fail with ENOENT.
       const options = {
-        name,
-        announce: [
-          'wss://tortok-tracker.fly.dev',
-          'wss://tracker.openwebtorrent.com',
-          'wss://tracker.btorrent.xyz',
-          'wss://tracker.webtorrent.dev'
-        ],
+        announce: this.announce,
         // BEP-19 webseed: HTTP fallback for pieces when no P2P peers are
         // available. WebTorrent treats this as another peer — downloaded
         // pieces are re-shared to the swarm.
         urlList: [`${this.contentOrigin}/videos/${name}`],
       };
 
+      // Timeout after 30 seconds; cleared once seeding starts.
+      const timer = setTimeout(() => {
+        reject(new Error(`Seeding timeout: ${name}`));
+      }, 30000);
+
       this.client!.seed(dirPath, options as any, (torrent) => {
+        clearTimeout(timer);
         const info: TorrentInfo = {
           infoHash: torrent.infoHash,
           magnetURI: torrent.magnetURI,
@@ -121,10 +138,6 @@ class SeederService {
         resolve(info);
       });
 
-      // Timeout after 30 seconds
-      setTimeout(() => {
-        reject(new Error('Seeding timeout'));
-      }, 30000);
     });
   }
 
@@ -158,8 +171,10 @@ class SeederService {
 
   async destroy(): Promise<void> {
     if (this.client) {
+      const client = this.client;
+      this.client = null;
       return new Promise((resolve) => {
-        this.client!.destroy(() => {
+        client.destroy(() => {
           console.log('[Seeder] Client destroyed');
           resolve();
         });
