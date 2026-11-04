@@ -38,9 +38,22 @@ Write all three in the same present tense and a reader can't tell *why we did it
 
 | # | Title | Status |
 |---|---|---|
-| [NNNN](NNNN-<name>.md) | <Title> | Proposed |
+| [0001](0001-webtorrent-end-to-end.md) | Torrent engine is WebTorrent, end to end | Accepted |
+| [0002](0002-atproto-federation.md) | Federation protocol is AT Protocol | Accepted |
+| [0003](0003-identity-dids.md) | Identity uses DIDs — `did:plc` default, `did:web` opt-in | Accepted |
+| [0004](0004-client-expo-react-native.md) | Client is Expo + React Native + TypeScript | Accepted |
+| [0005](0005-backend-node-appview.md) | Backend stays Node + TypeScript; evolves into an AppView | Accepted |
+| [0006](0006-migration-from-swift.md) | Migration path from the Swift prototype | Accepted |
+| [0007](0007-signup-and-spam-prevention.md) | Signup UX and spam prevention | Accepted |
+| [0008](0008-seeder-storage-cdn.md) | Seeder, storage, and CDN infrastructure | Accepted |
+| [0009](0009-client-seeding-policy.md) | Phase 2 client seeding scope and policy | Accepted |
+| [0010](0010-bluesky-video-bridge.md) | Bridge Bluesky video posts into the tortok feed (inbound federation) | Accepted |
+| [0011](0011-monetization-architecture.md) | Monetization architecture — interface-first payout, first-party pool committed | Accepted |
+| [0012](0012-lexicon-namespace.md) | Lexicon namespace governance | Accepted |
+| [0013](0013-moderation-strategy.md) | Moderation strategy — atproto labelers, illegal-content floor, UK age-verification gate | Accepted |
+| [0014](0014-device-testing-strategy.md) | Device testing strategy — emulators for CI, real devices for video/P2P | Accepted |
 
-(Replace the example row with real entries as you write them; `new decision` appends rows for you. `uv run docs/scripts/doctool.py lint` checks this table against the files.)
+Forward-looking items that are **not yet decisions** — unresolved design problems, deferred decisions, and explicit out-of-scope — live in [`../open-problems/`](../open-problems/README.md), a tortok-specific extension to the stock discipline (each entry carries a phase-gated `Must resolve by` header). `uv run docs/scripts/doctool.py lint` checks this table against the decision files.
 
 ## Adding a new decision
 
