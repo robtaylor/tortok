@@ -1,5 +1,7 @@
 # Decision 0009: Phase 2 client seeding scope and policy
 
+**Current architecture:** [P2P & torrent engine](../p2p-torrent.md)
+
 **Status:** Accepted — 2026-04-14
 
 **Context.** Phase 2 integrates WebTorrent into the Expo client and

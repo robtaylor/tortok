@@ -1,5 +1,7 @@
 # Decision 0005: Backend stays Node + TypeScript; evolves into an AppView
 
+**Current architecture:** [Backend / AppView](../backend.md)
+
 **Status:** Accepted
 
 **Context.** The existing backend (`backend/`) is Node/Express/Postgres

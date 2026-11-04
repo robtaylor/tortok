@@ -1,5 +1,7 @@
 # Decision 0011: Monetization architecture — interface-first payout, first-party pool committed, V1 rail gated on Apple + US-incorporation prerequisites
 
+**Current architecture:** [Monetization](../monetization.md)
+
 **Status:** Accepted — 2026-04-17. Amended 2026-04-29 — NSIDs are
 `app.tortok.payout.destination` and `app.tortok.payout.pool` (reverse-
 DNS rooted at `tortok.app`); see Decision 0012.

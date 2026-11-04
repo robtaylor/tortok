@@ -1,5 +1,7 @@
 # Decision 0007: Signup UX and spam prevention
 
+**Current architecture:** [Auth & signup](../auth-signup.md)
+
 **Status:** Accepted. Amended 2026-04-29 — signup is now atproto OAuth
 against the user's existing PDS, not a custodial email + password flow.
 See "Amendment 2026-04-29" below.

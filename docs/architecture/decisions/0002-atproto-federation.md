@@ -1,5 +1,7 @@
 # Decision 0002: Federation protocol is AT Protocol
 
+**Current architecture:** [Federation](../federation.md)
+
 **Status:** Accepted. Amended 2026-04-29 — NSID is `app.tortok.video.post`
 (reverse-DNS rooted at `tortok.app`); see Decision 0012. The example record
 shape below has been updated to match the formal Lexicon definition in

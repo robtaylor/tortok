@@ -1,5 +1,7 @@
 # Decision 0013: Moderation strategy — atproto labelers, illegal-content floor, UK age-verification gate
 
+**Current architecture:** [Moderation](../moderation.md)
+
 **Status:** Accepted — 2026-04-29. Resolves
 `docs/architecture/open-problems/moderation.md`.
 

@@ -1,5 +1,7 @@
 # Decision 0010: Bridge Bluesky video posts into the tortok feed (inbound federation)
 
+**Current architecture:** [Federation](../federation.md)
+
 **Status:** Accepted — 2026-04-17
 
 **Context.** The chicken-and-egg problem at launch is severe: a new

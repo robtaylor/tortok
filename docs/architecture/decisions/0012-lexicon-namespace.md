@@ -1,5 +1,7 @@
 # Decision 0012: Lexicon namespace governance
 
+**Current architecture:** [Federation](../federation.md)
+
 **Status:** Accepted — 2026-04-29
 
 **Context.** Decision 0002 commits us to AT Protocol and references a

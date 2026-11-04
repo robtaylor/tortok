@@ -1,5 +1,7 @@
 # Decision 0001: Torrent engine is WebTorrent, end to end
 
+**Current architecture:** [P2P & torrent engine](../p2p-torrent.md)
+
 **Status:** Accepted
 
 **Context.** The current tree has two torrent engines: a stubbed libtorrent

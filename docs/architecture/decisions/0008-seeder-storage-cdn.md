@@ -1,5 +1,7 @@
 # Decision 0008: Seeder, storage, and CDN infrastructure
 
+**Current architecture:** [P2P & torrent engine](../p2p-torrent.md)
+
 **Status:** Accepted
 
 **Context.** Decision 0005 extracts the WebTorrent seeder from the Express

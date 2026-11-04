@@ -1,5 +1,7 @@
 # Decision 0003: Identity uses DIDs — `did:plc` default, `did:web` opt-in
 
+**Current architecture:** [Federation](../federation.md)
+
 **Status:** Accepted. Amended 2026-04-29 — v1 no longer runs a custodial
 TorTok PDS; users authenticate via their existing atproto identity
 (typically `bsky.social`). See "Amendment 2026-04-29" below.

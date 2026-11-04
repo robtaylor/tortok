@@ -1,5 +1,7 @@
 # Decision 0006: Migration path from the Swift prototype
 
+**Current architecture:** [Architecture overview](../README.md)
+
 **Status:** Accepted
 
 Each phase below is independently shippable. If we stop at the end of any

@@ -1,5 +1,7 @@
 # Decision 0004: Client is Expo + React Native + TypeScript
 
+**Current architecture:** [Client](../client.md)
+
 **Status:** Accepted
 
 **Context.** The current Swift/SwiftUI prototype is iOS-only. Cross-platform
