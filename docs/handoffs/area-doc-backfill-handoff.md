@@ -21,8 +21,8 @@ don't batch all six.
 **Verification command:**
 ```sh
 uv run docs/scripts/doctool.py lint
-# Expect: 0 error(s), 1 warning(s) — the A002 on decisions/0006 is the only
-# acceptable warning. A new area doc must keep its '## Implementation status'
+# Expect: 0 error(s), 0 warning(s) — backend.md now links Decision 0006,
+# which cleared the old A002. A new area doc must keep its '## Implementation status'
 # and '## Decisions behind this' headings (A001) and the decisions it covers
 # must stay linked from it (A002).
 ```
@@ -95,15 +95,6 @@ launch-blocking and tracked against release criteria
 
 ## Critical context
 
-- **Doc/code mismatch found while writing `backend.md`:** `p2p-torrent.md`
-  says `webtorrent.seed()` is never passed `name:`. That holds for the spike
-  seeder (`test-content/seeder.mjs`), but the backend `SeederService` *does*
-  pass `name` and announces to public `wss://` trackers. Pending a user
-  decision: fix the code, or correct the p2p-torrent claim.
-
-- **Decision 0006's A002 warning is expected** (migration/phasing has no area
-  doc). Backfilling the six areas won't touch it; leave it unless you give 0006 a
-  home. The goal state is still "0 errors, 1 warning".
 - **The stubs are already lint-clean** (link-only, both headings present). Each
   backfill *replaces* a stub's body — keep the headings and decision links intact
   so D005/A001/A002 don't regress.
