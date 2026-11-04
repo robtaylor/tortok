@@ -22,13 +22,21 @@ resolution, and `polyfills.web.ts` is the lighter browser equivalent.
 ## Content origin and webseed
 
 The origin seeder runs today inside the backend as `SeederService`
-(`backend/src/services/seeder.ts`): it seeds the catalog over WebTorrent and
-exposes a BEP-19 **webseed** so the client can pull pieces over HTTP when no
-peers are available. The webseed origin is Cloudflare **R2** in production and a
-local content server (`http://localhost:8090`) in dev, overridable with
-`CONTENT_ORIGIN_URL` (Decision 0008's R2-origin layer). `webtorrent.seed()` is
-never passed a `name:` option — fs-chunk-store looks content up by torrent name
-and 404s every piece if it is.
+(`backend/src/services/seeder.ts`; process-level detail in
+[backend](backend.md#seeder)): it seeds the directories under
+`backend/content/` over WebTorrent and embeds a BEP-19 **webseed** URL in each
+torrent so the client can pull pieces over HTTP when no peers are available. In
+local development the feed's magnets come instead from the spike seeder
+(`test-content/seeder.mjs`, seeding `test-content/clips/*.mp4`). The webseed
+origin is Cloudflare **R2** in production and a local content server
+(`http://localhost:8090`) in dev, overridable with `CONTENT_ORIGIN_URL`
+(Decision 0008's R2-origin layer).
+
+A seeded **file** is never renamed with `seed()`'s `name:` option: the default
+fs-chunk-store resolves pieces by torrent name, so a name that differs from the
+file's basename makes every piece read fail with ENOENT. The spike seeder seeds
+files by path alone for this reason. `SeederService` passes `name:` equal to the
+seeded directory's own name, which is the default anyway and is harmless.
 
 ## Trackers and TURN
 

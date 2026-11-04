@@ -14,7 +14,7 @@ If you're an agent or a new reader, start here: this page maps every area to its
 | Monetization | [monetization](monetization.md) _(stub)_ | 0011 |
 | Moderation | [moderation](moderation.md) _(stub)_ | 0013 |
 
-Decision 0006 (migration from the Swift prototype) is project history rather than an area of the live system; it lives in the phases table in [`CLAUDE.md`](../../CLAUDE.md) and the [plans](../plans/).
+Decision 0006 (migration from the Swift prototype) is mostly project history rather than an area of the live system; its phasing lives in the phases table in [`CLAUDE.md`](../../CLAUDE.md) and the [plans](../plans/), and [backend](backend.md) links it for the legacy-backend retirement it schedules.
 
 Area docs are written incrementally. `p2p-torrent` and `backend` are written in full; the rest are **stubs** (they carry their decision links and an Implementation-status note, but their present-tense write-up is pending a verified backfill against the current code — see [Follow-ups](#follow-ups) below). Copy `_template.md` to replace a stub as each one is written.
 

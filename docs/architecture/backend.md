@@ -49,7 +49,7 @@ The Expo client calls `/auth/login`, `/auth/register`, `/auth/me` and `/videos/f
 
 ## Auth and validation
 
-The backend's auth is the **legacy** email/password + JWT path. atproto OAuth runs on the client and is documented in [auth-signup](auth-signup.md); this path is being retired in Phase 3.
+The backend's auth is the **legacy** email/password + JWT path, inherited from the Swift prototype. Login is decided to be atproto OAuth against the user's own PDS, with no tortok auth endpoint or stored passwords ([Decision 0007](decisions/0007-signup-and-spam-prevention.md)); that OAuth flow runs on the client and is documented in [auth-signup](auth-signup.md). Retiring this legacy backend is a Phase 3 deliverable ([Decision 0006](decisions/0006-migration-from-swift.md)).
 
 - **Register** checks that the username and email are each unused *on this instance* (`INSTANCE_DOMAIN`, default `localhost`), hashes the password with bcrypt (cost 10), inserts the user, and returns `{token, user}`.
 - **Login** looks the user up by email and instance, compares bcrypt hashes, and returns `{token, user}`. An unknown email and a wrong password both return the same 401.
@@ -134,3 +134,5 @@ In local development `scripts/dev-up.sh` starts the backend (`npm run dev` on :8
 ## Decisions behind this
 
 - [Decision 0005 — Backend stays Node + TypeScript; evolves into an AppView](decisions/0005-backend-node-appview.md)
+- [Decision 0006 — Migration path from the Swift prototype](decisions/0006-migration-from-swift.md) — phases the legacy feed and email/password backend out (Phases 3–4).
+- [Decision 0007 — Signup UX and spam prevention](decisions/0007-signup-and-spam-prevention.md) — login is atproto OAuth; the backend holds no passwords once the legacy path retires.
