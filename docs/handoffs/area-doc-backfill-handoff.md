@@ -27,6 +27,45 @@ uv run docs/scripts/doctool.py lint
 # must stay linked from it (A002).
 ```
 
+## Side thread agreed 2026-11-08 — write after PR #4 merges (fresh branch from `main`)
+
+Two Proposed docs the user approved; fold this section into them, then delete it.
+
+1. **Decision: the AppView's Postgres is one index among many.** Postgres holds
+   only derived, rebuildable data (posts, likes, hashtags, bridged items) plus a
+   short, named list of operator-local data (views until `view-counting.md`
+   resolves, moderation state, rate limits). Requirements: the client chooses its
+   AppView at runtime by service DID (routed via the user's PDS, `atproto-proxy`
+   style), not the build-time `EXPO_PUBLIC_API_URL` (`tortok/lib/api.ts:18-30`);
+   an AppView self-hosting guide; AppView discovery via declaration records
+   (e.g. `app.tortok.appview.declaration`, Decision 0012 namespace), deferred to
+   Phase 4+. Retire `/.well-known/tortok` (`backend/src/index.ts:64`, pre-atproto
+   "instance" model) and drop it from Decision 0016's smoke contract. Second half:
+   hosting (unmanaged Fly Postgres `tortok-db`), backups (verify snapshot
+   settings first), migrations (append-only `schema.sql` on boot). Also revises
+   Decision 0005's stale "host own PDS / subscribe to own PDS" (superseded in
+   practice by the 2026-04-29 amendments and `own-pds.md`).
+2. **Open problem: cross-deployment transport** (Must resolve by: Phase 3 for the
+   runtime-source requirement). Contents:
+   - Tracker and webseed are baked into signed records, so the publisher's origin
+     pays forever and old posts die with it; clients should treat magnet sources
+     as hints and learn extra sources at runtime (AppView-supplied or
+     record-published). Separate trackers split swarms (DHT is off).
+   - Candidates: own WebRTC seeders (spike: WebRTC/UDP on Fly), volunteer
+     seeders (liability; labeler drop-lists), HTTP mirrors (cheapest; BEP-19
+     allows several webseeds).
+   - Content domain: `content.tortok.net` (done 2026-11-08). Why `.net` not
+     `.app`: a blocklisting of user content must not take down the app, API,
+     OAuth or Lexicon domain (the githubusercontent pattern). All three domains
+     auto-renew at Gandi; a lapsed content domain breaks every old post.
+   - Durability equals R2's; Decision 0010's "P2P-backed durability" pitch
+     overstates it. No retention/deletion policy for R2 objects yet.
+   - Key real content by infohash (`/v/<infohash>/<file>`) so mirrors copy
+     path-for-path.
+   - Piece size: create-torrent's default gives 16 KB pieces for ~3 MB clips
+     (~180 sequential webseed requests); larger pieces cut requests.
+     Changing it changes infohashes.
+
 ## Method (applies to every area — do this, not freehand prose)
 
 1. **Model:** copy the depth, present tense, and file-referencing of

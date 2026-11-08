@@ -16,6 +16,15 @@ interface WebTorrentInstance {
   on: (event: string, callback: (...args: any[]) => void) => void;
 }
 
+function envOrDevDefault(name: string, devDefault: string): string {
+  const value = process.env[name];
+  if (value !== undefined) return value;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(`${name} must be set in production`);
+  }
+  return devDefault;
+}
+
 class SeederService {
   private client: WebTorrentInstance | null = null;
   private seededTorrents: Map<string, TorrentInfo> = new Map();
@@ -25,23 +34,13 @@ class SeederService {
 
   constructor() {
     this.contentDir = path.join(__dirname, '../../content');
-    // R2 public bucket URL — webseed (BEP-19) lets WebTorrent fetch pieces
-    // from this HTTP origin when no P2P peers are available. In dev we
-    // point at the local test-content seeder on :8090; in prod we use
-    // the public R2 bucket. Override with CONTENT_ORIGIN_URL.
-    this.contentOrigin = process.env.CONTENT_ORIGIN_URL
-      ?? (process.env.NODE_ENV !== 'production'
-        ? 'http://localhost:8090'
-        : 'https://pub-96c2a0ac73ac40359616969672d5f67f.r2.dev');
-    // Own trackers only (Decision 0008 L3). Public wss:// trackers leak
-    // phantom peers from earlier sessions into the swarm. In dev, announce
-    // to the local tracker that scripts/dev-up.sh starts on :8000 so dev
-    // fixtures never reach the production tracker. Override with
-    // TRACKER_URLS (comma-separated).
-    this.announce = (process.env.TRACKER_URLS
-      ?? (process.env.NODE_ENV !== 'production'
-        ? 'ws://localhost:8000'
-        : 'wss://tortok-tracker.fly.dev'))
+    // BEP-19 webseed origin and own trackers (Decision 0008; see
+    // docs/architecture/p2p-torrent.md). Both are baked into every magnet,
+    // so deployed environments set them explicitly (backend/fly.toml [env])
+    // and boot fails without them; only local dev has defaults: the
+    // test-content server on :8090 and the tracker from scripts/dev-up.sh.
+    this.contentOrigin = envOrDevDefault('CONTENT_ORIGIN_URL', 'http://localhost:8090');
+    this.announce = envOrDevDefault('TRACKER_URLS', 'ws://localhost:8000')
       .split(',').map((u) => u.trim()).filter(Boolean);
     if (this.announce.length === 0) {
       throw new Error('TRACKER_URLS is set but contains no tracker URLs');

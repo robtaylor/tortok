@@ -477,6 +477,11 @@ unified `posts` table architecture rather than a sidecar.
     429 rate-limit issue from attempt 1 (R2 public hostname has
     aggressive rate limits; the backend can cache + serve at
     line speed).
+    **Re-check before building (2026-11-08):** content is now served
+    from `content.tortok.net`, a Cloudflare-cached custom domain, so the
+    429 motivation is gone. Build this only if it has another reason
+    (e.g. a stable URL independent of the content host); otherwise drop it
+    and point `torrent_file_url` at `content.tortok.net`.
     - `GET /torrents/<did>/<cid>.torrent` → fetch from R2 once,
       cache in-memory or on disk, serve with long Cache-Control.
     - `mirror_state.torrent_file_url` writes the backend route,

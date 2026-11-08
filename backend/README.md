@@ -190,8 +190,8 @@ within `kill_timeout`.
 | `INSTANCE_DOMAIN` | Instance domain name | `localhost` |
 | `INSTANCE_NAME` | Display name | `TorTok Local` |
 | `ALLOWED_ORIGINS` | CORS origins (comma-separated) | `*` |
-| `CONTENT_ORIGIN_URL` | BEP-19 webseed origin | `http://localhost:8090` (dev), R2 bucket (prod) |
-| `TRACKER_URLS` | Trackers the seeder announces to (comma-separated) | `ws://localhost:8000` (dev), `wss://tortok-tracker.fly.dev` (prod) |
+| `CONTENT_ORIGIN_URL` | BEP-19 webseed origin | `http://localhost:8090` (dev); required in production, set in `fly.toml` |
+| `TRACKER_URLS` | Trackers the seeder announces to (comma-separated) | `ws://localhost:8000` (dev); required in production, set in `fly.toml` |
 | `TURN_SECRET` | coturn shared secret for `/turn/credentials` | unset → STUN only |
 
 ## Database Schema
