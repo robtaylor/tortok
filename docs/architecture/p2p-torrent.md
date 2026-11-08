@@ -28,9 +28,12 @@ The origin seeder runs today inside the backend as `SeederService`
 torrent so the client can pull pieces over HTTP when no peers are available. In
 local development the feed's magnets come instead from the spike seeder
 (`test-content/seeder.mjs`, seeding `test-content/clips/*.mp4`). The webseed
-origin is Cloudflare **R2** in production and a local content server
-(`http://localhost:8090`) in dev, overridable with `CONTENT_ORIGIN_URL`
-(Decision 0008's R2-origin layer). A webseed on R2 is sufficient on its own: with no
+origin is Cloudflare **R2** in production, served through the bucket's custom
+domain `content.tortok.net` behind Cloudflare's cache (the bucket's `r2.dev` URL
+is rate-limited and is not used), and a local content server
+(`http://localhost:8090`) in dev, set by `CONTENT_ORIGIN_URL`
+(Decision 0008's R2-origin layer). The origin URL is baked into every magnet and
+`.torrent` file, so the content hostname is effectively permanent. A webseed on R2 is sufficient on its own: with no
 seeder, tracker or DHT, a client downloads complete, verified content from R2
 ([webseed-only spike](decisions/spikes/webseed-only-origin.md)). For a directory
 (multi-file) torrent the webseed URL is the *parent* of the torrent directory,

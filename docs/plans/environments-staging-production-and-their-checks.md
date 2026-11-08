@@ -18,6 +18,7 @@ Give tortok two backend environments, staging and production, a single smoke scr
 - **CI:** none; the repository has no `.github/` directory. Deploys are a manual `fly deploy` from a laptop.
 - **Checks:** none automated. The 2026-11-04 deploy was verified by hand (`/health`, feed shape, `/turn/credentials`, `/seeder/stats`, a graceful-shutdown restart).
 - **Content:** production's feed is exactly the five Big Buck Bunny test clips, owned by `testuser` and published by `scripts/seed-prod-test-content.mjs` (R2 under `test-content/`, own tracker, per-file webseed, `bbb-01` newest). Each was verified to download completely from the webseed alone. The April `testuser3` row, which had no webseed, was deleted; the Detox `feed`/`navigation` tests now expect the clips. The webseed-only spike ([`webseed-only-origin.md`](../architecture/decisions/spikes/webseed-only-origin.md)) gives the check WS2 runs.
+- **Content domain:** the bucket is served at `content.tortok.net` (custom domain on the `tortok.net` Cloudflare zone, added 2026-11-08). Production sets `CONTENT_ORIGIN_URL` and `TRACKER_URLS` in `backend/fly.toml`; staging needs its own values.
 - **R2 CORS:** the public bucket allows `GET`/`HEAD` from any origin with the `Range` header and exposes `Content-Range`, `Content-Length`, `Accept-Ranges` and `ETag` (set 2026-11-04 via the S3 API; preflight verified). Any origin is safe because the bucket is public and unauthenticated.
 
 ## Workstreams

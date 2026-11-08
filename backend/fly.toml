@@ -8,6 +8,10 @@ kill_timeout = 10
 
 [env]
   PORT = "8080"
+  # Baked into every magnet the seeder creates; the code has no production
+  # defaults and refuses to boot without these.
+  CONTENT_ORIGIN_URL = "https://content.tortok.net"
+  TRACKER_URLS = "wss://tortok-tracker.fly.dev"
 
 [http_service]
   internal_port = 8080

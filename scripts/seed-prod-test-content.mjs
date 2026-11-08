@@ -23,8 +23,9 @@
 // Env:
 //   DATABASE_URL     target Postgres (required unless --dry-run)
 //   OWNER_USERNAME   user who owns the rows (default: testuser)
-//   TRACKER_URL      default wss://tortok-tracker.fly.dev
-//   R2_PUBLIC_URL    default: the public tortok-content bucket URL
+//   TRACKER_URLS        comma-separated (default wss://tortok-tracker.fly.dev)
+//   CONTENT_ORIGIN_URL  bucket's public origin (default https://content.tortok.net)
+//   (the same names and production values as backend/fly.toml)
 //   R2_PREFIX        key prefix in the bucket (default: test-content)
 
 import 'dotenv/config';
@@ -43,9 +44,9 @@ const { Client } = createRequire(new URL('../backend/package.json', import.meta.
 const DRY_RUN = process.argv.includes('--dry-run');
 const ROOT = new URL('..', import.meta.url).pathname;
 const CONTENT = path.join(ROOT, 'test-content');
-const TRACKER_URL = process.env.TRACKER_URL ?? 'wss://tortok-tracker.fly.dev';
-const PUBLIC_URL = (process.env.R2_PUBLIC_URL
-  ?? 'https://pub-96c2a0ac73ac40359616969672d5f67f.r2.dev').replace(/\/$/, '');
+const TRACKERS = (process.env.TRACKER_URLS ?? 'wss://tortok-tracker.fly.dev')
+  .split(',').map((u) => u.trim()).filter(Boolean);
+const PUBLIC_URL = (process.env.CONTENT_ORIGIN_URL ?? 'https://content.tortok.net').replace(/\/$/, '');
 const PREFIX = process.env.R2_PREFIX ?? 'test-content';
 const OWNER_USERNAME = process.env.OWNER_USERNAME ?? 'testuser';
 const R2_BUCKET = process.env.R2_BUCKET ?? 'tortok-content';
@@ -93,6 +94,7 @@ async function main() {
   const missing = inputs.flatMap((c) => [c.clipPath, c.posterPath]).filter((f) => !fs.existsSync(f));
   if (missing.length) throw new Error(`missing input files:\n  ${missing.join('\n  ')}`);
   const databaseUrl = DRY_RUN ? null : requireEnv('DATABASE_URL');
+  if (TRACKERS.length === 0) throw new Error('TRACKER_URLS contains no tracker URLs');
 
   const prepared = [];
   for (const { clipPath, posterPath, ...clip } of inputs) {
@@ -106,9 +108,9 @@ async function main() {
     // Single-file torrent: the webseed URL is the file itself. No `name:`
     // option — the name must stay the file's basename.
     const torrentBuf = await promisify(createTorrent)(clipPath,
-      { announceList: [[TRACKER_URL]], urlList: [clipUrl] });
+      { announceList: [TRACKERS], urlList: [clipUrl] });
     const parsed = await parseTorrent(torrentBuf);
-    if (!parsed.urlList?.includes(clipUrl) || !parsed.announce?.includes(TRACKER_URL)) {
+    if (!parsed.urlList?.includes(clipUrl) || !TRACKERS.every((t) => parsed.announce?.includes(t))) {
       throw new Error(`${clip.name}: torrent is missing its webseed or tracker`);
     }
     const magnet = toMagnetURI(parsed);

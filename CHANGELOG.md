@@ -26,7 +26,7 @@ deciding whether to upgrade.
 
 - Production backend (`tortok-api` on Fly.io) keeps one machine running at all times, so the in-process origin seeder no longer stops when traffic idles.
 - Backend seeder announces only to tortok's own trackers (`TRACKER_URLS`; local tracker in dev, `tortok-tracker.fly.dev` in production), not public `wss://` trackers.
-
+- Content is served from `content.tortok.net`, the R2 bucket's custom domain behind Cloudflare's cache, instead of the rate-limited `r2.dev` URL. Production webseeds, torrent files and posters use it.
 - Production feed is the five Big Buck Bunny test clips; the stale April test video is gone. Detox feed/navigation tests updated to match.
 - The public R2 bucket now sends CORS headers for `GET`/`HEAD` with `Range`, so the web client can use the webseed.
 
