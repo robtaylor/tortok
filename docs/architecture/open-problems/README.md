@@ -37,6 +37,10 @@ Each has a `Must resolve by:` header stating the phase that forces it.
   before V1 rail commitment: Apple App Store Guideline 3.1.1 written position,
   and the tortok US-incorporation decision. Sub-problem A (payout-destination
   Lexicon) is unblocked and can ship in Phase 3 independently.
+- **[`cross-deployment-transport.md`](cross-deployment-transport.md)** — resolve
+  by Phase 3 (clients must learn extra video sources at runtime before real
+  records fix their magnets), Phase 4 for mirrors vs seeders. Covers the
+  permanent content domain, durability, key layout and piece size.
 - **[`own-pds.md`](own-pds.md)** — parked. v1 leverages users' existing atproto
   identities (typically `bsky.social`); no tortok PDS is in scope. Documents the
   costs we're avoiding, the risks taken on, and the triggers that would force a

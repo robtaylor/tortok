@@ -54,6 +54,7 @@ Write all three in the same present tense and a reader can't tell *why we did it
 | [0014](0014-device-testing-strategy.md) | Device testing strategy — emulators for CI, real devices for video/P2P | Accepted |
 | [0015](0015-tier3-p2p-testing-lambdatest.md) | Tier-3 real-device P2P testing runs on LambdaTest/TestMu | Accepted |
 | [0016](0016-testing-strategy-where-each-kind-of-test-lives.md) | Testing strategy — where each kind of test lives | Proposed |
+| [0017](0017-appview-postgres-is-a-rebuildable-index.md) | The AppView's Postgres is a rebuildable index, one of many | Proposed |
 
 Forward-looking items that are **not yet decisions** — unresolved design problems, deferred decisions, and explicit out-of-scope — live in [`../open-problems/`](../open-problems/README.md), a tortok-specific extension to the stock discipline (each entry carries a phase-gated `Must resolve by` header). `uv run docs/scripts/doctool.py lint` checks this table against the decision files.
 
