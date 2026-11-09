@@ -1,6 +1,6 @@
 # Decision 0017 — The AppView's Postgres is a rebuildable index, one of many
 
-**Status:** Proposed.
+**Status:** Accepted — 2026-11-09. Revises the PDS and firehose-source parts of [Decision 0005](0005-backend-node-appview.md).
 
 **Current architecture:** [Backend](../backend.md).
 

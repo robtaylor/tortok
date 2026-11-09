@@ -111,4 +111,4 @@ Decision 0015:
 - [Decision 0009](decisions/0009-client-seeding-policy.md) — Phase 2 client seeding scope and policy.
 - [Decision 0014](decisions/0014-device-testing-strategy.md) — device testing strategy (three tiers).
 - [Decision 0015](decisions/0015-tier3-p2p-testing-lambdatest.md) — tier-3 real-device P2P testing on LambdaTest/TestMu.
-- [Decision 0016](decisions/0016-testing-strategy-where-each-kind-of-test-lives.md) *(proposed)* — testing strategy: tier 1 as the primary regression gate, integration tests for new backend code, no legacy-backend backfill.
+- [Decision 0016](decisions/0016-testing-strategy-where-each-kind-of-test-lives.md) — testing strategy: tier 1 as the primary regression gate, integration tests for new backend code, no legacy-backend backfill.

@@ -1,6 +1,6 @@
 # Decision 0016 — Testing strategy — where each kind of test lives
 
-**Status:** Proposed.
+**Status:** Accepted — 2026-11-09.
 
 **Current architecture:** [P2P & torrent engine § Device testing](../p2p-torrent.md#device-testing).
 

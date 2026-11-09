@@ -1,6 +1,6 @@
 # Plan — Environments — staging, production, and their checks: know what's deployed and that it works
 
-**Status:** Proposed.
+**Status:** Active — direct production deploys allowed until public release (Decision 0016, commitment 12).
 
 ## Goal
 
@@ -8,7 +8,7 @@ Give tortok two backend environments, staging and production, a single smoke scr
 
 ## Prerequisites
 
-- Decision 0016 accepted.
+- Decision 0016 accepted. Done 2026-11-09.
 - Production on current code. Done 2026-11-04: `tortok-api` was redeployed from `backend/seeder-lifecycle` (PR #4) after running a 2026-04-12 image for seven months.
 - A Fly API token stored as a GitHub Actions secret (`FLY_API_TOKEN`) for WS3.
 
