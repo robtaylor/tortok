@@ -97,6 +97,9 @@ Decision 0015:
   undecided; unifying the dev-spike and backend seeders waits on that. None of
   the three device-testing tiers is stood up yet; they begin once Phase 3 work
   clears, tiers 1 and 2 before the tier-3 rig (Decision 0014).
+- **Open:** where bytes come from once several deployments serve the same
+  posts, and how clients learn sources beyond the magnet; see
+  [`open-problems/cross-deployment-transport.md`](open-problems/cross-deployment-transport.md).
 - **Open:** real-device offload ratio and the client policy's starting numbers
   are validated by the real-device tiers, not yet run; see
   [`open-problems/seeding-policy.md`](open-problems/seeding-policy.md).

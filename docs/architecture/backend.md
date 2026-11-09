@@ -136,3 +136,4 @@ In local development `scripts/dev-up.sh` starts the backend (`npm run dev` on :8
 - [Decision 0005 — Backend stays Node + TypeScript; evolves into an AppView](decisions/0005-backend-node-appview.md)
 - [Decision 0006 — Migration path from the Swift prototype](decisions/0006-migration-from-swift.md) — phases the legacy feed and email/password backend out (Phases 3–4).
 - [Decision 0007 — Signup UX and spam prevention](decisions/0007-signup-and-spam-prevention.md) — login is atproto OAuth; the backend holds no passwords once the legacy path retires.
+- [Decision 0017 — The AppView's Postgres is a rebuildable index, one of many](decisions/0017-appview-postgres-is-a-rebuildable-index.md) *(proposed)* — Postgres becomes a derived index; clients choose their AppView at runtime.
