@@ -215,8 +215,8 @@ restores the session via `oauth.restore(did)`. Logout revokes.
 Six months passed between this replan and its execution. This block
 records what changed and how each phase now reads; the numbered steps
 below stay as the detailed recipe except where this block overrides
-them. Status: **Proposed — awaiting user confirmation of scope and the
-open questions at the end.**
+them. Status: **Scope confirmed by the user 2026-11-09**, with the
+answers recorded under "Decisions on the open questions" at the end.
 
 **State on 2026-11-09.**
 
@@ -280,52 +280,59 @@ open questions at the end.**
     smoke contract (Decision 0017, item 6).
   - The Detox `login()` helper moves to OAuth in the same change (Decision
     0016, commitment 6). OAuth runs in the system auth browser, which
-    Detox can't drive, so this needs a test-only path; see open question 3.
+    Detox can't drive, so it uses a dev-only path; see decision 3 below.
+  - Add the in-app AppView URL setting (decision 4 below).
+  - Remove `SeederService` and let the API scale to zero (decision 1 below).
   - Retire `seed-prod-test-content.mjs` (it writes the legacy `videos`
     table, which this phase drops); production content comes from
     `seed-fixtures.mjs` records instead.
 - **Phase D (bridge).**
   - Drop step 19 (the backend `/torrents` route). Its only reason was
     `r2.dev` rate limits; `torrent_file_url` points at `content.tortok.net`.
-  - **Blocked on a decision** (open question 2): steps 15–18 mirror Bluesky
-    videos into tortok's R2, but Decision 0010 item 4 says bridged bytes
-    come from Bluesky's video CDN and tortok does not re-host them.
-  - Bridged objects follow the transport open problem's key layout, keyed
-    by infohash, instead of `bridged/<did>/<cid>.mp4`.
-  - Attempt 1's 16 KB piece size conflicts with the transport open
-    problem's finding that 16 KB pieces make webseed fetches
-    request-bound. Settle piece size before any real records exist.
+  - No re-hosting (decision 2 below): bridged posts play from Bluesky's
+    HLS URL, so the R2 mirror, ffmpeg remux, bridged R2 layout and the
+    16 KB bridged piece size all drop out.
+  - Step 20 grows one client change: an item with `hls_url` and no magnet
+    plays the HLS URL directly through `expo-video`, bypassing `useP2PUrl`.
+  - Piece size for tortok's own content still needs settling before Unit
+    3 publishes real records (the transport open problem's 16 KB finding).
 - **Phase E.** As planned, plus: write `auth-signup.md` and
   `federation.md` after the cutover (the area-doc backfill defers them to
   here).
 
 **Out of scope for this unit:** runtime AppView selection by service DID
-(Decision 0017 item 4 lands it "with Phase C"; see open question 4),
+(service-DID routing; decision 4 below puts a URL setting in Phase C),
 publishing from the app (Unit 3), web cookie auth (Unit 7).
 
-**Open questions for the user.**
+**Decisions on the open questions (user, 2026-11-09).**
 
-1. **Seeder.** Webseed alone is sufficient (spike), and `SeederService`
-   seeds an HLS fixture whose webseed path 404s (R2 has
-   `videos/test-video/`, the seeder announces `videos/tortok-test-video/`).
-   Remove `SeederService` and its fixture in Phase C, and set the API
-   back to `auto_stop_machines = "stop"`? Recommended: yes. The
-   always-on-peer question moves wholly into the transport open problem.
-2. **Bridge re-hosting.** Either supersede Decision 0010 item 4 (tortok
-   mirrors promoted Bluesky videos into R2 as torrents, the attempt-1
-   design, with re-hosting and liability consequences), or keep 0010 and
-   play bridged posts from Bluesky's HLS URL over plain HTTP (no P2P for
-   bridged content, which is what 0010 already says). Recommended: keep
-   0010 for now; it is less code and no re-hosting liability.
-3. **Detox under OAuth.** A dev-only sign-in path that loads a session
-   from an app password (`tortok-dev`, cached to respect the 10
-   logins/day limit), compiled out of release builds. Recommended.
-4. **Runtime AppView choice.** Decision 0017 says it lands with Phase C.
-   Doing it properly means the AppView exposes XRPC methods behind a
-   service DID and the PDS proxies them. Proposed: Phase C ships a
-   settings field for the AppView base URL (replacing the build-time
-   `EXPO_PUBLIC_API_URL`), and DID-plus-proxy routing becomes its own
-   unit after Unit 3.
+1. **Seeder: remove it.** Phase C deletes `SeederService`, its
+   `backend/content/` fixture and the `/seeder/stats` route, and sets the
+   API back to `auto_stop_machines = "stop"`. Whether tortok runs an
+   always-on peer is now wholly a question for
+   [`cross-deployment-transport.md`](../architecture/open-problems/cross-deployment-transport.md).
+   Update `p2p-torrent.md`, `backend.md` and `fly.toml` in the same change.
+2. **Bridge: keep Decision 0010.** Bridged posts play from Bluesky's HLS
+   URL over plain HTTP, with no P2P and no re-hosting. Phase D drops the
+   mirror pipeline (steps 15–18's R2 mirroring and the ffmpeg remux) and
+   step 19, keeping the Jetstream subscriber, NSFW and opt-out filtering,
+   and engagement polling. `posts` rows for `app.bsky.feed.post` carry the
+   HLS URL in `hls_url`, and the client plays it directly (no torrent).
+3. **Detox: dev-only app-password sign-in.** A sign-in path compiled
+   only into dev and e2e builds creates a session for `tortok-dev` from
+   its app password, cached to respect the 10 logins/day limit; release
+   builds don't contain it. The real OAuth flow gets its own small suite
+   per platform later, using a tool that can drive system dialogs and web
+   content (Maestro or Appium), run nightly or by hand. Driving the auth
+   browser from the main suite was rejected as fragile: the sheet runs out
+   of process with a system consent prompt, the login page is Bluesky's
+   and can change or add captcha/2FA, every run burns rate-limited
+   logins, browser cookies leak state between runs, Android Custom Tabs
+   need different automation, and every run depends on live `bsky.social`.
+4. **AppView choice: URL setting now, DID later.** Phase C adds an
+   in-app AppView base-URL setting (defaulting to tortok's) that replaces
+   the build-time `EXPO_PUBLIC_API_URL`. Service-DID plus PDS-proxy
+   routing becomes its own unit after Unit 3.
 
 **Why a replan.** First attempt (preserved on `unit-2.5-attempt-1`
 tag, ~30 commits) shipped `bridged_posts` as a sidecar table with
