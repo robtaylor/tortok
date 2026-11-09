@@ -184,6 +184,10 @@ the design avoids anyone having to:
 The log format, where it is published, and how auditors fetch a shard are
 still open.
 
+A hosted service that sells funders verified stats from these logs is a
+possible tortok income stream; see "Other mechanisms" in
+[`monetization.md`](monetization.md).
+
 **Pros.** Meets the privacy, verifiability and decentralisation
 constraints together. Each funder sets its own trust policy instead of
 trusting tortok's number. Builds on standardised cryptography.

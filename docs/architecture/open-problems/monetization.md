@@ -399,6 +399,24 @@ decision. The summary below reflects what Decision 0011 commits to.
   creators' fan revenue, gives tortok an income stream that doesn't
   depend on extracting from creators or running ads. Defer to its
   own decision; not blocking the release plan.
+- **Verified engagement stats for funders (tortok-side monetization).**
+  Sponsors and pool operators pay for audited view and engagement stats
+  built on approach 6 of [`view-counting.md`](view-counting.md). Like
+  premium features, it doesn't tax creators and involves no custody of
+  creator money (Decision 0011). Three conditions keep it from
+  undermining the design. The verifier stays open source and anyone can
+  run the same service against the public token logs; tortok sells the
+  hosted convenience (reports, vetted trust tiers, fraud analysis, an API
+  with an SLA), not exclusive access to truth. The token issuer is a
+  separate service with its own published keys, and funders can choose to
+  count only tokens from issuers other than tortok's, which answers the
+  conflict of interest in tortok counting and auditing itself. It runs on
+  `tortok.org` or `tortok.app`, never `tortok.net`, which is reserved for
+  user content (see
+  [`cross-deployment-transport.md`](cross-deployment-transport.md)).
+  Comparable businesses: Social Blade, CreatorIQ, Nielsen. Can't exist
+  before approach 6, and only worth building once funders pay against view
+  counts, after Decision 0011's payout prerequisites.
 
 **Open sub-questions for the eventual decision record:**
 
