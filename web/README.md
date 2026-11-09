@@ -1,6 +1,6 @@
 # web/
 
-Static site for `tortok.app`. Intended deploy target: **Cloudflare Pages** (consistent with our existing Cloudflare/R2 footprint from Decision 0008). Hosts the atproto OAuth client metadata document, the OAuth auth callback shim, and a placeholder marketing page. Cloudflare Pages deploy is not yet configured — that is a separate follow-up task.
+Static site for `tortok.app`, served by **Cloudflare Pages** and deployed with `npm run deploy:web` (see below). It hosts the atproto OAuth client metadata document, the OAuth callback shim, and a placeholder marketing page.
 
 The Expo web build deploys separately to the `app.tortok.app` subdomain (option (a) in the Phase 3 plan). That build is not part of this directory.
 
@@ -34,8 +34,8 @@ Handles the browser redirect from the user's PDS after OAuth authorization.
   `https://app.tortok.app`.
 
 Note: the native deep-link scheme uses a **single slash** (`app.tortok:/auth/callback`),
-not a double slash. This is intentional — it matches how `app.config.ts`
-must declare `scheme: "app.tortok"` in the Expo client (Track 2 of Unit 2).
+not a double slash. This is intentional: it matches the Expo client's
+`"scheme": "app.tortok"` in `tortok/app.json`.
 
 ## No build step
 

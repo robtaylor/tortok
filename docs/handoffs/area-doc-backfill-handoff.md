@@ -1,114 +1,66 @@
-# Handoff — Backfill the six stub area docs (adoption follow-up 1)
+# Handoff — Backfill the stub area docs (adoption follow-up 1)
 
-**Created:** 2026-11-04
-**Working tree:** clean
-**Branch:** main (start a `docs/area-backfill-<area>` branch per area)
+**Created:** 2026-11-04 · **Updated:** 2026-11-09
+**Branch:** start a `docs/area-backfill-<area>` branch per area, from `main`
 
 ## Goal & next-up
 
-**Goal:** replace the six **stub** architecture area docs with full,
-present-tense reference docs, each claim verified against the current code — the
-first follow-up from the claude-project-discipline adoption (see
-[`docs/architecture/README.md`](../architecture/README.md) § Follow-ups).
+**Goal:** replace the stub architecture area docs with full, present-tense
+reference docs, each claim verified against the current code. This executes
+follow-up 1 in [`docs/architecture/README.md`](../architecture/README.md#follow-ups),
+which also records which docs wait for Phase 3 Unit 2.5.
 
-**Progress:** `backend.md` ✅ done; `client.md` ✅ done (branch `docs/area-backfill-client`).
-
-**Next session should pick up:** `monetization.md` and `moderation.md` (mostly unbuilt —
-they stay thin, honestly marked). `auth-signup.md` and `federation.md` wait until
-Phase 3 Unit 2.5 (v2) completes (user decision 2026-11-09): documenting them now
-would describe the legacy auth and feed that Phase C deletes. One area per branch/PR;
-don't batch all six.
+**Next session should pick up:** `monetization.md`, then `moderation.md`. Both
+are mostly unbuilt, so they stay thin and say so. One area per branch and PR.
 
 **Verification command:**
 ```sh
-uv run docs/scripts/doctool.py lint
-# Expect: 0 error(s), 0 warning(s) — backend.md now links Decision 0006,
-# which cleared the old A002. A new area doc must keep its '## Implementation status'
-# and '## Decisions behind this' headings (A001) and the decisions it covers
-# must stay linked from it (A002).
+uv run docs/scripts/doctool.py lint   # expect 0 error(s), 0 warning(s)
 ```
+A backfilled doc must keep its `## Implementation status` and
+`## Decisions behind this` headings (A001) and keep linking the decisions it
+covers (A002).
 
-## Method (applies to every area — do this, not freehand prose)
+## Done
 
-1. **Model:** copy the depth, present tense, and file-referencing of
-   [`docs/architecture/p2p-torrent.md`](../architecture/p2p-torrent.md). Start
-   from `_template.md`.
-2. **Verify every sentence against code before writing it** (the repo's
-   claim-verification rule). A present-tense claim is a claim about today's code
-   — read the file, don't infer from the decision record.
-3. **Decisions stay frozen.** Move each decision's *current-state* claims into
-   the area doc; never edit the decision record's body. Keep the
-   `**Current architecture:**` forward-links the decisions already carry.
-4. **Keep both required headings** (`## Implementation status`,
-   `## Decisions behind this`) and the decision back-links, or lint regresses.
-5. **Run `doctool.py lint` before committing**; one area per PR.
+| Doc | Landed |
+|---|---|
+| `backend.md` | PR #3 (2026-11-04) |
+| `client.md` | PR #8 (2026-11-09) |
 
-## Open follow-ups (priority-ordered)
+## Method
 
-### 1. ✅ `backend.md` — Backend / AppView (Decision 0005) — done
+1. Model the depth, present tense and file references on
+   [`p2p-torrent.md`](../architecture/p2p-torrent.md); start from
+   [`_template.md`](../architecture/_template.md).
+2. Verify every sentence against the code before writing it. Read the file; don't
+   infer from a decision record.
+3. Decision bodies stay frozen. Move a decision's current-state claims into the
+   area doc and link the decision.
+4. Run `doctool.py lint` before committing.
 
-Read `backend/src/index.ts` (route mounting, seeder init, graceful shutdown),
-`routes/auth.ts`, `routes/videos.ts`, `middleware/auth.ts` + `validate.ts`,
-`db/schema.sql` + `db/index.ts`, `services/seeder.ts`. Document the live Express
-surface (auth, videos, seeder wiring) in present tense; put the AppView
-ingest/feed-generation path under Implementation status as **not built yet**
-(Phase 3/4). The seeder currently lives here — cross-link
-[`p2p-torrent.md`](../architecture/p2p-torrent.md) rather than re-describing it.
+## Remaining areas
 
-### 2. ✅ `client.md` — Client / Expo (Decision 0004) — done
+### `monetization.md` (Decision 0011)
 
-Read `tortok/app/` (Expo Router: `_layout.tsx`, `(auth)/`, `(tabs)/`),
-`tortok/stores/`, `tortok/lib/`. Document feed, player, navigation, state, and
-the WebTorrent surface it consumes (cross-link p2p-torrent). Note the `Record`
-tab is a stub (out of scope per the decisions).
-
-### 3. `auth-signup.md` — Auth & signup (Decision 0007)
-
-atproto OAuth is **client-side**: `tortok/lib/atproto/oauth.ts`,
-`tortok/app/(auth)/login.tsx`, `tortok/stores/auth.ts` (+ `auth.test.ts`),
-`tortok/assets/oauth-client-metadata.json`. Backend still has the legacy
-`routes/auth.ts` + `middleware/auth.ts` (JWT) being retired in Phase 3 — state
-which path is live today vs being removed. The OAuth client must be lazy-init'd
-(eager construction crashes on `indexedDB is not defined` under Expo Router SSR).
-
-### 4. `federation.md` — Federation / atproto (Decisions 0002, 0003, 0010, 0012)
-
-Read `lexicons/app/tortok/video/post.json` (the only Lexicon so far) and the
-Phase 3 plan ([`../plans/phase-3-atproto.md`](../plans/phase-3-atproto.md)) for
-what's live vs in-flight. Much of federation (publishing to PDS, the AppView,
-the Bluesky bridge) is Phase 3/4 — be honest in Implementation status about what
-exists. The bridge mirror-state design is a Phase-3 task (see plan step ~23).
-
-### 5. `monetization.md` — Monetization (Decision 0011)
-
-Grep confirms **no monetization code exists yet** (no payout/pool code in
-`backend/src` or `tortok`). Keep this doc thin: the interface-first direction is
-set, nothing is built. The open design questions live in
+No monetization code exists (no payout or pool code in `backend/src` or
+`tortok`; `lexicons/` holds only `app/tortok/video/post.json`). State that the
+interface-first direction is set and nothing is built. Link
 [`open-problems/monetization.md`](../architecture/open-problems/monetization.md)
-— link, don't duplicate.
+for the open questions rather than repeating them.
 
-### 6. `moderation.md` — Moderation (Decision 0013)
+### `moderation.md` (Decision 0013)
 
-Grep confirms **no moderation/labeler code exists yet**. Keep thin: strategy is
-set (labelers, illegal-content floor, UK age gate), implementation is
-launch-blocking and tracked against release criteria
-([`../plans/release-plan.md`](../plans/release-plan.md)).
+No labeler, CSAM-hashing, DMCA or age-gate code exists. The stub already says
+so (audit PR #12). Strategy is set; implementation is launch-blocking per
+[`release-plan.md`](../plans/release-plan.md).
 
-## Critical context
+### Later: `auth-signup.md`, `federation.md`
 
-- **The stubs are already lint-clean** (link-only, both headings present). Each
-  backfill *replaces* a stub's body — keep the headings and decision links intact
-  so D005/A001/A002 don't regress.
-- Known client gotchas worth capturing in `client.md`/`auth-signup.md` if still
-  true: Hermes WebTorrent polyfills (`self` + `AbortSignal.timeout`), lazy OAuth
-  client init, `adb reverse tcp:8080 + tcp:8090` for the Android emulator.
-
-## References
-
-- [`docs/architecture/README.md`](../architecture/README.md) — area map + the Follow-ups section this handoff executes.
-- [`docs/architecture/p2p-torrent.md`](../architecture/p2p-torrent.md) — the model area doc.
-- [`docs/architecture/_template.md`](../architecture/_template.md) — area-doc template.
-- [`docs/architecture/decisions/README.md`](../architecture/decisions/README.md) — decision index (immutable rule).
+After Phase 3 Unit 2.5. Gotcha to verify then: `tortok/lib/atproto/oauth.ts`
+builds the OAuth client eagerly at module scope. Attempt 1 of Unit 2.5 found
+that crashes Expo Router's web render pass (`indexedDB is not defined`), and
+its lazy-init fix is on the plan's carry-forward list.
 
 ---
 
