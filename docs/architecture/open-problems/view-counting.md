@@ -166,6 +166,24 @@ tier, and a funder chooses which keys it accepts. Tiers, not per-host keys:
 a small host with its own key would shrink its users' anonymity set to a
 handful of people.
 
+Volume is the main unsolved cost. A publicly verifiable token is roughly
+300 bytes (mostly an RSA-2048 signature), so 100k daily users watching 50
+videos each spend 5M tokens, about 1.5 GB, a day. Storing that is cheap
+(a few dollars a month per year of logs on R2). Verifying it all is not, so
+the design avoids anyone having to:
+
+- Shard the published log by post, so a funder fetches only the posts it
+  pays on.
+- Rotate issuer keys per epoch (e.g. daily). A token is valid only in its
+  epoch, so double-spend checks cover one epoch's set and old epochs can be
+  archived.
+- Publish per-post counts and a Merkle root per epoch. Auditors check
+  random samples with inclusion proofs, which catches inflation with high
+  probability; anyone wanting certainty fetches a post's full shard.
+
+The log format, where it is published, and how auditors fetch a shard are
+still open.
+
 **Pros.** Meets the privacy, verifiability and decentralisation
 constraints together. Each funder sets its own trust policy instead of
 trusting tortok's number. Builds on standardised cryptography.
@@ -217,6 +235,26 @@ Views can't copy this design, because a public record per view would
 publish every user's watch history. That is why views end up as private,
 trusted data unless approach 2 or 3 makes them provable without revealing
 who watched.
+
+## Current leaning (2026-11-09)
+
+Not a decision. Approach 6 is the target, because it is the only candidate
+that meets the privacy, verifiability and decentralisation constraints
+together. It is not the first step:
+
+- **Now through Phase 4: approach 1.** Clients report through
+  `sendInteractions` with a tortok `#interactionWatched` event. Counts stay
+  private and serve ranking and creators' own dashboards. Shape the event
+  so a token field can be added without a new format.
+- **Before money depends on counts: an approach-6 spike.** It covers the
+  verification-volume design above, a blind-signature library on Hermes
+  and the web build, batched delayed spending on backgrounded phones, and
+  per-host issuance policy. Decision 0011 gates payouts on other questions
+  anyway, so this is not on the Phase 3 or 4 critical path.
+- **Fallback: approach 5** if monetization stops depending on views.
+
+Approaches 2 and 3 become ingredients of 6 (a download proof inside the
+token) rather than alternatives. Approach 4 stays parked.
 
 ## Economic calibration
 
