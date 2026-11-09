@@ -65,6 +65,17 @@ three sit in now-completed phases (0–2); kept for the record with their outcom
 
 ## Deferred decisions
 
+- **Recording requirements, for the future recording plan.** Carried over
+  from the retired Swift-era MVP specs; none is decided. Front/back camera
+  flip; portrait 9:16 capture at 720p/30 fps; a hard duration cap; a trim
+  and caption step after recording; the poster taken from the first frame;
+  and a processing budget of under 30 s for a 60 s clip. Open question: the
+  specs capped native posts at 15–60 s, but `app.tortok.video.post` allows
+  up to 600,000 ms (10 minutes) and bridged Bluesky video runs longer, so
+  "short-form means 60 s" needs a decision. Recording must also re-enable
+  the blocked Android camera and microphone permissions (see
+  [`client.md`](../client.md)).
+
 These become decision records at a specific phase boundary. Listed so they are
 not forgotten; each gets a real record when the phase that forces it arrives.
 
@@ -104,3 +115,7 @@ not forgotten; each gets a real record when the phase that forces it arrives.
   US-incorporation decision. The external-monetization path needs no tortok-side
   payment processing.
 - **Native desktop (macOS, Windows, Linux).** Expo web covers desktop for v1.
+- **Social features beyond the feed.** Direct messages, stories and other
+  ephemeral content, a sound library, effects and filters, duets and
+  stitching, live streaming, and advanced search. (Carried over from the
+  retired Swift-era MVP specs, which listed the same non-goals.)
