@@ -11,7 +11,7 @@ Decision rationale, technical context, and project state all have natural homes:
 - **Decision records** (`docs/architecture/decisions/`) capture architectural decisions and their *why*.
 - **Open problems** (`docs/architecture/open-problems/`) capture decisions we have deliberately *not* made yet, with a `Must resolve by:` phase header.
 - **Plan docs** (`docs/plans/<phase>.md`) capture *what's left* in a phase and the next workstream slices.
-- **Release plan** (`docs/release-plan.md`) captures launch criteria and pre-release work.
+- **Release plan** (`docs/plans/release-plan.md`) captures launch criteria and pre-release work.
 
 When that content lives in a handoff instead, two things go wrong:
 
@@ -30,7 +30,7 @@ A single markdown file at `docs/handoffs/<topic>-handoff.md` containing exactly 
 - **Critical context** — gotchas, surprising findings, environment specifics that aren't obvious from the code or docs *yet*.
 - **Verification** — the command(s) the next session runs to confirm the work is in the state you say it is.
 
-Exactly one handoff exists at a time. There's no chain of resolved predecessors to wade through.
+There's at most one handoff per active thread of work, and usually just one. There's no chain of resolved predecessors to wade through.
 
 ## What a handoff IS NOT
 
@@ -44,7 +44,7 @@ Exactly one handoff exists at a time. There's no chain of resolved predecessors 
 Write a handoff at the end of any session that:
 
 1. **Leaves work in a partial state** that someone else might pick up cold.
-2. **Captures non-obvious context** the next session needs (e.g. "the OAuth client must be lazy-init'd to survive Expo Router's SSR pass; eager construction crashes on `indexedDB is not defined`").
+2. **Captures non-obvious context** the next session needs (e.g. "eager construction of the OAuth client crashes Expo Router's web render pass with `indexedDB is not defined`").
 3. **Documents the next concrete step** with enough scope to start without re-discovering it.
 
 If the session ended at a clean stopping point (everything merged, all decisions documented in decision records/plans, nothing surprising), don't write a handoff. The plan doc already says what's next.
@@ -61,10 +61,10 @@ When a handoff's work is done — whether in the next session or several session
 | "Future scope for Unit N: do A then B then C" | The plan doc's Unit N section (`docs/plans/phase-3-atproto.md` or successor) |
 | "Open question: should we X or Y; must decide by phase Z" | A new file under `docs/architecture/open-problems/<name>.md` with the standard `Must resolve by:` header |
 | "Gotcha: Hermes is missing `AbortSignal.throwIfAborted`" | A code comment near the polyfill (`tortok/lib/polyfills.ts`), or `CLAUDE.md` if it cuts across files |
-| "Build dep / env var Z is required for dev" | `.env.example` and `CLAUDE.md` quickstart, not a handoff |
+| "Build dep / env var Z is required for dev" | `.env.example` and the quickstart in the root `README.md`, not a handoff |
 | "Subsystem A doesn't yet do B" | Plan doc as a new open item, or a decision-record-tracked walk-back if it's a deferred design choice |
-| "Run `npm run smoke:atproto` to verify" | The verification block in the relevant plan doc, or a quickstart section in `CLAUDE.md` |
-| "Launch criteria: A, B, C must hold before opening signups" | `docs/release-plan.md` |
+| "Run `npm run smoke:atproto` to verify" | The verification block in the relevant plan doc, or the quickstart in the root `README.md` |
+| "Launch criteria: A, B, C must hold before opening signups" | `docs/plans/release-plan.md` |
 
 After migration, the handoff file is removed in the same commit as the migration:
 
@@ -85,62 +85,10 @@ The commit message records what migrated where — that's the audit trail. `git 
 
 ## Template
 
-When you do need to write one, use this skeleton. Replace placeholders inline; delete sections that don't apply (better to omit a section than fill it with "N/A").
-
-```markdown
-# Handoff — <Topic> (one-line summary of what this session left open)
-
-**Created:** YYYY-MM-DD
-**Working tree:** clean | <state if not clean>
-**Branch:** main | <branch>
-
-## Goal & next-up
-
-**Goal of this session:** <what you were trying to do, in 1–3 sentences>
-
-**Next session should pick up:** <the very next concrete action, by name. Reference the plan doc section if applicable.>
-
-**Verification command:**
-```sh
-<commands the next session runs to confirm this handoff's claimed state>
-# Expect: <what success looks like>
-```
-
-## Done this session
-
-| Commit | Subject | Notes |
-|---|---|---|
-| `<sha>` | <subject> | <one-line note> |
-
-## Open follow-ups (priority-ordered)
-
-### 1. <Item name> (<rough size>)
-
-<Concrete scope. Enough detail to start cold. Link to existing plan/decision/area-doc sections rather than reproducing them.>
-
-### 2. ...
-
-## Critical context
-
-<Things the next session needs to know that aren't yet in the code/docs. Be honest about what's truly load-bearing — anything obvious from `git log` or a quick `grep` doesn't belong here.>
-
-## References
-
-- [`<plan doc>`](<path>) — current phase state
-- [`<decision>`](<path>) — relevant decision record
-
----
-
-**Resume in a new session with:**
-\`\`\`
-/resume_handoff docs/handoffs/<topic>-handoff.md
-\`\`\`
-```
+Start from [`docs/handoffs/_template.md`](handoffs/_template.md), or scaffold one with `uv run docs/scripts/doctool.py new handoff "<topic>"`. Replace placeholders inline, and delete sections that don't apply rather than filling them with "N/A".
 
 ## Tooling
 
 The `create_handoff` and `resume_handoff` skills (from various Claude Code orchestration toolkits) generate and consume handoffs. They're optional — the discipline above is the load-bearing artifact. A handoff written by hand following this template is just as valid.
 
 If you use one of those skills, expect them to default to YAML format under `thoughts/shared/handoffs/` with database indexing. **That doesn't apply to this project.** Override it: produce markdown at `docs/handoffs/<topic>-handoff.md` and skip the database step. The skill activation is informational; the project's convention takes precedence.
-
-The legacy `thoughts/` directory in the working tree (untracked, predates this discipline) can be ignored or removed; its YAMLs are not authoritative and have not been folded into the canonical docs by this discipline's standards.

@@ -1,12 +1,6 @@
 # Release process
 
-<!--
-This template is the lightweight release process companion to the Claude Project
-Discipline (architecture reference, decisions, spikes, plans, handoffs). Adjust
-the <PROJECT> placeholders, then prune the sections that don't apply.
--->
-
-Lightweight by design. tortok is an application, not a published package: an Expo (React Native) client for iOS / Android / web, a Node + TypeScript backend evolving into an atproto AppView, and standalone seeder / tracker / TURN infrastructure. A "release" is a client build submitted to the app stores (and the web deploy) together with the backend/infra deploy that supports it, tagged with a `CHANGELOG` entry — not a crates.io / npm / PyPI publication. The operational launch plan and its gating criteria live in [`docs/plans/release-plan.md`](plans/release-plan.md).
+Lightweight by design. tortok is an application, not a published package: an Expo (React Native) client for iOS / Android / web, a Node + TypeScript backend evolving into an atproto AppView, and tracker and TURN infrastructure on Fly.io. A "release" is a client build submitted to the app stores (and the web deploy) together with the backend/infra deploy that supports it, tagged with a `CHANGELOG` entry — not a crates.io / npm / PyPI publication. The operational launch plan and its gating criteria live in [`docs/plans/release-plan.md`](plans/release-plan.md).
 
 ## When to release
 
@@ -36,17 +30,19 @@ Write the notes in the `[Unreleased]` section of [`CHANGELOG.md`](../CHANGELOG.m
 
 For maintainers cutting a release:
 
-1. **Verify CI is green** on `main` for all jobs. If a runner is offline, hold the release until it's restored.
+1. **Verify the checks pass.** There is no CI yet (no `.github/`); Decision 0016 and the [environments plan](plans/environments-staging-production-and-their-checks.md) set it up. Until then, run the backend and client unit tests and the Detox suite by hand.
 
 2. **Roll the `[Unreleased]` section in [`CHANGELOG.md`](../CHANGELOG.md) into a numbered version block.** Format follows [Keep a Changelog](https://keepachangelog.com/). Update the link references at the bottom. Leave a fresh empty `[Unreleased]` section.
 
-3. **Bump `version`** in your project manifest (`Cargo.toml` / `package.json` / `pyproject.toml` / etc.) and re-build to update the lockfile.
+3. **Bump `version`** in `tortok/package.json`, `tortok/app.json` (`expo.version`) and `backend/package.json`, then run `npm install` in each to update the lockfiles.
 
 4. **Commit:** `chore: release v<X.Y.Z>` with whatever attribution conventions your project uses.
 
 5. **Tag:** `git tag -a v<X.Y.Z> -m "v<X.Y.Z>"` then `git push --tags`.
 
-6. **Create a release** on the platform of your choice from the tag. Body = the CHANGELOG section for that version.
+6. **Create a GitHub release** from the tag. Body = the CHANGELOG section for that version.
+
+7. **Deploy.** Backend: `fly deploy` from `backend/`; before public release this goes straight to production (Decision 0016, commitment 12), afterwards it promotes the image staging passed. Web: `npm run deploy:web` from the repo root. App-store builds are not set up yet: there is no `eas.json`.
 
 ## Release candidates (optional)
 
@@ -56,7 +52,6 @@ During the RC window, `main` **is** the candidate. It stays at `X.Y.Z-rc.N` with
 
 ## What does NOT need to change at release time
 
-- Submodule pins (unless deliberately bumping a vendored dep).
 - Area docs in `docs/architecture/` (unless the release changes the design they describe).
 - `LICENSE` (unless re-licensing).
 

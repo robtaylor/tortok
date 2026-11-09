@@ -109,11 +109,11 @@ test measuring 89–91% offload. We are in **Phase 3**.
 | Phase | Name | What it delivers | Blocks |
 |-------|------|------------------|--------|
 | **0a** | Clean house | Fix B1–B6, address S1–S4, delete libtorrent stubs, commit WebTorrent seeder wiring with B4 fixed, clean docs | — |
-| **0b** | Extract seeder infra | Standalone seeder Docker image, Fly.io deploy (L2), own trackers (L3), R2 content origin (L1), self-hosting guide (L4) | seeding-policy.md (server side) |
-| **1** | Expo skeleton | Expo app logs in against existing backend, vertical feed with react-native-video, feature parity with Swift prototype minus P2P | — |
+| **0b** | Extract seeder infra | Own trackers (L3) and R2 content origin (L1) delivered. The standalone seeder (L2) was deployed and then destroyed on 2026-11-04 after the webseed-only spike; no self-hosting guide (L4) exists | seeding-policy.md (server side) |
+| **1** | Expo skeleton | Expo app logs in against existing backend, vertical feed with `expo-video`, feature parity with Swift prototype minus P2P | — |
 | **2** | Cross-platform P2P | WebTorrent integrated in Expo client, tested on iOS / Android / web simulators, P2P offload measured, Hermes WebRTC validated | ~~seeding-policy.md (client side)~~ resolved in Decision 0009; execution risks #1 and #3 (see the [Phase-2 spike](docs/architecture/decisions/spikes/phase-2-p2p-offload.md)) |
-| **3** | atproto integration | atproto OAuth login against user's existing PDS (typically bsky.social), `app.tortok.video.post` Lexicon live, client publishes via `@atproto/api`, legacy email/password backend retired | ~~moderation.md~~ resolved in Decision 0013 (launch criteria gate signup-beyond-team); own-pds.md (parked, not blocking) |
-| **4** | AppView cutover | Own AppView subscribes to own PDS, indexes records, feed endpoint moves off legacy backend | view-counting.md (if ranking on views) |
+| **3** | atproto integration | atproto OAuth login against user's existing PDS (typically bsky.social), `app.tortok.video.post` Lexicon live, client publishes via `@atproto/api`, legacy email/password backend retired | ~~moderation.md~~ resolved in Decision 0013 (launch criteria gate signup-beyond-team); cross-deployment-transport.md (runtime video sources must ship before Unit 3 publishes real records); own-pds.md (parked, not blocking) |
+| **4** | AppView cutover | AppView at scale: ingest hardening, view counting, feed ranking. The ingest itself (relay/Jetstream, Decision 0017) and the feed's move off the legacy backend land early, in Phase 3 Unit 2.5 | view-counting.md (if ranking on views) |
 | **5** | Retire Swift | Swift codebase deleted (done early 2026-04-14) | — |
 
 The Phase-0 punch list that drove phase 0a is archived at
@@ -135,7 +135,7 @@ Most changes don't need a checkpoint. These do:
    is enough.
 2. **When an open problem in `open-problems/` becomes blocking.** If the
    work in front of you can't proceed without resolving
-   `view-counting.md`, `seeding-policy.md`, or `monetization.md` —
+   `view-counting.md`, `cross-deployment-transport.md`, `seeding-policy.md`, or `monetization.md` —
    **stop and tell the user**. Do not pick a policy silently. Offer the
    candidate options from the open-problem file and let the user pick.
    The resolution becomes a new decision record.

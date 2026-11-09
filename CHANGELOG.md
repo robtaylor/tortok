@@ -29,12 +29,19 @@ deciding whether to upgrade.
 - Content is served from `content.tortok.net`, the R2 bucket's custom domain behind Cloudflare's cache, instead of the rate-limited `r2.dev` URL. Production webseeds, torrent files and posters use it.
 - Production feed is the five Big Buck Bunny test clips; the stale April test video is gone. Detox feed/navigation tests updated to match.
 - The public R2 bucket now sends CORS headers for `GET`/`HEAD` with `Range`, so the web client can use the webseed.
+- Postgres SSL follows the `sslmode` in `DATABASE_URL`; production connects over Fly's private network with `sslmode=disable`.
+- Production boot fails if `CONTENT_ORIGIN_URL` or `TRACKER_URLS` is unset; `backend/fly.toml` sets both, and the seeder has no production defaults.
+- The Android app no longer requests camera, microphone, Bluetooth, overlay or audio-settings permissions; they return when recording is built.
+- The repository has a root `README.md` with a layout map and a local quickstart.
 
 ### Removed
 
 - Google Cloud Run deployment (`backend/deploy.sh`) and the Cloud SQL socket handling; Fly.io is the only backend deployment.
+- The standalone `tortok-seeder` Fly app, destroyed after a spike showed the R2 webseed alone delivers complete content.
+- The Swift-era `designs/` specifications; their still-current content moved into the open problems, release plan and release process.
 
 ### Fixed
 
-- Backend shuts down gracefully on both SIGINT (Fly.io's default kill signal, Ctrl+C) and SIGTERM, closing HTTP, the seeder, and the Postgres pool under a deadline. Previously only SIGTERM was handled, so Fly stops skipped it.
+- `SeederService`'s webseed URL is now the parent of each seeded directory, so webseed fetches for its multi-file torrents no longer 404.
+- Backend shuts down gracefully on both SIGINT (Ctrl+C) and SIGTERM (which `backend/fly.toml` now sets as Fly's kill signal), closing HTTP, the seeder, and the Postgres pool under a deadline. Previously only SIGTERM was handled, so Fly stops skipped it.
 - Spike seeder (`test-content/seeder.mjs`) shuts down cleanly on SIGTERM from `scripts/dev-down.sh`, not just Ctrl+C.
