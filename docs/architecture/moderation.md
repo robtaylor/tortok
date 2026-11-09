@@ -12,9 +12,11 @@ age-verification gate.
 
 ## Implementation status
 
-Strategy is set (Decision 0013, resolved 2026-04-29); the labeler integration and
-the illegal-content floor are launch-blocking and tracked against the release
-criteria. Verified current-state write-up is part of the adoption follow-up.
+None of it is implemented: there is no labeler subscription, CSAM hashing, DMCA
+agent or age gate in the code. Decision 0013 sets the strategy; its "Phase 3
+signup-beyond-team launch criteria" section and the launch criteria in
+[`release-plan.md`](../plans/release-plan.md) make the labeler integration and
+the illegal-content floor launch-blocking.
 
 ## Decisions behind this
 

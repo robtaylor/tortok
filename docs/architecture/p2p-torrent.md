@@ -9,17 +9,17 @@ tracking the code; the *why* is in the [decisions behind this](#decisions-behind
 
 tortok uses **WebTorrent end to end** (Decision 0001) — the same WebRTC/BitTorrent
 stack on the client and the origin, no libtorrent anywhere. The client wraps it
-in a platform-split bridge: `tortok/lib/webtorrent/bridge.native.ts` (Hermes /
-React Native) serves torrents to the player over a local HTTP server, while
-`bridge.web.ts` is a stub that rejects (a Service Worker streamer is not built),
-so on web `useP2PUrl.ts` plays the magnet's webseed URL directly and the browser
-does no P2P. `client.ts` holds the shared
-refcounted torrent manager and `types.ts` the shared surface. Playback URLs are
+in a platform-split bridge. On native, `tortok/lib/webtorrent/bridge.native.ts`
+serves torrents to the player over a local HTTP server. On web,
+`bridge.web.ts` is a stub that rejects, because no Service Worker streamer is
+built; `useP2PUrl.ts` plays the magnet's webseed URL directly, and the browser
+does no P2P. `client.ts` holds the shared refcounted torrent manager and
+`types.ts` the shared surface. Playback URLs are
 resolved through `useP2PUrl.ts`, and `usePrefetch.ts` warms upcoming feed items.
 
-On Hermes the WebRTC surface needs polyfills (`polyfills.native.ts`) — notably a
-`self` shim and `AbortSignal.timeout` — without which BEP-19 webseed fetches fall
-back to a slow WebRTC path. `metro.config.js` wires the matching module
+On Hermes the WebRTC surface needs the polyfills in `polyfills.native.ts`,
+notably a `self` shim and `AbortSignal.timeout`. Without them, BEP-19 webseed
+fetches fall back to a slow WebRTC path. `metro.config.js` wires the matching module
 resolution, and `polyfills.web.ts` is the lighter browser equivalent.
 
 ## Content origin and webseed
@@ -32,11 +32,13 @@ torrent so the client can pull pieces over HTTP when no peers are available. In
 local development the feed's magnets come instead from the spike seeder
 (`test-content/seeder.mjs`, seeding `test-content/clips/*.mp4`). The webseed
 origin is Cloudflare **R2** in production, served through the bucket's custom
-domain `content.tortok.net` behind Cloudflare's cache (the bucket's `r2.dev` URL
-is rate-limited and is not used), and a local content server
-(`http://localhost:8090`) in dev, set by `CONTENT_ORIGIN_URL`
-(Decision 0008's R2-origin layer). The origin URL is baked into every magnet and
-`.torrent` file, so the content hostname is effectively permanent. A webseed on R2 is sufficient on its own: with no
+domain `content.tortok.net` behind Cloudflare's cache, and a local content
+server (`http://localhost:8090`) in dev, set by `CONTENT_ORIGIN_URL`
+(Decision 0008's R2-origin layer). The bucket's `r2.dev` URL is not used; the
+reasons for the custom domain are in
+[`cross-deployment-transport.md`](open-problems/cross-deployment-transport.md).
+The origin URL is baked into every magnet and `.torrent` file, so the content
+hostname is effectively permanent. A webseed on R2 is sufficient on its own: with no
 seeder, tracker or DHT, a client downloads complete, verified content from R2
 ([webseed-only spike](decisions/spikes/webseed-only-origin.md)). For a directory
 (multi-file) torrent the webseed URL is the *parent* of the torrent directory,
@@ -46,16 +48,16 @@ file's URL.
 A seeded **file** is never renamed with `seed()`'s `name:` option: the default
 fs-chunk-store resolves pieces by torrent name, so a name that differs from the
 file's basename makes every piece read fail with ENOENT. The spike seeder seeds
-files by path alone for this reason. `SeederService` passes `name:` equal to the
-seeded directory's own name, which is the default anyway and is harmless.
+files by path alone for this reason, and so does `SeederService`.
 
 ## Trackers and TURN
 
 tortok runs its **own WebSocket tracker** (`tracker/server.js`, deployed on
-Fly.io via `tracker/fly.toml`) rather than relying on public `wss://` trackers,
-which leak phantom peers from prior sessions. It also runs its **own TURN
-server** (`coturn/`, a coturn image on Fly.io) for WebRTC ICE when peers are
-behind NAT — this is the TURN that the device-testing tier 3 (below) also uses.
+Fly.io via `tracker/fly.toml`) and announces to no public tracker (Decision
+0008's L3; the [Phase 2 spike](decisions/spikes/phase-2-p2p-offload.md) records
+why). It also runs its **own TURN server** (`coturn/`, a coturn image on Fly.io)
+for WebRTC ICE when peers are behind NAT. Device-testing tier 3 is planned to
+use the same TURN server.
 
 ## Client seeding policy
 
@@ -64,28 +66,20 @@ Decision 0009's policy and implemented in `tortok/lib/webtorrent/seedPolicy.ts`
 on top of `client.ts`'s refcount holds. The starting numbers: on mobile, at most
 5 held torrents, a 150 MB byte budget, and a 30-minute TTL; on desktop/web the
 seed count is unbounded and the budget is 500 MB. Eviction runs on a 60-second
-interval. Seeding is **battery- and network-gated** via
-`deviceConditions.native.ts` (NetInfo + battery), so a backgrounded or
-low-battery phone stops seeding. These numbers are starting guesses pending the
+interval. Seeding is **battery- and network-gated** by
+`deviceConditions.native.ts`, which uses `expo-battery` and `expo-network`: a
+phone below 30% battery or off Wi-Fi doesn't seed, and the network is polled
+every 30 seconds. `useSeedPolicy.ts` also stops seeding when the app leaves the
+foreground (`AppState`). These numbers are starting guesses pending the
 offload validation (see the [Phase 2 spike](decisions/spikes/phase-2-p2p-offload.md)).
 
 ## Device testing
 
-Device testing is split into three tiers by what each question needs
-(Decision 0014), with the tier-3 vendor revised to LambdaTest/TestMu by
-Decision 0015:
-
-- **Tier 1 — CI gate: self-hosted emulators** in our own VPC. P2P connection
-  logic, offload accounting, and regression smoke, cheaply and with full network
-  control.
-- **Tier 2 — video playback tuning: a single real device** on a cheap farm, fed
-  from CDN/webseed. Decode, FPS, jank, thermal, and startup — no P2P networking
-  needed, since playback is independent of where the bytes come from.
-- **Tier 3 — P2P × real-device composition: LambdaTest/TestMu**, two parallel
-  Appium sessions connecting over a TURN-relayed ICE path using our own TURN
-  server, signaling through our tracker (reached via their Tunnel). Offload is
-  measured app-side, since their `appProfiling` network metric is aggregate-only.
-  AWS Device Farm + VPC-ENI is the documented fallback.
+No device-testing rig exists yet. The plan is three tiers (Decision 0014): tier
+1 self-hosted emulators as the CI gate, tier 2 a single real device for playback
+tuning, and tier 3 real-device P2P on LambdaTest/TestMu (Decision 0015). Tier 1
+is the primary regression gate (Decision 0016). The only device tests today are
+the hand-run Detox suite described in [client](client.md#testing).
 
 ## Implementation status
 
@@ -96,11 +90,11 @@ Decision 0015:
   server. Two-simulator P2P offload measured at 89–91% in the Phase 2 spike.
 - **Pending:** There is no standalone seeder deployment: the `tortok-seeder` Fly
   app was destroyed on 2026-11-04 after the webseed-only spike, and the only
-  origin seeder is the backend's in-process `SeederService`. Whether an
-  always-on origin peer is still wanted, given that webseed suffices, is
-  undecided; unifying the dev-spike and backend seeders waits on that. None of
-  the three device-testing tiers is stood up yet; they begin once Phase 3 work
-  clears, tiers 1 and 2 before the tier-3 rig (Decision 0014).
+  origin seeder is the backend's in-process `SeederService`. Phase 3 Unit 2.5C
+  removes it ([`phase-3-atproto.md`](../plans/phase-3-atproto.md)); whether
+  tortok runs an always-on peer at all is part of the transport open problem.
+  None of the three device-testing tiers is stood up yet; they begin once
+  Phase 3 work clears, tiers 1 and 2 before the tier-3 rig (Decision 0014).
 - **Open:** where bytes come from once several deployments serve the same
   posts, and how clients learn sources beyond the magnet; see
   [`open-problems/cross-deployment-transport.md`](open-problems/cross-deployment-transport.md).

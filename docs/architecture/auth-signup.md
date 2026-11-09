@@ -12,10 +12,11 @@ legacy email/password backend in Phase 3.
 
 ## Implementation status
 
-Phase 1 shipped against the legacy email/password backend; Phase 3 moves signin
-to atproto OAuth and retires the `users` table (see the
-[Phase 3 plan](../plans/phase-3-atproto.md)). Verified current-state write-up is
-part of the adoption follow-up.
+Sign-in is atproto OAuth, built in Phase 3 Unit 2 (2026-05-02) and described in
+[client](client.md#authentication). The legacy email/password routes and the
+`users` table still exist on the backend; Phase 3 Unit 2.5C retires them (see the
+[Phase 3 plan](../plans/phase-3-atproto.md)). This doc is written in full after
+that cutover.
 
 ## Decisions behind this
 

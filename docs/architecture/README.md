@@ -6,17 +6,17 @@ If you're an agent or a new reader, start here: this page maps every area to its
 
 | Area | Reference | Decisions behind it |
 |---|---|---|
-| P2P & torrent engine | [p2p-torrent](p2p-torrent.md) | 0001, 0008, 0009, 0014, 0015 |
+| P2P & torrent engine | [p2p-torrent](p2p-torrent.md) | 0001, 0008, 0009, 0014, 0015, 0016 |
 | Federation (atproto) | [federation](federation.md) _(stub)_ | 0002, 0003, 0010, 0012 |
 | Client (Expo / React Native) | [client](client.md) | 0004, 0007, 0009, 0016, 0017 |
-| Backend / AppView | [backend](backend.md) | 0005 |
+| Backend / AppView | [backend](backend.md) | 0005, 0006, 0007, 0017 |
 | Auth & signup | [auth-signup](auth-signup.md) _(stub)_ | 0007 |
 | Monetization | [monetization](monetization.md) _(stub)_ | 0011 |
 | Moderation | [moderation](moderation.md) _(stub)_ | 0013 |
 
 Decision 0006 (migration from the Swift prototype) is mostly project history rather than an area of the live system; its phasing lives in the phases table in [`CLAUDE.md`](../../CLAUDE.md) and the [plans](../plans/), and [backend](backend.md) links it for the legacy-backend retirement it schedules.
 
-Area docs are written incrementally. `p2p-torrent`, `backend` and `client` are written in full; the rest are **stubs** (they carry their decision links and an Implementation-status note, but their present-tense write-up is pending a verified backfill against the current code — see [Follow-ups](#follow-ups) below). Copy `_template.md` to replace a stub as each one is written.
+Area docs are written incrementally. `p2p-torrent`, `backend` and `client` are written in full; the rest are **stubs**. A stub carries its decision links and an Implementation-status note; its present-tense write-up waits for a backfill verified against the code, tracked under [Follow-ups](#follow-ups). Copy `_template.md` to replace a stub as each one is written.
 
 ## Follow-ups
 
