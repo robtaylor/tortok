@@ -21,8 +21,15 @@ enabled (`app.json`), and Expo Router 6 with typed routes (entry
 
 `app.json` sets the URL scheme `app.tortok` (used as the OAuth redirect), an iOS
 deployment target of 26.3, Android cleartext traffic (for the local dev
-backend), and the `react-native-webrtc` config plugin with camera and
-microphone permission strings. The bundle identifier and Android package are
+backend), and the `react-native-webrtc` config plugin. P2P uses WebRTC data
+channels only, so the app needs no camera, microphone or related access. The
+plugin adds `CAMERA`, `RECORD_AUDIO`, `BLUETOOTH`, `SYSTEM_ALERT_WINDOW` and
+`MODIFY_AUDIO_SETTINGS` to the Android manifest unconditionally, so `app.json`
+lists all five under `android.blockedPermissions`, which strips them from the
+merged manifest. On iOS the plugin's camera and microphone usage strings stay:
+the WebRTC library references those APIs, and Apple rejects binaries that do
+without purpose strings. The app never requests either permission. The bundle
+identifier and Android package are
 still the template's `com.anonymous.tortok`. Web builds with Metro to static
 output.
 
@@ -168,8 +175,11 @@ The suite therefore can't sign in against the current app.
   (v2) Phase B moves the feed onto atproto records and Phase C retires the
   legacy token, `user`, `register` and the legacy API calls
   ([`phase-3-atproto.md`](../plans/phase-3-atproto.md)).
-- **Not built:** recording and upload (the Record tab is a placeholder; out of
-  scope for v1), publishing records to the PDS (Phase 3 Unit 3), comments,
+- **Not built: recording and upload.** The Record tab is a placeholder, out of
+  scope for v1. When recording is built, it must take `CAMERA` and
+  `RECORD_AUDIO` back out of `android.blockedPermissions` in `app.json`, and
+  replace the iOS usage strings with ones that describe recording.
+- **Not built, other:** publishing records to the PDS (Phase 3 Unit 3), comments,
   sharing, feed pagination, view reporting (`recordView` is unused), choosing an
   AppView at runtime (Decision 0017; the backend URL is fixed at build time),
   and web cookie auth (Phase 3 Unit 7; web tokens sit in `localStorage` today).
