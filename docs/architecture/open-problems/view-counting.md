@@ -1,6 +1,6 @@
 # Open problem: View counting and creator monetization
 
-**Status:** Unresolved. Problem statement + five candidate approaches.
+**Status:** Unresolved. Problem statement + six candidate approaches.
 **Must resolve by:** Phase 4 AppView cutover if the feed ranks on
 views. Under the external-monetization model decided in
 `monetization.md`, this is *the* signal TorTok provides to creators
@@ -39,7 +39,7 @@ several adversarial constraints simultaneously:
 
 ## Candidate approaches
 
-These are five genuinely different designs. Each has known failure
+These are six genuinely different designs. Each has known failure
 modes; we need to pick one (or a hybrid) with eyes open.
 
 ### 1. Server-side attestation with heuristics (simplest)
@@ -126,6 +126,56 @@ publish nothing. This is what Bluesky does (see below).
 the external-sponsorship model in `monetization.md`. Viable only if
 monetization stops depending on views.
 
+### 6. Anonymous view tokens
+
+Make views as verifiable as likes without revealing who watched, using
+anonymous tokens, the pattern behind Privacy Pass (IETF RFCs 9576–9578).
+
+1. An issuer gives each logged-in account a capped batch of view tokens
+   (say N per day). The issuer knows which account received tokens, but
+   blind signatures stop it recognising them later.
+2. When the client counts a view, it spends one token tagged with the
+   post's at-uri. No DID is attached. The issuer's signature proves the
+   token is genuine.
+3. Spent tokens are published. They identify nobody, so any AppView or
+   funder can recount a post's views, verify every signature and reject
+   double-spends.
+
+The transport can be `sendInteractions` (see below) with a tortok event
+such as `#interactionWatched` carrying the token instead of the caller's
+DID. Clients spend tokens in batches at random delays, so timing can't link
+a token to the IP address that fetched the video. Approach 2's
+chunk-download proof can ride inside the token, so a token proves bytes
+were received as well as that an account existed.
+
+Tokens prove a real *account*, not a real *person*. That puts views at the
+same level as likes and as fake-account resistance on Instagram or TikTok,
+which is an acceptable target. The atproto-specific difference is that
+anyone can run a PDS and mint accounts without any signup friction, so the
+defence sits in issuance policy: which accounts get tokens, and how many.
+Options include caps per PDS host, account age or activity, labels from
+trusted labelers (Decision 0013), and full allowances only for hosts with
+real signup checks.
+
+Counting becomes a choice made by whoever consumes the count. Because spent
+tokens are public, a funder (an external sponsor, or the fan pool of
+Decision 0011) recounts under its own trust policy, for example accepting
+only tokens from `bsky.social` and hosts it has vetted. To make that
+possible after spending, the issuer signs with a separate key per trust
+tier, and a funder chooses which keys it accepts. Tiers, not per-host keys:
+a small host with its own key would shrink its users' anonymity set to a
+handful of people.
+
+**Pros.** Meets the privacy, verifiability and decentralisation
+constraints together. Each funder sets its own trust policy instead of
+trusting tortok's number. Builds on standardised cryptography.
+
+**Cons.** Issuers are trusted not to mint tokens for accounts they
+invented (several issuers, or PDS-run issuance, spread that trust). A
+blind-signature issuer is a new service to run. The issuance policy is
+real anti-abuse work, the same work Bluesky's AppView does for likes and
+replies.
+
 ## Prior art in AT Protocol (checked 2026-11-09)
 
 Bluesky has no view counts anywhere in the protocol. A post view
@@ -187,7 +237,7 @@ These weights are a starting point, not a decision.
 ## Attack vectors we have to answer for
 
 1. **View botting.** Headless clients looping a video. Mitigation:
-   approaches 1–4 need a minimum-watch-threshold story.
+   approaches 1–4 and 6 need a minimum-watch-threshold story.
 2. **Peer collusion.** Two accounts pull pieces from each other and
    attest to each other's views. Breaks approach 3.
 3. **Replay attacks.** Same signed proof submitted N times. Mitigation:
