@@ -241,11 +241,14 @@ answers recorded under "Decisions on the open questions" at the end.
 **What changes, by phase.**
 
 - **Phase A (ingest).**
-  - Ingest from Jetstream filtered with `wantedCollections=app.tortok.video.post`,
-    not 30 s `listRecords` polling of known DIDs. Decision 0017 (item 3)
-    says the AppView reads the network, and attempt 1 already ran a
-    Jetstream subscriber with a persisted cursor. This covers every PDS on
-    the relay, so Unit 4's multi-PDS goal comes for free.
+  - Ingest by subscribing to Jetstream with
+    `wantedCollections=app.tortok.video.post`, so new and deleted records
+    arrive as events. This replaces step 6's design, which called
+    `com.atproto.repo.listRecords` for every known DID every 30 seconds.
+    Decision 0017 (item 3) says the AppView reads the network, and attempt
+    1 already ran a Jetstream subscriber with a persisted cursor. Jetstream
+    carries records from every PDS on the relay, so Unit 4's multi-PDS goal
+    comes for free.
   - Keep `listRecords` only as **backfill** for accounts in the
     known-account list, which Decision 0017 (item 2) makes operator-local
     data the rebuild depends on. Persist the Jetstream cursor and the
@@ -262,17 +265,26 @@ answers recorded under "Decisions on the open questions" at the end.
   - As planned: `/videos/feed` reads `posts`.
   - **Client:** the feed query stops depending on the legacy token (the feed
     endpoint is public); Profile renders the OAuth handle and DID with a
-    sign-out button; the Like button is hidden, because this plan's
-    going-in answer 3 keeps Phase 3 read-only (likes arrive later as
-    `app.bsky.feed.like` records).
+    sign-out button; the Like button is hidden. The "Going-in answers"
+    section near the top of this plan (item 3) decided Phase 3 ships
+    without likes or follows; when they arrive, they are
+    `app.bsky.feed.like` and `app.bsky.graph.follow` records (item 2), not
+    rows in our database.
   - **Runtime sources** (the Phase 3 requirement in
     [`cross-deployment-transport.md`](../architecture/open-problems/cross-deployment-transport.md)):
-    each feed item carries a `sources` list (extra webseeds and trackers)
-    beyond its magnet, and the client adds them with
-    `torrent.addWebSeed()` (present in WebTorrent 2.8.5) and extra
-    announces. The AppView fills the list from its own content origin
-    for content it can serve. Real user records arrive in Unit 3, so this
-    must land before Unit 3.
+    each feed item carries a `sources` object beyond its magnet, holding
+    extra webseed URLs and extra tracker URLs. The client passes them to
+    WebTorrent's `client.add(magnet, { urlList, announce })`, which
+    merges them with the magnet's own webseeds and trackers (WebTorrent
+    2.8.5, `lib/torrent.js`). Extra webseeds let a client fetch bytes from
+    an origin the publisher didn't name, such as this AppView's own
+    content origin or a mirror. Extra trackers let it find peers that
+    announce to a different tracker: without them, clients of two
+    deployments with their own trackers never find each other, because
+    the DHT is off. Both reasons are in the open problem's "The
+    requirement Phase 3 must meet" and "The problem" sections. The
+    AppView fills `sources` for content it can serve. Real user records
+    arrive in Unit 3, so this must land before Unit 3.
 - **Phase C (retire legacy).**
   - As planned (auth routes, JWT, legacy write routes, legacy tables, the
     client's `token`/`user`/`register` and legacy API calls).
@@ -283,6 +295,40 @@ answers recorded under "Decisions on the open questions" at the end.
     Detox can't drive, so it uses a dev-only path; see decision 3 below.
   - Add the in-app AppView URL setting (decision 4 below).
   - Remove `SeederService` and let the API scale to zero (decision 1 below).
+  - **Removal checklist** (checked against the code 2026-11-09; each item
+    is unused once Phases B and C land, unless noted):
+    - Backend code: `routes/auth.ts`; `middleware/auth.ts` (JWT bearer
+      path); `middleware/validate.ts` and its Joi schemas, if no surviving
+      route validates input; the legacy write routes in `routes/videos.ts`;
+      `/.well-known/tortok`; `services/seeder.ts`, `/seeder/stats` and the
+      `backend/content/tortok-test-video` fixture.
+    - Backend dependencies: `bcrypt`, `jsonwebtoken`, `joi` (with
+      `validate.ts`), `webtorrent` (with the seeder), and their `@types/*`.
+      `uuid` is already unused and can go in any change.
+    - Backend config: `JWT_SECRET` (code, `.env.example`,
+      `scripts/init-dev-secrets.sh`); `TRACKER_URLS` (seeder only);
+      `kill_timeout`/`auto_stop_machines = "off"` in `fly.toml` revert to
+      scale-to-zero. `CONTENT_ORIGIN_URL` stays: Phase B's `sources` use it.
+    - Schema: drop `users`, `videos`, `hashtags`, `video_hashtags`,
+      `follows`, `likes` (step 12; keep `views`).
+    - Client: `app/(auth)/register.tsx`; the auth store's `token`, `user`
+      and legacy `signIn`; `lib/api.ts`'s `login`, `register`, `likeVideo`,
+      `recordView`, `getProfile` and the `User`/`AuthResponse` types; the
+      Like button (hidden in Phase B, removed here); the Comment and Share
+      buttons, which have no handlers.
+    - Tests: Detox `auth.test.ts` sign-up cases and every use of
+      `emailTextField`, `passwordTextField` and `signUpButton`.
+    - Scripts: `scripts/seed-prod-test-content.mjs` and
+      `test-content/seed-db.mjs` (both write the legacy `videos` table;
+      `seed-fixtures.mjs` replaces them); `scripts/atproto-smoke-test.mjs`
+      (superseded by `seed-fixtures.mjs`); `scripts/r2-smoke-test.mjs`
+      (written for the Phase 0b seeder).
+    - Docs: `CLAUDE.md` and `open-problems/README.md` say the Phase 1 feed
+      shipped with react-native-video; it never did (no commit ever added
+      it to `tortok/package.json`; the app uses `expo-video`).
+    - Kept: `test-content/tracker.mjs` (local tracker for dev);
+      `scripts/webseed-only-test.mjs` until WS2's smoke script generalises
+      it.
   - Retire `seed-prod-test-content.mjs` (it writes the legacy `videos`
     table, which this phase drops); production content comes from
     `seed-fixtures.mjs` records instead.
