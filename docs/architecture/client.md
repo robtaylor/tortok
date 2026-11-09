@@ -142,7 +142,8 @@ playback profiling.
 
 `app/(tabs)/profile.tsx` renders the legacy `user` from the auth store:
 display name, username, bio, follower/following/video counts, and the sign-out
-button. It returns nothing when `user` is null.
+button. It returns nothing when `user` is null. It has no grid of the user's
+own videos; the author feed that would fill one isn't built.
 
 ## Testing
 

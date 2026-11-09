@@ -336,7 +336,16 @@ Key properties:
   voice / pitching strategy TBD.
 - **App Review pre-clearance.** Worth a low-stakes inquiry before
   Phase C — ask Apple Developer Relations whether bridged-content
-  rendering raises any §5.2 IP flags.
+  rendering raises any §5.2 IP flags. Battery is a second review risk:
+  Apple rejects apps that drain the battery in the background, and the
+  retired MVP specs called for a visible seeding indicator and a user
+  toggle. Decision 0009 chose automatic battery and network gating with
+  no visible control; decide before Phase C whether App Review needs one.
+- **Playback and battery targets.** The retired MVP specs proposed
+  video start under 3 s, no rebuffering after the first load, and battery
+  drain under 10 %/h while watching (under 7 %/h on iOS). None is a launch
+  criterion today. Decide whether to adopt them as Phase A criteria, and
+  measure them in the real-device tiers (Decisions 0014, 0015).
 - **Monetization decision record ordering.** Sub-problem A and Sub-problem C
   decision records both want to ship before Phase B graduates. Which goes
   first? Depends on whether the operating-mechanism research for
