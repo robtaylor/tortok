@@ -19,7 +19,7 @@ referenced there were never implemented; nothing to clean up.
 - ✅ **Unit 1** — Standalone Node smoke test (`scripts/atproto-smoke-test.mjs`) round-trips an `app.tortok.video.post` record against `bsky.social` using app-password auth.
 - ✅ **Unit 2** — End-to-end OAuth round-trip verified on iOS sim. `tortok.app` Cloudflare Pages live. `@atproto/oauth-client-expo` integrated. Hermes polyfills (`AbortSignal.timeout`, `AbortSignal.prototype.throwIfAborted`) at `tortok/lib/polyfills.ts`. Last-handle pre-fill + iOS autofill hints. 7 auth-store tests.
 - 🔁 **Unit 2.5 — REPLANNED 2026-05-02 evening.** First attempt (4 slices, 13 fixes, ~30 commits) preserved on `unit-2.5-attempt-1` tag. `main` reset to `670061a` (pre-Unit-2.5). Architectural takeaways from the attempt: (1) `bridged_posts` as a separate table was a defensive kludge; the right model is one `posts` table holding atproto records of either lexicon, with mirror state in a sidecar. (2) The `source` discriminator column was redundant — at-uri's collection segment carries the same info. (3) Most issues were bridged-content-specific data-shape problems; the bridge.native.ts + WebTorrent-on-Hermes infrastructure itself is healthy (Phase 2 measured 89–91% P2P offload between two sims; native at this commit cold-starts in ~413ms). The byte-level fixes from the attempt (HLS→MP4 ffmpeg remux with `-movflags +faststart`, 16K piece size, query-string strip from playlist, NSFW self-label filter, listener leak fixes, lazy-init OAuth client, per-request bridge logging) carry forward — only the table architecture and integration shape get rewritten.
-- ➡️ **Unit 2.5 (v2)** — see "Replanned Unit 2.5" below. Phase 0 cleanup → Phase A atproto-native ingestion → Phase B feed cutover → Phase C retire legacy → Phase D bring back bridge → Phase E final cleanup. Absorbs Unit 4 (partial), Unit 5, Unit 6 from the original plan.
+- ➡️ **Unit 2.5 (v2)** — rescoped 2026-11-09 (see "Rescope 2026-11-09" at the top of the unit); Phase 0 is done, Phase A is next. See "Replanned Unit 2.5" below. Phase 0 cleanup → Phase A atproto-native ingestion → Phase B feed cutover → Phase C retire legacy → Phase D bring back bridge → Phase E final cleanup. Absorbs Unit 4 (partial), Unit 5, Unit 6 from the original plan.
 - **Unit 3** — after Unit 2.5 (v2); client publishes `app.tortok.video.post` via the user's PDS.
 - **Unit 7** — web cookie auth (still pending; unchanged).
 - ✅ **Moderation parallel track** — Decision 0013 landed 2026-04-29 (atproto labelers + illegal-content floor + UK age-verification gate); `open-problems/moderation.md` deleted.
@@ -209,6 +209,123 @@ emulator, and web. Logged-in DID visible in app state. Cold start
 restores the session via `oauth.restore(did)`. Logout revokes.
 
 ### Unit 2.5 (v2) — Atproto-native cutover + Bluesky bridge *(~5–7 days; replanned 2026-05-02 evening)*
+
+#### Rescope 2026-11-09 — read this first
+
+Six months passed between this replan and its execution. This block
+records what changed and how each phase now reads; the numbered steps
+below stay as the detailed recipe except where this block overrides
+them. Status: **Proposed — awaiting user confirmation of scope and the
+open questions at the end.**
+
+**State on 2026-11-09.**
+
+- **Phase 0 is done.** `schema.sql` already drops `bridged_posts` and
+  `bridge_cursor`; the R2 `bridged/` prefix is empty (checked); no
+  attempt-1 services exist in `backend/src/services/` (only `seeder.ts`).
+- **Phase A has not started.** No `posts` table, no `atprotoIngest`, no
+  `seed-fixtures.mjs`.
+- **The test account holds one record,** the 2026-04-30 smoke-test post,
+  whose magnet points at `ws://localhost:8000` and
+  `http://localhost:8090/bbb-01.mp4`. It is unplayable from anywhere but a
+  dev machine, and shows why sources baked into signed records matter.
+- **The client is broken by the half-done cutover** (see
+  [`client.md`](../architecture/client.md#implementation-status)): after
+  OAuth login the feed never loads, Like is a no-op, Profile is blank
+  (hiding sign-out), and the Detox login helper targets fields that no
+  longer exist. Phases B and C are what fix this.
+- **Content** is served from `content.tortok.net`; production's feed is the
+  five BBB clips in the legacy `videos` table, published by
+  `scripts/seed-prod-test-content.mjs` (same infohashes as the dev clips).
+
+**What changes, by phase.**
+
+- **Phase A (ingest).**
+  - Ingest from Jetstream filtered with `wantedCollections=app.tortok.video.post`,
+    not 30 s `listRecords` polling of known DIDs. Decision 0017 (item 3)
+    says the AppView reads the network, and attempt 1 already ran a
+    Jetstream subscriber with a persisted cursor. This covers every PDS on
+    the relay, so Unit 4's multi-PDS goal comes for free.
+  - Keep `listRecords` only as **backfill** for accounts in the
+    known-account list, which Decision 0017 (item 2) makes operator-local
+    data the rebuild depends on. Persist the Jetstream cursor and the
+    known-account list.
+  - `seed-fixtures.mjs` publishes the five BBB clips as
+    `app.tortok.video.post` records from `tortok-dev.bsky.social`, reusing
+    the torrent logic of `seed-prod-test-content.mjs` (same infohashes,
+    `content.tortok.net` webseeds, poster uploaded as the thumbnail blob),
+    and deletes the 2026-04-30 localhost smoke-test record.
+  - Ingest ships with integration tests against a real Postgres, with
+    fixtures for both `app.tortok.video.post` and bridged
+    `app.bsky.feed.post` shapes (Decision 0016, commitment 2).
+- **Phase B (feed cutover).**
+  - As planned: `/videos/feed` reads `posts`.
+  - **Client:** the feed query stops depending on the legacy token (the feed
+    endpoint is public); Profile renders the OAuth handle and DID with a
+    sign-out button; the Like button is hidden, because this plan's
+    going-in answer 3 keeps Phase 3 read-only (likes arrive later as
+    `app.bsky.feed.like` records).
+  - **Runtime sources** (the Phase 3 requirement in
+    [`cross-deployment-transport.md`](../architecture/open-problems/cross-deployment-transport.md)):
+    each feed item carries a `sources` list (extra webseeds and trackers)
+    beyond its magnet, and the client adds them with
+    `torrent.addWebSeed()` (present in WebTorrent 2.8.5) and extra
+    announces. The AppView fills the list from its own content origin
+    for content it can serve. Real user records arrive in Unit 3, so this
+    must land before Unit 3.
+- **Phase C (retire legacy).**
+  - As planned (auth routes, JWT, legacy write routes, legacy tables, the
+    client's `token`/`user`/`register` and legacy API calls).
+  - Also retire `/.well-known/tortok` and drop it from Decision 0016's
+    smoke contract (Decision 0017, item 6).
+  - The Detox `login()` helper moves to OAuth in the same change (Decision
+    0016, commitment 6). OAuth runs in the system auth browser, which
+    Detox can't drive, so this needs a test-only path; see open question 3.
+  - Retire `seed-prod-test-content.mjs` (it writes the legacy `videos`
+    table, which this phase drops); production content comes from
+    `seed-fixtures.mjs` records instead.
+- **Phase D (bridge).**
+  - Drop step 19 (the backend `/torrents` route). Its only reason was
+    `r2.dev` rate limits; `torrent_file_url` points at `content.tortok.net`.
+  - **Blocked on a decision** (open question 2): steps 15–18 mirror Bluesky
+    videos into tortok's R2, but Decision 0010 item 4 says bridged bytes
+    come from Bluesky's video CDN and tortok does not re-host them.
+  - Bridged objects follow the transport open problem's key layout, keyed
+    by infohash, instead of `bridged/<did>/<cid>.mp4`.
+  - Attempt 1's 16 KB piece size conflicts with the transport open
+    problem's finding that 16 KB pieces make webseed fetches
+    request-bound. Settle piece size before any real records exist.
+- **Phase E.** As planned, plus: write `auth-signup.md` and
+  `federation.md` after the cutover (the area-doc backfill defers them to
+  here).
+
+**Out of scope for this unit:** runtime AppView selection by service DID
+(Decision 0017 item 4 lands it "with Phase C"; see open question 4),
+publishing from the app (Unit 3), web cookie auth (Unit 7).
+
+**Open questions for the user.**
+
+1. **Seeder.** Webseed alone is sufficient (spike), and `SeederService`
+   seeds an HLS fixture whose webseed path 404s (R2 has
+   `videos/test-video/`, the seeder announces `videos/tortok-test-video/`).
+   Remove `SeederService` and its fixture in Phase C, and set the API
+   back to `auto_stop_machines = "stop"`? Recommended: yes. The
+   always-on-peer question moves wholly into the transport open problem.
+2. **Bridge re-hosting.** Either supersede Decision 0010 item 4 (tortok
+   mirrors promoted Bluesky videos into R2 as torrents, the attempt-1
+   design, with re-hosting and liability consequences), or keep 0010 and
+   play bridged posts from Bluesky's HLS URL over plain HTTP (no P2P for
+   bridged content, which is what 0010 already says). Recommended: keep
+   0010 for now; it is less code and no re-hosting liability.
+3. **Detox under OAuth.** A dev-only sign-in path that loads a session
+   from an app password (`tortok-dev`, cached to respect the 10
+   logins/day limit), compiled out of release builds. Recommended.
+4. **Runtime AppView choice.** Decision 0017 says it lands with Phase C.
+   Doing it properly means the AppView exposes XRPC methods behind a
+   service DID and the PDS proxies them. Proposed: Phase C ships a
+   settings field for the AppView base URL (replacing the build-time
+   `EXPO_PUBLIC_API_URL`), and DID-plus-proxy routing becomes its own
+   unit after Unit 3.
 
 **Why a replan.** First attempt (preserved on `unit-2.5-attempt-1`
 tag, ~30 commits) shipped `bridged_posts` as a sidecar table with
