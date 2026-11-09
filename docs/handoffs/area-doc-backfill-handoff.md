@@ -13,8 +13,10 @@ first follow-up from the claude-project-discipline adoption (see
 
 **Progress:** `backend.md` ✅ done; `client.md` ✅ done (branch `docs/area-backfill-client`).
 
-**Next session should pick up:** `auth-signup.md`, `federation.md`; do `monetization.md` and `moderation.md` last
-(mostly unbuilt — they stay thin, honestly marked). One area per branch/PR;
+**Next session should pick up:** `monetization.md` and `moderation.md` (mostly unbuilt —
+they stay thin, honestly marked). `auth-signup.md` and `federation.md` wait until
+Phase 3 Unit 2.5 (v2) completes (user decision 2026-11-09): documenting them now
+would describe the legacy auth and feed that Phase C deletes. One area per branch/PR;
 don't batch all six.
 
 **Verification command:**
