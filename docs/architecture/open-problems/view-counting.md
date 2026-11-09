@@ -1,6 +1,6 @@
 # Open problem: View counting and creator monetization
 
-**Status:** Unresolved. Problem statement + four candidate approaches.
+**Status:** Unresolved. Problem statement + five candidate approaches.
 **Must resolve by:** Phase 4 AppView cutover if the feed ranks on
 views. Under the external-monetization model decided in
 `monetization.md`, this is *the* signal TorTok provides to creators
@@ -39,7 +39,7 @@ several adversarial constraints simultaneously:
 
 ## Candidate approaches
 
-These are four genuinely different designs. Each has known failure
+These are five genuinely different designs. Each has known failure
 modes; we need to pick one (or a hybrid) with eyes open.
 
 ### 1. Server-side attestation with heuristics (simplest)
@@ -115,6 +115,59 @@ the same state.
 becomes the product, this deserves a real evaluation — but not now.
 Documented only so future-us doesn't forget it was on the table.
 
+### 5. Show no view counts
+
+Count views privately for ranking, show creators their own numbers, and
+publish nothing. This is what Bluesky does (see below).
+
+**Pros.** No public number to game, no trust question for other AppViews.
+
+**Cons.** Gives creators nothing third parties can rely on, which breaks
+the external-sponsorship model in `monetization.md`. Viable only if
+monetization stops depending on views.
+
+## Prior art in AT Protocol (checked 2026-11-09)
+
+Bluesky has no view counts anywhere in the protocol. A post view
+(`app.bsky.feed.defs#postView`) carries like, reply, repost, quote and
+bookmark counts. The video embed's view (`app.bsky.embed.video#view`)
+carries the playlist, thumbnail, alt text, aspect ratio and presentation,
+and no counter.
+
+What it does have is a standard way for a client to report what a user saw.
+`app.bsky.feed.sendInteractions` sends batches of events to "the feed
+generator that served them", and a feed generator opts in with
+`acceptsInteractions`. The events include `interactionSeen` ("Feed item was
+seen by user"), the clickthrough events, like, repost, reply, quote, share,
+and `requestMore`/`requestLess`. The data goes only to that feed generator
+and is never published.
+
+That is ready-made plumbing for approach 1. Three points apply:
+
+- Calls to a feed generator normally go through the user's PDS, which
+  attaches a service-auth token naming the user's DID. If `sendInteractions`
+  is authenticated that way, each event comes from a real account rather
+  than an anonymous device, which is the basis for per-DID rate limits.
+  Not yet verified.
+- `interactionSeen` means the item appeared on screen, not that it was
+  watched. The event field's values are a known-values list, not a closed
+  set, so tortok can add its own, e.g. `app.tortok.feed.defs#interactionWatched`
+  with the watched duration.
+- The counts still live on one AppView, as operator-local data under
+  Decision 0017, so other AppViews must trust them. The transport doesn't
+  change the trust model; approaches 2 and 3 could use it to carry proofs.
+
+Likes show why views are harder. A like is an `app.bsky.feed.like` record in
+the liker's own repo, signed by their key, and a like count is an AppView
+counting those records. Anyone can recount and check each one, so like
+counts are verifiable. They aren't Sybil-resistant: a signature proves an
+account liked the post, not that a person did, and AppViews filter
+differently (takedowns, labels, blocks), so honest AppViews can disagree.
+Views can't copy this design, because a public record per view would
+publish every user's watch history. That is why views end up as private,
+trusted data unless approach 2 or 3 makes them provable without revealing
+who watched.
+
 ## Economic calibration
 
 For reference, YouTube's effective creator rate is roughly
@@ -134,7 +187,7 @@ These weights are a starting point, not a decision.
 ## Attack vectors we have to answer for
 
 1. **View botting.** Headless clients looping a video. Mitigation:
-   all four approaches need a minimum-watch-threshold story.
+   approaches 1–4 need a minimum-watch-threshold story.
 2. **Peer collusion.** Two accounts pull pieces from each other and
    attest to each other's views. Breaks approach 3.
 3. **Replay attacks.** Same signed proof submitted N times. Mitigation:
