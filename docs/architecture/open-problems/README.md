@@ -93,9 +93,7 @@ not forgotten; each gets a real record when the phase that forces it arrives.
 - **Recording / upload UX.** The `Record` tab is a stub; camera capture is a
   separate concern. The Android camera and microphone permissions are blocked
   in `app.json` until then; see [`client.md`](../client.md#implementation-status)
-  for what recording must re-enable. The Swift-era recording design in
-  `designs/mvp-video-reels-specification.md` (AVCaptureSession, on-device HLS)
-  predates the Expo client and MP4 webseed torrents and is not the plan.
+  for what recording must re-enable.
 - **Direct platform monetization via ads or paid content.** tortok serves no
   ads, hosts no paid content, and takes no cut of creator earnings. Creators
   monetize externally using trustworthy engagement signals published by their
