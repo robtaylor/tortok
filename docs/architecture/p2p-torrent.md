@@ -10,7 +10,10 @@ tracking the code; the *why* is in the [decisions behind this](#decisions-behind
 tortok uses **WebTorrent end to end** (Decision 0001) — the same WebRTC/BitTorrent
 stack on the client and the origin, no libtorrent anywhere. The client wraps it
 in a platform-split bridge: `tortok/lib/webtorrent/bridge.native.ts` (Hermes /
-React Native) and `bridge.web.ts` (browser), with `client.ts` holding the shared
+React Native) serves torrents to the player over a local HTTP server, while
+`bridge.web.ts` is a stub that rejects (a Service Worker streamer is not built),
+so on web `useP2PUrl.ts` plays the magnet's webseed URL directly and the browser
+does no P2P. `client.ts` holds the shared
 refcounted torrent manager and `types.ts` the shared surface. Playback URLs are
 resolved through `useP2PUrl.ts`, and `usePrefetch.ts` warms upcoming feed items.
 
@@ -86,7 +89,8 @@ Decision 0015:
 
 ## Implementation status
 
-- **Built:** WebTorrent client bridge (native + web), refcounted torrent manager,
+- **Built:** WebTorrent client bridge on native (web plays the webseed over
+  HTTP; the web bridge is a stub), refcounted torrent manager,
   Hermes polyfills, client seeding policy with battery/network gating, the
   backend `SeederService` with R2 webseed, the own tracker, and the coturn TURN
   server. Two-simulator P2P offload measured at 89–91% in the Phase 2 spike.

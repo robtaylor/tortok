@@ -11,10 +11,9 @@ present-tense reference docs, each claim verified against the current code — t
 first follow-up from the claude-project-discipline adoption (see
 [`docs/architecture/README.md`](../architecture/README.md) § Follow-ups).
 
-**Progress:** `backend.md` ✅ done (branch `docs/area-backfill-backend`).
+**Progress:** `backend.md` ✅ done; `client.md` ✅ done (branch `docs/area-backfill-client`).
 
-**Next session should pick up:** `client.md`, then
-`auth-signup.md`, `federation.md`; do `monetization.md` and `moderation.md` last
+**Next session should pick up:** `auth-signup.md`, `federation.md`; do `monetization.md` and `moderation.md` last
 (mostly unbuilt — they stay thin, honestly marked). One area per branch/PR;
 don't batch all six.
 
@@ -54,7 +53,7 @@ ingest/feed-generation path under Implementation status as **not built yet**
 (Phase 3/4). The seeder currently lives here — cross-link
 [`p2p-torrent.md`](../architecture/p2p-torrent.md) rather than re-describing it.
 
-### 2. `client.md` — Client / Expo (Decision 0004)
+### 2. ✅ `client.md` — Client / Expo (Decision 0004) — done
 
 Read `tortok/app/` (Expo Router: `_layout.tsx`, `(auth)/`, `(tabs)/`),
 `tortok/stores/`, `tortok/lib/`. Document feed, player, navigation, state, and
