@@ -19,6 +19,7 @@ deciding whether to upgrade.
 
 ### Added
 
+- tortok is licensed under Apache-2.0 (`LICENSE`), and the repository is public.
 - `scripts/seed-prod-test-content.mjs` publishes the Big Buck Bunny test clips to an environment (R2 upload + feed rows), each playable from its R2 webseed with no seeder.
 - `scripts/webseed-only-test.mjs` checks that a torrent downloads completely from its webseed with all peer discovery off.
 

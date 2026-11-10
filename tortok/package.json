@@ -2,6 +2,7 @@
   "name": "tortok",
   "main": "expo-router/entry",
   "version": "1.0.0",
+  "license": "Apache-2.0",
   "scripts": {
     "start": "expo start",
     "adb:ports": "ADB=\"${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb\" && \"$ADB\" reverse tcp:8080 tcp:8080 && \"$ADB\" reverse tcp:8090 tcp:8090 && \"$ADB\" reverse --list",

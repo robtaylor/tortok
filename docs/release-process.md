@@ -61,7 +61,7 @@ These items block the first release. As they land, they're checked off in the sa
 
 - [ ] Launch criteria in [`docs/plans/release-plan.md`](plans/release-plan.md) met (signup/spam gate, moderation floor per Decision 0013, etc.).
 - [ ] All Continuous Integration (CI) jobs green on `main`.
-- [ ] License chosen and a root `LICENSE` file added. None exists yet; `backend/package.json` declares MIT. The retired MVP specs intended MIT or Apache-2.0.
+- [x] License chosen and a root `LICENSE` file added: Apache-2.0 (2026-11-10), declared in every `package.json`.
 - [ ] No GPL or AGPL code in the shipped app, because copyleft terms conflict with App Store distribution; GPL projects such as iTorrent are reference only. `NOTICE` file in place if vendoring third-party code.
 - [ ] End-to-end test exercising the headline feature.
 - [ ] User-facing docs cover the install path.
