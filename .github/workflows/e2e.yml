@@ -46,7 +46,7 @@ jobs:
             tortok/package-lock.json
       - name: Postgres and applesimutils
         run: |
-          brew install postgresql@17
+          brew install postgresql@17 ccache
           # applesimutils comes from Wix's tap, which Homebrew won't load until trusted.
           brew tap wix/brew && brew trust wix/brew && brew install applesimutils
           PG="$(brew --prefix postgresql@17)/bin"
@@ -61,11 +61,42 @@ jobs:
       # The stack doesn't depend on the app, so it starts before the long build.
       - name: Start the local stack
         run: scripts/e2e-up.sh
+      # Compiler and pod caches: the native build is most of this job.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.ccache
+            ~/Library/Caches/CocoaPods
+          key: ios-build-${{ hashFiles('tortok/package-lock.json', 'tortok/app.json') }}-${{ github.sha }}
+          restore-keys: |
+            ios-build-${{ hashFiles('tortok/package-lock.json', 'tortok/app.json') }}-
+            ios-build-
       - name: Build the app (release, with test sign-in)
         working-directory: tortok
+        env:
+          USE_CCACHE: "1"
+          CCACHE_MAXSIZE: 2G
         run: |
+          export CCACHE_DIR="$HOME/.ccache"
           npx expo prebuild --platform ios
           npm run e2e:build:ios
+          ccache --show-stats || true
+      # The first launch on a freshly booted simulator takes minutes; pay it
+      # once here rather than inside the first test file's timeouts.
+      - name: Warm up the simulator
+        run: |
+          # Names repeat across installed runtimes; use the newest runtime's
+          # device, and hand Detox the same UDID.
+          udid=$(xcrun simctl list devices available -j | jq -r --arg name "$DETOX_IOS_DEVICE" \
+            '[.devices | to_entries[] | select(.key | test("iOS")) | .value[] | select(.name == $name)] | last | .udid')
+          test -n "$udid" && test "$udid" != null
+          echo "DETOX_IOS_UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl boot "$udid" || true
+          xcrun simctl bootstatus "$udid" -b
+          xcrun simctl install "$udid" tortok/ios/build/Build/Products/Release-iphonesimulator/tortok.app
+          xcrun simctl launch "$udid" com.anonymous.tortok
+          sleep 90
+          xcrun simctl terminate "$udid" com.anonymous.tortok || true
       - name: Detox
         working-directory: tortok
         run: |
@@ -117,6 +148,8 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+      # Caches Gradle's dependencies and build outputs (written from main).
+      - uses: gradle/actions/setup-gradle@v4
       - name: Install
         run: |
           pids=()
