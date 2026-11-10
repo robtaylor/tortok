@@ -102,7 +102,8 @@ export class AtprotoIngest {
   private readonly backfillConcurrency: number;
 
   private ws: WebSocketLike | null = null;
-  private stopped = true;
+  /** Set by stop(). backfill() can also run without start(), so it starts false. */
+  private stopped = false;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private reconnectDelayMs = RECONNECT_INITIAL_MS;
   private flushTimer: NodeJS.Timeout | null = null;
