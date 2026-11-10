@@ -12,6 +12,9 @@ kill_timeout = 10
   # defaults and refuses to boot without these.
   CONTENT_ORIGIN_URL = "https://content.tortok.net"
   TRACKER_URLS = "wss://tortok-tracker.fly.dev"
+  # atproto ingest backfills these on boot: the dev account that holds the
+  # test fixtures (scripts/seed-fixtures.mjs).
+  INGEST_SEED_DIDS = "did:plc:teqobv6pqer5nw7roqrgi55v"
 
 [http_service]
   internal_port = 8080

@@ -19,6 +19,9 @@ deciding whether to upgrade.
 
 ### Added
 
+- The backend indexes `app.tortok.video.post` records from the network: a Jetstream subscriber with a saved cursor, `listRecords` backfill of known accounts, record validation against the Lexicon, and authors resolved from their own DID documents and PDSes. New tables `posts`, `profiles`, `ingest_cursor` and `known_accounts`. The feed doesn't read them yet (Phase 3 Unit 2.5B).
+- `scripts/seed-fixtures.mjs` (`npm run seed:fixtures`) publishes the five test clips as `app.tortok.video.post` records from the dev account, with their posters and `.torrent` files as PDS blobs.
+- The `app.tortok.video.post` Lexicon has an optional `torrentBlob` holding the post's `.torrent` file, so a post can start with no peer (Decision 0020). The unused `hlsFallbackUrl` is gone.
 - End-to-end tests run in CI on every pull request that changes code, on the iOS simulator and the Android emulator: sign-in, the feed, playback, pause, swiping, tabs, profile and sign-out (Detox, against a throwaway local stack with its own atproto PDS; Decision 0021).
 - CI on GitHub Actions: the backend typecheck and Jest suite (with a Postgres 17 service) and the doc linter run on every pull request and push to `main`.
 - tortok is licensed under Apache-2.0 (`LICENSE`), and the repository is public.
