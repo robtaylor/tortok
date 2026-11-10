@@ -72,7 +72,8 @@ gut-feeling estimates, not commitments.
 
 Standalone Node script (`scripts/atproto-smoke-test.mjs`): app-password
 login → create an `app.tortok.video.post` record against `bsky.social`.
-Run via `npm run smoke:atproto`.
+It was deleted on 2026-11-10: `scripts/seed-fixtures.mjs` (2.5A) does
+the same round trip, with the current record shape.
 
 **Verified:**
 - `bsky.social` accepts third-party `app.tortok.*` lexicons.
@@ -455,7 +456,7 @@ unused once 2.5B and 2.5C land, unless noted):
 - Scripts: `scripts/seed-prod-test-content.mjs` and
   `test-content/seed-db.mjs` (both write the legacy `videos` table;
   `seed-fixtures.mjs` replaces them); `scripts/atproto-smoke-test.mjs`
-  (superseded by `seed-fixtures.mjs`); `scripts/r2-smoke-test.mjs`
+  (superseded by `seed-fixtures.mjs`; already deleted in 2.5A); `scripts/r2-smoke-test.mjs`
   (written for the Phase 0b seeder).
 - Docs: `CLAUDE.md` and `open-problems/README.md` used to say the Phase 1
   feed shipped with react-native-video; it never did. Both are fixed;
