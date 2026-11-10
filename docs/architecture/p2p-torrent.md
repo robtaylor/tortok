@@ -98,9 +98,15 @@ the hand-run Detox suite described in [client](client.md#testing).
 - **Open:** where bytes come from once several deployments serve the same
   posts, and how clients learn sources beyond the magnet; see
   [`open-problems/cross-deployment-transport.md`](open-problems/cross-deployment-transport.md).
-- **Open:** real-device offload ratio and the client policy's starting numbers
-  are validated by the real-device tiers, not yet run; see
-  [`open-problems/seeding-policy.md`](open-problems/seeding-policy.md).
+- **Unvalidated on real devices:** the 89–91% offload was two simulators on
+  one machine. Whether phones seed reliably over WebRTC behind real NAT, the
+  real offload ratio, and the battery cost of Decision 0009's starting numbers
+  are all measured by the real-device tiers, which haven't run. The only
+  battery figures are pre-tortok operator reports for libtorrent clients:
+  15–25% per seeding hour uncontrolled, 5–8% gated on battery above 50%, and
+  2–3% seeding only the playing video. If the scroll-back window costs more
+  than about 5% an hour, Decision 0009 itself names the fallback: seed only
+  the playing video, in a superseding record.
 
 ## Decisions behind this
 

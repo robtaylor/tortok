@@ -14,11 +14,11 @@ Give tortok two backend environments, staging and production, a single smoke scr
 
 ## Where things stand (2026-11-04)
 
-- **Environments:** production only — `tortok-api` (one machine, always on), `tortok-db` (unmanaged Fly Postgres 17, `lhr`), `tortok-tracker`, `tortok-turn`. No staging.
+- **Environments:** production only (`tortok-api`, `tortok-db`, `tortok-tracker`, `tortok-turn`); [`backend.md`](../architecture/backend.md) describes the deployment. No staging.
 - **CI:** none; the repository has no `.github/` directory. Deploys are a manual `fly deploy` from a laptop.
 - **Checks:** none automated. The 2026-11-04 deploy was verified by hand (`/health`, feed shape, `/turn/credentials`, `/seeder/stats`, a graceful-shutdown restart).
 - **Content:** production's feed is exactly the five Big Buck Bunny test clips, owned by `testuser` and published by `scripts/seed-prod-test-content.mjs` (R2 under `test-content/`, own tracker, per-file webseed, `bbb-01` newest). Each was verified to download completely from the webseed alone. The April `testuser3` row, which had no webseed, was deleted; the Detox `feed`/`navigation` tests now expect the clips. The webseed-only spike ([`webseed-only-origin.md`](../architecture/decisions/spikes/webseed-only-origin.md)) gives the check WS2 runs.
-- **Content domain:** the bucket is served at `content.tortok.net` (custom domain on the `tortok.net` Cloudflare zone, added 2026-11-08). Production sets `CONTENT_ORIGIN_URL` and `TRACKER_URLS` in `backend/fly.toml`; staging needs its own values.
+- **Content domain:** the bucket is served at `content.tortok.net` (added 2026-11-08). Production sets `CONTENT_ORIGIN_URL` in `backend/fly.toml`; staging needs its own value.
 - **R2 CORS:** the public bucket allows `GET`/`HEAD` from any origin with the `Range` header and exposes `Content-Range`, `Content-Length`, `Accept-Ranges` and `ETag` (set 2026-11-04 via the S3 API; preflight verified). Any origin is safe because the bucket is public and unauthenticated.
 
 ## Workstreams
@@ -42,9 +42,11 @@ Give tortok two backend environments, staging and production, a single smoke scr
 
 **Status:** Production done 2026-11-04 (content published, CORS set); staging follows WS3.
 
+Phase 3 Unit 2.5 changes what "content per environment" means. Until 2.5C, each environment's feed is rows in its own legacy `videos` table, written by `scripts/seed-prod-test-content.mjs`. From 2.5A, content is `app.tortok.video.post` records in the test account's repo, published once by `scripts/seed-fixtures.mjs`, and every environment's AppView indexes the same records from Jetstream. Staging then needs no content of its own.
+
 **Deliverables:**
 
-- `scripts/seed-prod-test-content.mjs` run against each environment (staging gets its own `R2_PREFIX` or bucket).
+- Until 2.5C: `scripts/seed-prod-test-content.mjs` run against staging (its own `R2_PREFIX` or bucket). After 2.5C: nothing per environment.
 - An R2 CORS rule on the public bucket allowing `GET`/`HEAD` with the `Range` header from the app's web origins, exposing `Content-Range`/`Content-Length`.
 
 **Exit criteria:**
@@ -60,13 +62,13 @@ One script, `scripts/smoke.mjs <base-url> [--expect-sha <sha>]`, that is read-on
 **Deliverables:**
 
 - **Version:** `/health` is healthy and, if given, reports the expected SHA.
-- **Contract:** response shapes of `/health`, `/.well-known/tortok`, the feed endpoint and `/turn/credentials`; TURN credentials are present (fails if `TURN_SECRET` is missing).
+- **Contract:** response shapes of `/health`, the feed endpoint and `/turn/credentials`; TURN credentials are present (fails if `TURN_SECRET` is missing). `/.well-known/tortok` is retired in Unit 2.5C (Decision 0017, item 6), so the contract doesn't check it.
 - **Webseed:** for each feed item (capped), load its torrent metadata and fetch at least one piece from its webseed with trackers, DHT and LSD off; the torrent's piece hash verifies the bytes, so no local mirror is needed. Generalises `scripts/webseed-only-test.mjs`.
 - Non-zero exit and a one-line reason per failure.
 
 **Exit criteria:**
 
-- The script passes against a correctly populated environment and fails, with a clear reason, against today's production feed item (no webseed).
+- The script passes against a correctly populated environment and fails, with a clear reason, against a feed item whose magnet has no webseed.
 
 ### WS3 — Staging environment and image promotion
 
@@ -74,7 +76,7 @@ One script, `scripts/smoke.mjs <base-url> [--expect-sha <sha>]`, that is read-on
 
 **Deliverables:**
 
-- `tortok-api-staging` (Fly, `lhr`) with its own small Postgres (`tortok-db-staging`), sharing `tortok-tracker` and `tortok-turn` with production. Separate `JWT_SECRET`; own `INSTANCE_DOMAIN`.
+- `tortok-api-staging` (Fly, `lhr`) with its own small Postgres (`tortok-db-staging`), sharing `tortok-tracker` and `tortok-turn` with production. Own `INSTANCE_DOMAIN`, and its own `JWT_SECRET` if staging exists before Unit 2.5C removes it.
 - GitHub Actions: on push to `main`, build once, deploy to staging, run the WS2 smoke against staging.
 - Promotion to production redeploys **the same image** staging passed (`fly deploy --image registry.fly.io/tortok-api-staging@sha256:…` or a shared tag), never a rebuild, then runs the WS2 smoke against production with `--expect-sha`.
 - Write-path checks (login, publish a record) run against staging only, using the test account; sessions are reused because the account allows 10 logins/day.

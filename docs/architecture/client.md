@@ -172,8 +172,8 @@ The suite therefore can't sign in against the current app.
 - **Broken by the half-finished auth cutover:** after OAuth login no legacy
   token exists, so the feed query never runs and the Home tab shows "No videos
   yet"; Like does nothing; the Profile tab renders blank, which also hides the
-  only sign-out button. The Detox suite can't log in (above). Phase 3 Unit 2.5
-  (v2) Phase B moves the feed onto atproto records and Phase C retires the
+  only sign-out button. The Detox suite can't log in (above). Phase 3 Unit 2.5B
+  moves the feed onto atproto records and Unit 2.5C retires the
   legacy token, `user`, `register` and the legacy API calls
   ([`phase-3-atproto.md`](../plans/phase-3-atproto.md)).
 - **Not built: recording and upload.** The Record tab is a placeholder, out of

@@ -1,6 +1,6 @@
 # Open problem: Should TorTok run its own PDS?
 
-**Status:** Parked. v1 leverages users' existing atproto identities
+**Status:** Parked. v1 uses users' existing atproto identities
 (typically `bsky.social`); no TorTok PDS is in scope.
 **Must resolve by:** No phase forces this currently. Revisited when one
 of the trigger conditions below fires — at which point this becomes a
@@ -13,7 +13,7 @@ amended 2026-04-29), Decision 0005 (backend evolves to AppView), Decision 0006
 
 ## The question
 
-TorTok's v1 architecture leverages whichever PDS the user is already on
+TorTok's v1 architecture uses whichever PDS the user is already on
 — for the overwhelming majority that is `bsky.social`. We define our
 own Lexicon (`app.tortok.video.post`), run our own AppView, and write
 records into the user's existing repo via `@atproto/api`. We do not
@@ -27,8 +27,9 @@ would the cost of running our own PDS become worth it again?**
 
 - Forking `bluesky-social/atproto`'s reference PDS and tracking
   upstream forever.
-- Operating a second stateful service (PDS) alongside the AppView and
-  seeder.
+- Operating a second stateful service (PDS) alongside the AppView.
+- Choosing per-user upload quotas, which set the abuse surface and the
+  storage bill. Users' existing PDSes apply their own blob limits today.
 - Custodial rotation-key storage (KMS, audit logging, breach
   surface).
 - Email/password auth: argon2id, email delivery on critical path,
