@@ -59,11 +59,11 @@
               "maxLength": 256
             }
           },
-          "hlsFallbackUrl": {
-            "type": "string",
-            "description": "HLS playlist URL on the L1 origin. Used as a fallback when WebTorrent cannot bootstrap a swarm.",
-            "format": "uri",
-            "maxLength": 2048
+          "torrentBlob": {
+            "type": "blob",
+            "description": "The post's .torrent file. Lets a client start the torrent with no peer. Clients use it only if its info dictionary hashes to infoHash.",
+            "accept": ["application/x-bittorrent"],
+            "maxSize": 1000000
           },
           "createdAt": {
             "type": "string",

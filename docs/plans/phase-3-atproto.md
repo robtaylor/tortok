@@ -247,6 +247,10 @@ Goal: tortok-native posts, created by Unit 3 or by `seed-fixtures.mjs`,
 flow into a unified `posts` table that the feed reads from. The legacy
 `videos` table still exists at the end of this phase; 2.5C drops it.
 
+0. **Lexicon first** ([Decision 0020](../architecture/decisions/0020-torrent-metadata-as-pds-blob.md)):
+   add the optional `torrentBlob` and drop `hlsFallbackUrl`, so the
+   fixtures are published with their `.torrent` from the start.
+
 1. **Append the `posts` table to `backend/src/db/schema.sql`:**
    ```sql
    CREATE TABLE IF NOT EXISTS posts (
@@ -255,22 +259,18 @@ flow into a unified `posts` table that the feed reads from. The legacy
      collection TEXT NOT NULL,           -- 'app.tortok.video.post' | 'app.bsky.feed.post'
      rkey TEXT NOT NULL,
      cid TEXT NOT NULL,                  -- record CID (for revision tracking)
-     -- Author profile snapshot (denormalized for feed reads)
-     handle TEXT,
-     display_name TEXT,
-     avatar_url TEXT,
      -- Content
      text TEXT,
      video_cid TEXT,                     -- the video blob's CID
-     poster_url TEXT,
+     thumbnail_cid TEXT,                 -- poster blob; URL built at read time
      duration_ms INTEGER,
-     width INTEGER,
+     width INTEGER,                      -- the record's aspectRatio
      height INTEGER,
-     aspect_ratio_w INTEGER,
-     aspect_ratio_h INTEGER,
+     hashtags TEXT[],
      -- Playback: magnet for app.tortok rows, hls_url for app.bsky rows
      magnet_link TEXT,
-     torrent_file_url TEXT,
+     info_hash TEXT,
+     torrent_cid TEXT,                   -- torrentBlob (Decision 0020)
      hls_url TEXT,
      -- Lifecycle
      record_created_at TIMESTAMPTZ NOT NULL,
@@ -281,7 +281,16 @@ flow into a unified `posts` table that the feed reads from. The legacy
    CREATE INDEX IF NOT EXISTS idx_posts_did ON posts (did);
    ```
    `collection` is already part of `at_uri`; the column is a
-   denormalized index helper.
+   denormalized index helper. Posts store blob CIDs, not URLs: the feed
+   builds URLs on the AppView's blob route (step 5).
+
+   Alongside it, append:
+   - **`profiles`**: DID, handle, display name, avatar CID, PDS endpoint
+     and refreshed-at. Feed reads join it, so a profile change updates
+     one row. The PDS endpoint is needed to fetch blobs.
+   - **`ingest_cursor`** and **`known_accounts`**, the operator-local
+     tables of Decision 0017 item 2. `known_accounts` records how each
+     DID became known (seen on Jetstream, or from the env seed list).
 
 2. **Create `backend/src/services/atprotoIngest.ts`.**
    - Subscribe to Jetstream with `wantedCollections=app.tortok.video.post`,
@@ -289,6 +298,12 @@ flow into a unified `posts` table that the feed reads from. The legacy
      Jetstream subscriber (`wss://jetstream2.us-east.bsky.network/subscribe`)
      with a persisted cursor; reuse that shape. Jetstream carries records
      from every PDS on the relay, so ingest isn't limited to `bsky.social`.
+   - Validate each record against the Lexicon before indexing: required
+     fields, size limits, and a magnet whose infohash matches `infoHash`.
+     A hand-written validator for this one record type, with tests.
+   - Resolve each author from the source, not from Bluesky's AppView: the
+     DID document (PLC directory or `did:web`) gives the handle and PDS,
+     and the PDS's `app.bsky.actor.profile` record gives the rest.
    - UPSERT into `posts` keyed by `at_uri`; replace a row only when its
      `cid` changed. Delete events DELETE by `at_uri`. Tombstones are a
      Phase 4 concern.
@@ -296,13 +311,17 @@ flow into a unified `posts` table that the feed reads from. The legacy
      known-account list, on boot and when an account is added. Decision
      0017 (item 2) makes that list operator-local data the rebuild depends
      on, so persist it, and persist the Jetstream cursor.
-   - Boot it from `backend/src/index.ts`.
+   - Save the cursor every few seconds, and rewind a few seconds on
+     reconnect; the idempotent upsert absorbs the replay.
+   - Boot it from `backend/src/index.ts`. Use the `ws` package: the
+     Docker image is `node:18-alpine`, which has no global WebSocket.
+     Upgrade Node after 2.5C removes the seeder's native dependencies.
 
 3. **Create `scripts/seed-fixtures.mjs`.** It publishes the five BBB clips
    as `app.tortok.video.post` records from `tortok-dev.bsky.social`.
    - It reuses the torrent logic of `seed-prod-test-content.mjs`: same
-     infohashes, `content.tortok.net` webseeds, and the poster uploaded as
-     the thumbnail blob.
+     infohashes, `content.tortok.net` webseeds, the poster uploaded as
+     the thumbnail blob, and the `.torrent` uploaded as `torrentBlob`.
    - It uses app-password auth and caches the session, because the account
      allows 10 logins a day.
    - It's idempotent: records that already exist are skipped.
@@ -326,9 +345,15 @@ them.
 
 5. **Modify `backend/src/routes/videos.ts`.**
    - `GET /videos/feed` reads `posts ORDER BY record_created_at DESC`.
-   - Mapping: `at_uri → id`, `did/handle/display_name/avatar_url →
-     user.*`, `magnet_link/torrent_file_url/hls_url → playback`.
+   - Mapping: `at_uri → id`, `profiles` → `user.*`,
+     `magnet_link/hls_url → playback`, and `thumbnail_cid`,
+     `torrent_cid` and the avatar CID → URLs on the blob route below.
    - `GET /videos/:id` likewise reads `posts`.
+   - **Blob route** `GET /blob/:did/:cid`: fetch the blob once from the
+     author's PDS and return it with `Cache-Control: immutable`, so
+     Cloudflare caches it for good. A CID names its content, so the
+     cache can't go stale. It serves posters, avatars and `.torrent`
+     files, keeping images on a CDN as the legacy R2 posters are today.
 
 6. **Runtime sources** (the Phase 3 requirement in
    [`cross-deployment-transport.md`](../architecture/open-problems/cross-deployment-transport.md)).
@@ -384,7 +409,8 @@ Afterwards the only way content reaches the app is through atproto.
     (decision 4 below).
 14. **AppView custom domain.** Serve the `tortok-api` Fly app as
     `appview.tortok.app`: a Fly certificate plus a DNS record in the
-    Cloudflare `tortok.app` zone. The URL setting's default is that
+    Cloudflare `tortok.app` zone, **proxied** through Cloudflare so the
+   blob route is cached at the edge. The URL setting's default is that
     domain, so `tortok-api.fly.dev` never ships in a user build. The Fly
     app keeps its name; nothing user-facing shows it. The domain is on
     `tortok.app`, not `tortok.net`, because the AppView is part of the
@@ -561,9 +587,10 @@ from the app (Unit 3), web cookie auth (Unit 7).
 - Hashtags travel inside the record (already in the Lexicon shape).
 - Once the record lands in the user's PDS, 2.5A's `atprotoIngest`
   receives it from Jetstream and inserts it into `posts`.
-- Before the first real record: settle the Lexicon's unused
-  `hlsFallbackUrl` field and the piece size for real uploads, both listed
-  under the constraints in
+- Upload the `.torrent` as `torrentBlob` alongside the thumbnail
+  (Decision 0020).
+- Before the first real record: settle the piece size and content key
+  layout for real uploads, both listed under the constraints in
   [`cross-deployment-transport.md`](../architecture/open-problems/cross-deployment-transport.md),
   because published records can't be changed.
 

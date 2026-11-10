@@ -3,7 +3,7 @@
 **Status:** Unresolved. Problem statement, candidate approaches, and one requirement that Phase 3 must meet.
 **Must resolve by:** Phase 3 for the runtime-source requirement below, because the first real records are published then and their magnets can't be changed afterwards. Phase 4 for choosing between seeders and mirrors.
 **Blocks:** publishing `app.tortok.video.post` records with production URLs (Phase 3); any third-party AppView serving tortok video reliably.
-**Related decision records:** Decision 0001 (WebTorrent end to end), Decision 0002 (AT Protocol), Decision 0008 (R2 origin and CDN), Decision 0010 (Bluesky bridge), Decision 0017 (the AppView's Postgres is a rebuildable index).
+**Related decision records:** Decision 0001 (WebTorrent end to end), Decision 0002 (AT Protocol), Decision 0008 (R2 origin and CDN), Decision 0010 (Bluesky bridge), Decision 0017 (the AppView's Postgres is a rebuildable index), Decision 0020 (torrent metadata as a PDS blob).
 **Related open problems:** `own-pds.md`.
 
 ## The problem
@@ -53,7 +53,6 @@ Cons: a volunteer re-hosting arbitrary video is exposed to whatever it contains.
 - **The content domain is permanent.** Production content is served from `content.tortok.net` (since 2026-11-08), the R2 bucket's custom domain behind Cloudflare's cache. It replaced the bucket's `r2.dev` URL, which Cloudflare rate-limits, doesn't cache, and describes as for development only. It is deliberately not on `tortok.app`, so that a blocklisting caused by uploaded content can't take down the app, API, OAuth or the Lexicon domain. All three tortok domains auto-renew at Gandi. A lapsed content domain would break every old post, and whoever registered it next would control those URLs.
 - **Key real content by infohash,** e.g. `/v/<infohash>/<file>`, so a mirror can copy the bucket path for path. The test clips use `test-content/<name>.mp4`.
 - **No retention or deletion policy exists.** R2 storage grows without limit, and deleting a post's record doesn't delete its R2 objects. See also the deferred "R2 reliability and backup strategy" item in [`README.md`](README.md).
-- **The Lexicon still has `hlsFallbackUrl`.** `app.tortok.video.post` carries an optional HLS fallback URL from the Swift-era design, which encoded an HLS ladder. Playback is now a single-file MP4 with webseeds, so the field has no producer. Drop it or redefine it before real records are published, since published records can't be changed.
 - **Piece size is a webseed cost.** create-torrent's default gives 16 KB pieces for 3 MB clips, about 180 HTTP requests per clip, and request latency dominates webseed speed. Larger pieces cut that, but changing piece size changes the infohash, so it should be settled before real records are published.
 
 ## Spikes this needs
