@@ -15,7 +15,7 @@ Give tortok two backend environments, staging and production, a single smoke scr
 ## Where things stand (2026-11-04)
 
 - **Environments:** production only (`tortok-api`, `tortok-db`, `tortok-tracker`, `tortok-turn`); [`backend.md`](../architecture/backend.md) describes the deployment. No staging.
-- **CI:** none; the repository has no `.github/` directory. Deploys are a manual `fly deploy` from a laptop.
+- **CI:** `.github/workflows/ci.yml` runs the backend typecheck and tests and the doc linter on pull requests and pushes to `main`. Nothing deploys from CI; deploys are a manual `fly deploy` from a laptop.
 - **Checks:** none automated. The 2026-11-04 deploy was verified by hand (`/health`, feed shape, `/turn/credentials`, `/seeder/stats`, a graceful-shutdown restart).
 - **Content:** production's feed is exactly the five Big Buck Bunny test clips, owned by `testuser` and published by `scripts/seed-prod-test-content.mjs` (R2 under `test-content/`, own tracker, per-file webseed, `bbb-01` newest). Each was verified to download completely from the webseed alone. The April `testuser3` row, which had no webseed, was deleted; the Detox `feed`/`navigation` tests now expect the clips. The webseed-only spike ([`webseed-only-origin.md`](../architecture/decisions/spikes/webseed-only-origin.md)) gives the check WS2 runs.
 - **Content domain:** the bucket is served at `content.tortok.net` (added 2026-11-08). Production sets `CONTENT_ORIGIN_URL` in `backend/fly.toml`; staging needs its own value.
