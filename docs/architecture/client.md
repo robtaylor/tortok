@@ -35,7 +35,14 @@ output.
 
 `package.json` scripts: `start`, `ios` and `android` (`expo run:*`; `android`
 first runs `adb:ports`, which reverses ports 8080 and 8090 to the host), `web`,
-and the Detox scripts `e2e:build`, `e2e:test` and `e2e`.
+the Detox scripts `e2e:build:ios`, `e2e:test:ios`, `e2e:build:android` and
+`e2e:test:android`, and `postinstall`, which runs `patch-package`.
+
+`patches/` holds one patch: `bittorrent-tracker`'s check for `ws://` trackers
+read `window.location.protocol`, and React Native has no `window.location`
+outside development builds, so any `ws://` tracker crashed a release build.
+The patch reads it with optional chaining. `plugins/withDetoxAndroid.js` is a
+local config plugin that adds Detox's Android test runner at `expo prebuild`.
 
 ## Navigation and session gating
 
@@ -111,13 +118,14 @@ moved to OAuth.
 ## Feed and player
 
 The feed (`app/(tabs)/index.tsx`) is a vertical, paged `FlatList`: each item
-is exactly the measured height of the feed area, with snapping and
+is exactly the measured height of the feed area, with snapping (one item per
+swipe however fast, via `disableIntervalMomentum`) and
 `viewAreaCoveragePercentThreshold: 50` deciding the active item. On web the
 column is held to a 9:16 phone width, and a mouse drag of more than 50 px moves
 one item up or down.
 
-The feed query is `useQuery(['feed', token], () => getFeed(token))` with
-`enabled: !!token`, so it runs only when a legacy token is present. It loads
+The feed query is `useQuery(['feed', token], () => getFeed(token))`. The
+feed endpoint is public, so it runs with or without a legacy token. It loads
 the first page only; there is no pagination in the UI.
 
 Each `VideoItem` runs a small display state machine: `idle` (poster shown),
@@ -147,21 +155,43 @@ playback profiling.
 
 ## Profile
 
-`app/(tabs)/profile.tsx` renders the legacy `user` from the auth store:
-display name, username, bio, follower/following/video counts, and the sign-out
-button. It returns nothing when `user` is null. It has no grid of the user's
-own videos; the author feed that would fill one isn't built.
+`app/(tabs)/profile.tsx` shows the signed-in handle and DID from the auth
+store, with the sign-out button. When a legacy `user` is also present it adds
+that user's display name, bio and follower/following/video counts. It has no
+grid of the user's own videos; the author feed that would fill one isn't
+built.
 
 ## Testing
 
 `stores/auth.test.ts` holds Jest unit tests for the auth store, run with
 `npx jest --config stores/jest.config.js` from `tortok/` (there is no `test`
-script). `tortok/e2e/`
-holds a Detox iOS suite (`auth`, `feed`, `navigation`, `profile`, `session`)
-run by hand with `npm run e2e`. Its `login()` helper (`e2e/helpers.ts`) fills
-`emailTextField` and `passwordTextField`, which no longer exist on the login
-screen, and several tests tap a `signUpButton` that no longer exists either.
-The suite therefore can't sign in against the current app.
+script).
+
+`tortok/e2e/` holds the Detox suite (`auth`, `feed`, `navigation`, `profile`,
+`session`), which runs on the iOS simulator and the Android emulator against
+release builds ([Decision 0021](decisions/0021-e2e-on-hosted-runners.md)). It
+covers sign-in, the feed loading the five test clips, playback reaching
+`playing`, pause and resume on tap, swiping to the next clip and back, the
+three tabs, the profile's handle and DID, session persistence across a
+relaunch, and sign-out.
+
+- **Stack:** `scripts/e2e-up.sh` starts what the app talks to, on the host: a
+  throwaway PLC and PDS with a test account (`test-network/start.mjs`), the
+  backend on its own `tortok_e2e` database, the tracker, and the content
+  server, then seeds the legacy feed. `scripts/e2e-down.sh` stops it. On
+  Android the tests reverse the stack's ports to the emulator.
+- **Sign-in:** e2e builds are bundled with `EXPO_PUBLIC_E2E=1`, which adds a
+  test sign-in form to the login screen (`lib/atproto/devSignIn.ts`): an app
+  password against the test PDS. User builds never set the flag, and the real
+  OAuth flow isn't driven by the suite.
+- **Test hooks:** the active feed item carries `activeVideoState` (its display
+  state as an accessibility label), `activeVideoAuthor` and
+  `activeVideoCaption`; the feed list is `videoFeed`, and the tabs are
+  `homeTab`, `recordTab` and `profileTab`.
+- **Running it:** `npm run e2e:build:ios` then `npm run e2e:test:ios` (or the
+  `android` pair) from `tortok/`, after `npx expo prebuild` and with the stack
+  up. CI runs both platforms on every pull request
+  (`.github/workflows/e2e.yml`).
 
 ## Implementation status
 
@@ -169,12 +199,10 @@ The suite therefore can't sign in against the current app.
   restore and revocation; the paged feed with the poster/player state machine;
   WebTorrent playback, prefetch and seeding policy on native (Phase 2, see
   [p2p-torrent](p2p-torrent.md)). Web plays from the webseed over HTTP only.
-- **Broken by the half-finished auth cutover:** after OAuth login no legacy
-  token exists, so the feed query never runs and the Home tab shows "No videos
-  yet"; Like does nothing; the Profile tab renders blank, which also hides the
-  only sign-out button. The Detox suite can't log in (above). Phase 3 Unit 2.5B
-  moves the feed onto atproto records and Unit 2.5C retires the
-  legacy token, `user`, `register` and the legacy API calls
+- **Still on the legacy backend:** the feed reads the legacy `/videos/feed`,
+  and Like does nothing without a legacy token, which OAuth sign-in never
+  creates. Phase 3 Unit 2.5B moves the feed onto atproto records and Unit 2.5C
+  retires the legacy token, `user`, `register` and the legacy API calls
   ([`phase-3-atproto.md`](../plans/phase-3-atproto.md)).
 - **Not built: recording and upload.** The Record tab is a placeholder, out of
   scope for v1. When recording is built, it must take `CAMERA` and
@@ -194,3 +222,4 @@ The suite therefore can't sign in against the current app.
 - [Decision 0009 — Client seeding policy](decisions/0009-client-seeding-policy.md) — what the feed seeds back, via `useSeedPolicy`.
 - [Decision 0016 — Testing strategy](decisions/0016-testing-strategy-where-each-kind-of-test-lives.md) — targeted client unit tests; Detox as the start of tier 1.
 - [Decision 0017 — The AppView's Postgres is a rebuildable index](decisions/0017-appview-postgres-is-a-rebuildable-index.md) — the client must choose its AppView at runtime.
+- [Decision 0021 — End-to-end tests run on GitHub-hosted runners](decisions/0021-e2e-on-hosted-runners.md) — Detox on both platforms in CI, against a throwaway stack with its own PDS.

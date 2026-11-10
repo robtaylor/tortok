@@ -274,6 +274,16 @@ const VideoItem = memo(function VideoItem({
 
   return (
     <View style={[styles.videoContainer, { width: videoWidth, height: videoHeight }]}>
+      {isActive ? (
+        // For end-to-end tests: the active item's display state, readable as
+        // an accessibility label on iOS and Android alike.
+        <View
+          testID="activeVideoState"
+          accessibilityLabel={displayState}
+          style={styles.stateMarker}
+          pointerEvents="none"
+        />
+      ) : null}
       {video.posterURL && showPoster ? (
         <Image
           source={{ uri: video.posterURL }}
@@ -285,7 +295,11 @@ const VideoItem = memo(function VideoItem({
         />
       ) : null}
 
-      <Pressable style={styles.video} onPress={handleTogglePlay} testID="videoPressable">
+      <Pressable
+        style={styles.video}
+        onPress={handleTogglePlay}
+        testID="videoPressable"
+      >
         {mountPlayer ? (
           <VideoView
             player={player}
@@ -329,8 +343,10 @@ const VideoItem = memo(function VideoItem({
       ) : null}
 
       <View style={styles.bottomOverlay}>
-        <Text style={styles.username}>@{video.user.username}</Text>
-        <Text style={styles.caption} numberOfLines={2}>
+        <Text style={styles.username} testID={isActive ? 'activeVideoAuthor' : undefined}>
+          @{video.user.username}
+        </Text>
+        <Text style={styles.caption} numberOfLines={2} testID={isActive ? 'activeVideoCaption' : undefined}>
           {video.caption}
         </Text>
         {video.hashtags.length > 0 && (
@@ -387,10 +403,11 @@ export default function FeedScreen() {
     ? Math.min(layout?.w ?? fallbackW, Math.round(videoHeight * PHONE_ASPECT))
     : (layout?.w ?? fallbackW);
 
+  // The feed is public, so it loads with or without a legacy token. OAuth
+  // sign-in never creates one; gating on it left the feed empty.
   const { data, isLoading, error } = useQuery({
     queryKey: ['feed', token],
     queryFn: () => getFeed(token),
-    enabled: !!token,
   });
 
   const videos = useMemo(() => data?.videos ?? [], [data]);
@@ -492,6 +509,9 @@ export default function FeedScreen() {
         renderItem={renderItem}
         snapToInterval={videoHeight}
         snapToAlignment="start"
+        // One video per swipe, however fast: without this a fast fling on
+        // Android carried past several items (caught by e2e/feed.test.ts).
+        disableIntervalMomentum
         decelerationRate="fast"
         showsVerticalScrollIndicator={false}
         onViewableItemsChanged={onViewableItemsChanged}
@@ -502,6 +522,7 @@ export default function FeedScreen() {
           index,
         })}
         style={{ width: videoWidth }}
+        testID="videoFeed"
         initialNumToRender={1}
         maxToRenderPerBatch={2}
         windowSize={5}
@@ -517,6 +538,13 @@ export default function FeedScreen() {
 }
 
 const styles = StyleSheet.create({
+  stateMarker: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 1,
+    height: 1,
+  },
   feedRoot: {
     flex: 1,
     backgroundColor: '#000',

@@ -12,9 +12,12 @@ function StatView({ count, label }: { count: number; label: string }) {
 }
 
 export default function ProfileScreen() {
-  const { user, signOut } = useAuthStore();
+  const { user, did, lastHandle, signOut } = useAuthStore();
 
-  if (!user) return null;
+  // Signed in with atproto: show the handle and DID. The legacy `user`
+  // (counts, bio) exists only for accounts signed in to the old backend;
+  // nothing fills an atproto profile yet (Phase 3 Unit 2.5B and later).
+  const handle = lastHandle ?? user?.username ?? null;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -31,16 +34,21 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      <Text style={styles.displayName} testID="displayName">{user.displayName}</Text>
-      <Text style={styles.username} testID="username">@{user.username}</Text>
+      <Text style={styles.displayName} testID="displayName">
+        {user?.displayName ?? handle ?? 'Signed in'}
+      </Text>
+      {handle ? <Text style={styles.username} testID="username">@{handle}</Text> : null}
+      {did ? <Text style={styles.did} testID="did" selectable>{did}</Text> : null}
 
-      {user.bio ? <Text style={styles.bio} testID="bio">{user.bio}</Text> : null}
+      {user?.bio ? <Text style={styles.bio} testID="bio">{user.bio}</Text> : null}
 
-      <View style={styles.statsRow}>
-        <StatView count={user.followerCount} label="Followers" />
-        <StatView count={user.followingCount} label="Following" />
-        <StatView count={user.videoCount} label="Videos" />
-      </View>
+      {user ? (
+        <View style={styles.statsRow}>
+          <StatView count={user.followerCount} label="Followers" />
+          <StatView count={user.followingCount} label="Following" />
+          <StatView count={user.videoCount} label="Videos" />
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -90,6 +98,12 @@ const styles = StyleSheet.create({
   username: {
     color: '#888',
     fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  did: {
+    color: '#555',
+    fontSize: 12,
     textAlign: 'center',
     marginBottom: 24,
   },

@@ -1,0 +1,13 @@
+diff --git a/node_modules/bittorrent-tracker/client.js b/node_modules/bittorrent-tracker/client.js
+index c37345f..350d271 100644
+--- a/node_modules/bittorrent-tracker/client.js
++++ b/node_modules/bittorrent-tracker/client.js
+@@ -112,7 +112,7 @@ class Client extends EventEmitter {
+         } else if ((protocol === 'ws:' || protocol === 'wss:') && webrtcSupport) {
+           // Skip ws:// trackers on https:// sites because they throw SecurityError
+           if (protocol === 'ws:' && typeof window !== 'undefined' &&
+-              window.location.protocol === 'https:') {
++              window.location?.protocol === 'https:') {
+             nextTickWarn(new Error(`Unsupported tracker protocol: ${announceUrl}`))
+             return null
+           }

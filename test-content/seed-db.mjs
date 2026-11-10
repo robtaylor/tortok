@@ -33,6 +33,15 @@ const client = new pg.Client(DATABASE_URL);
 async function main() {
   await client.connect();
 
+  // The owner of the clips. Created if missing, so a fresh database (such as
+  // the one scripts/e2e-up.sh makes) needs no other setup.
+  await client.query(
+    `INSERT INTO users (id, username, display_name, email, password_hash, instance_domain)
+     VALUES ($1, 'testuser', 'Test User', 'test@example.com', 'no-login', 'localhost')
+     ON CONFLICT DO NOTHING`,
+    [USER_ID],
+  );
+
   // Clear stale video records (and cascaded likes/views/hashtag links).
   await client.query('DELETE FROM video_hashtags');
   await client.query('DELETE FROM views');

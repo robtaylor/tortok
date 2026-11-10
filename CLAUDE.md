@@ -149,6 +149,13 @@ Most changes don't need a checkpoint. These do:
    endpoints, schema changes) get a review before landing. Routine work
    inside a scoped phase does not.
 
+## Tests travel with the code
+
+A change to the app updates the Detox tests it affects, on both iOS and
+Android, in the same pull request; a change to the backend ships with its
+integration tests. CI (`.github/workflows/ci.yml` and `e2e.yml`) runs both on
+every pull request. Don't merge a code change that leaves either red.
+
 ## When *not* to stop
 
 - Routine bug fixes inside an already-scoped phase

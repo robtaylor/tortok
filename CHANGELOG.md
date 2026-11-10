@@ -19,6 +19,7 @@ deciding whether to upgrade.
 
 ### Added
 
+- End-to-end tests run in CI on every pull request, on the iOS simulator and the Android emulator: sign-in, the feed, playback, pause, swiping, tabs, profile and sign-out (Detox, against a throwaway local stack with its own atproto PDS; Decision 0021).
 - CI on GitHub Actions: the backend typecheck and Jest suite (with a Postgres 17 service) and the doc linter run on every pull request and push to `main`.
 - tortok is licensed under Apache-2.0 (`LICENSE`), and the repository is public.
 - `scripts/seed-prod-test-content.mjs` publishes the Big Buck Bunny test clips to an environment (R2 upload + feed rows), each playable from its R2 webseed with no seeder.
@@ -39,12 +40,16 @@ deciding whether to upgrade.
 
 ### Removed
 
+- `react-native-reanimated` and `react-native-worklets`, unused template dependencies whose Android release build failed with this Gradle plugin version.
 - Google Cloud Run deployment (`backend/deploy.sh`) and the Cloud SQL socket handling; Fly.io is the only backend deployment.
 - The standalone `tortok-seeder` Fly app, destroyed after a spike showed the R2 webseed alone delivers complete content.
 - The Swift-era `designs/` specifications; their still-current content moved into the open problems, release plan and release process.
 
 ### Fixed
 
+- The feed loads after signing in with Bluesky. It used to wait for a legacy login token that atproto sign-in never creates, so the Home tab stayed empty. The Profile tab shows the signed-in handle and the sign-out button instead of rendering blank.
+- On Android, a fast swipe moves one video, as on iOS; it used to fly past several.
+- Release builds no longer crash when a video's magnet lists a `ws://` tracker (a `bittorrent-tracker` bug, patched in `tortok/patches/`).
 - `SeederService`'s webseed URL is now the parent of each seeded directory, so webseed fetches for its multi-file torrents no longer 404.
 - Backend shuts down gracefully on both SIGINT (Ctrl+C) and SIGTERM (which `backend/fly.toml` now sets as Fly's kill signal), closing HTTP, the seeder, and the Postgres pool under a deadline. Previously only SIGTERM was handled, so Fly stops skipped it.
 - Spike seeder (`test-content/seeder.mjs`) shuts down cleanly on SIGTERM from `scripts/dev-down.sh`, not just Ctrl+C.

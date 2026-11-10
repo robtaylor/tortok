@@ -373,9 +373,9 @@ them.
    Real user records arrive in Unit 3, so this must land before Unit 3.
 
 7. **Client.**
-   - The feed query stops depending on the legacy token; the feed
-     endpoint is public.
-   - Profile renders the OAuth handle and DID, with a sign-out button.
+   - ✅ Done early, with the Detox baseline (2026-11-10): the feed query
+     no longer depends on the legacy token, and Profile renders the OAuth
+     handle and DID with a sign-out button.
    - The Like button is hidden, since Phase 3 ships no likes.
    - `tortok/lib/api.ts` types follow any renamed response fields.
 
@@ -402,9 +402,13 @@ Afterwards the only way content reaches the app is through atproto.
     `video_hashtags`, `follows` and `likes` to `schema.sql`. Keep `views`.
 11. **Client.** Delete `app/(auth)/register.tsx`; the auth store's `token`,
     `user` and legacy `signIn`; and `lib/api.ts`'s legacy calls and types.
-12. **Detox.** The `login()` helper moves to the dev-only app-password
-    sign-in (decision 3 below) in the same change (Decision 0016,
-    commitment 6).
+12. **Detox.** ✅ Done early, before 2.5A merged (2026-11-10): the suite
+    signs in through an e2e-only app-password form against a throwaway
+    PDS, and runs on iOS and Android in CI
+    ([Decision 0021](../architecture/decisions/0021-e2e-on-hosted-runners.md)).
+    The legacy sign-up and email/password cases are already gone. From now
+    on, every client change updates the Detox tests it
+    affects, on both platforms, in the same pull request.
 13. **AppView URL setting.** An in-app AppView base-URL setting,
     defaulting to tortok's, replaces the build-time `EXPO_PUBLIC_API_URL`
     (decision 4 below).

@@ -22,6 +22,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
+          tabBarButtonTestID: 'homeTab',
           tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
         }}
       />
@@ -29,6 +30,7 @@ export default function TabLayout() {
         name="record"
         options={{
           title: 'Record',
+          tabBarButtonTestID: 'recordTab',
           tabBarIcon: ({ color }) => <TabBarIcon name="plus-square" color={color} />,
         }}
       />
@@ -36,6 +38,7 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
+          tabBarButtonTestID: 'profileTab',
           tabBarIcon: ({ color }) => <TabBarIcon name="user" color={color} />,
         }}
       />
