@@ -314,7 +314,8 @@ flow into a unified `posts` table that the feed reads from. The legacy
    - Save the cursor every few seconds, and rewind a few seconds on
      reconnect; the idempotent upsert absorbs the replay.
    - Boot it from `backend/src/index.ts`. Use the `ws` package: the
-     Docker image is `node:18-alpine`, which has no global WebSocket.
+     Docker image was `node:18-alpine`, which has no global WebSocket. It moved to
+     Node 22 on 2026-11-10, so `ws` could now be dropped for the built-in WebSocket.
      Upgrade Node after 2.5C removes the seeder's native dependencies.
 
 3. **Create `scripts/seed-fixtures.mjs`.** It publishes the five BBB clips

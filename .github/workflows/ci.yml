@@ -45,8 +45,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          # The production image is node:18-alpine (backend/Dockerfile).
-          node-version: 18
+          # The production image is node:22-alpine (backend/Dockerfile).
+          node-version: 22
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
