@@ -88,7 +88,7 @@ jobs:
           # Names repeat across installed runtimes; use the newest runtime's
           # device, and hand Detox the same UDID.
           udid=$(xcrun simctl list devices available -j | jq -r --arg name "$DETOX_IOS_DEVICE" \
-            '[.devices | to_entries[] | select(.key | test("iOS")) | .value[] | select(.name == $name)] | last | .udid')
+            '[.devices | to_entries | sort_by(.key)[] | select(.key | test("iOS")) | .value[] | select(.name == $name)] | last | .udid')
           test -n "$udid" && test "$udid" != null
           echo "DETOX_IOS_UDID=$udid" >> "$GITHUB_ENV"
           xcrun simctl boot "$udid" || true
