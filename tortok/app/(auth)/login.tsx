@@ -52,8 +52,10 @@ export default function LoginScreen() {
     }
   };
 
-  const handleLogin = () => {
-    const trimmed = handle.trim();
+  // `text` comes from the submit event when there is one: it carries the
+  // field's current text even if this render's state hasn't caught up yet.
+  const handleLogin = (text = handle) => {
+    const trimmed = text.trim();
     if (!trimmed) {
       setError('Please enter your Bluesky handle');
       return;
@@ -92,12 +94,14 @@ export default function LoginScreen() {
           keyboardType="email-address"
           textContentType="username"
           autoComplete="username"
+          returnKeyType="go"
+          onSubmitEditing={(e) => handleLogin(e.nativeEvent.text)}
           testID="handleTextField"
         />
 
         <TouchableOpacity
           style={[authStyles.button, loading && authStyles.buttonDisabled]}
-          onPress={handleLogin}
+          onPress={() => handleLogin()}
           disabled={loading}
           testID="signInButton"
         >

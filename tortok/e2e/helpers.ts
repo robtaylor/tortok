@@ -52,7 +52,7 @@ export async function relaunch() {
   await device.disableSynchronization();
 }
 
-export async function waitForLoginScreen(timeout = 30000) {
+export async function waitForLoginScreen(timeout = 60000) {
   await waitFor(element(by.id('signInButton'))).toBeVisible().withTimeout(timeout);
 }
 
@@ -77,7 +77,8 @@ async function fill(id: string, text: string) {
   await new Promise((r) => setTimeout(r, 400));
 }
 
-export async function waitForFeed(timeout = 20000) {
+// Generous: the first launch on a freshly booted CI simulator is slow.
+export async function waitForFeed(timeout = 60000) {
   await waitFor(element(by.id('videoFeed'))).toBeVisible().withTimeout(timeout);
 }
 

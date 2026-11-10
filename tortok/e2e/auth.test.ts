@@ -23,9 +23,9 @@ describe('Sign-in', () => {
 
   it('asks for a handle when Bluesky sign-in is submitted empty', async () => {
     await waitForLoginScreen();
+    // Submit from the keyboard: the button is still moving while it closes.
     await element(by.id('handleTextField')).replaceText('');
     await element(by.id('handleTextField')).tapReturnKey();
-    await element(by.id('signInButton')).tap();
     await waitFor(element(by.id('errorMessage'))).toBeVisible().withTimeout(5000);
   });
 
