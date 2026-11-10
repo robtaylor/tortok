@@ -2,7 +2,7 @@
 
 **Current architecture:** [P2P & torrent engine](../p2p-torrent.md)
 
-**Status:** Accepted — 2026-11-04. Revises the tier-3 vendor choice of [Decision 0014](0014-device-testing-strategy.md); tiers 1 and 2 of 0014 are unchanged.
+**Status:** Accepted (partial) (2026-11-04). Revises the tier-3 vendor choice of [Decision 0014](0014-device-testing-strategy.md); tiers 1 and 2 of 0014 are unchanged.
 
 **Context.** Decision 0014 split device testing into three tiers and routed
 tier 3 (P2P × real-device composition) to AWS Device Farm private devices +

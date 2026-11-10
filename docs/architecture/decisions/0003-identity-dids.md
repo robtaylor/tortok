@@ -2,9 +2,7 @@
 
 **Current architecture:** [Federation](../federation.md)
 
-**Status:** Accepted. Amended 2026-04-29 — v1 no longer runs a custodial
-TorTok PDS; users authenticate via their existing atproto identity
-(typically `bsky.social`). See "Amendment 2026-04-29" below.
+**Status:** Accepted. Custodial identity revised by [Decision 0019](0019-v1-uses-existing-pds-via-oauth.md) (2026-11-10). The "as amended" sections below were written into this record on 2026-04-29; 0019 is the record of that change.
 
 **Context.** AT Protocol accounts are DIDs. Two methods are practical:
 `did:plc` (PLC directory, currently operated by Bluesky PBC) and `did:web`

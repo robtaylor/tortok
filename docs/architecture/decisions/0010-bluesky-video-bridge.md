@@ -2,7 +2,7 @@
 
 **Current architecture:** [Federation](../federation.md)
 
-**Status:** Accepted — 2026-04-17
+**Status:** Accepted (partial) (2026-04-17).
 
 **Context.** The chicken-and-egg problem at launch is severe: a new
 short-form video app shipping with an empty feed dies on day one.

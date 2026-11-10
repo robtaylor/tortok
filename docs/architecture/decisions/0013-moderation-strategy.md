@@ -2,8 +2,7 @@
 
 **Current architecture:** [Moderation](../moderation.md)
 
-**Status:** Accepted — 2026-04-29. Resolves
-`docs/architecture/open-problems/moderation.md`.
+**Status:** Accepted (partial) (2026-04-29). Resolved the former moderation open problem.
 
 **Context.** Phase 3 opens signup (eventually); content moderation has
 to be in place before that window opens to anyone outside the team.

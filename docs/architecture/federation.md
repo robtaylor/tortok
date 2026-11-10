@@ -26,5 +26,6 @@ PDSes, the AppView that indexes them, and the inbound Bluesky-video bridge.
 
 - [Decision 0002 — Federation protocol is AT Protocol](decisions/0002-atproto-federation.md)
 - [Decision 0003 — Identity uses DIDs](decisions/0003-identity-dids.md)
+- [Decision 0019 — v1 uses each user's existing PDS through atproto OAuth](decisions/0019-v1-uses-existing-pds-via-oauth.md)
 - [Decision 0010 — Bridge Bluesky video posts into the feed](decisions/0010-bluesky-video-bridge.md)
 - [Decision 0012 — Lexicon namespace governance](decisions/0012-lexicon-namespace.md)

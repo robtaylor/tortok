@@ -38,23 +38,25 @@ Write all three in the same present tense and a reader can't tell *why we did it
 
 | # | Title | Status |
 |---|---|---|
-| [0001](0001-webtorrent-end-to-end.md) | Torrent engine is WebTorrent, end to end | Accepted |
-| [0002](0002-atproto-federation.md) | Federation protocol is AT Protocol | Accepted |
+| [0001](0001-webtorrent-end-to-end.md) | Torrent engine is WebTorrent, end to end | Accepted (partial) |
+| [0002](0002-atproto-federation.md) | Federation protocol is AT Protocol | Accepted (partial) |
 | [0003](0003-identity-dids.md) | Identity uses DIDs — `did:plc` default, `did:web` opt-in | Accepted |
 | [0004](0004-client-expo-react-native.md) | Client is Expo + React Native + TypeScript | Accepted |
-| [0005](0005-backend-node-appview.md) | Backend stays Node + TypeScript; evolves into an AppView | Accepted |
+| [0005](0005-backend-node-appview.md) | Backend stays Node + TypeScript; evolves into an AppView | Accepted (partial) |
 | [0006](0006-migration-from-swift.md) | Migration path from the Swift prototype | Accepted |
 | [0007](0007-signup-and-spam-prevention.md) | Signup UX and spam prevention | Accepted |
 | [0008](0008-seeder-storage-cdn.md) | Seeder, storage, and CDN infrastructure | Accepted |
 | [0009](0009-client-seeding-policy.md) | Phase 2 client seeding scope and policy | Accepted |
-| [0010](0010-bluesky-video-bridge.md) | Bridge Bluesky video posts into the tortok feed (inbound federation) | Accepted |
-| [0011](0011-monetization-architecture.md) | Monetization architecture — interface-first payout, first-party pool committed | Accepted |
+| [0010](0010-bluesky-video-bridge.md) | Bridge Bluesky video posts into the tortok feed (inbound federation) | Accepted (partial) |
+| [0011](0011-monetization-architecture.md) | Monetization architecture — interface-first payout, first-party pool committed, V1 rail gated on Apple + US-incorporation prerequisites | Accepted (partial) |
 | [0012](0012-lexicon-namespace.md) | Lexicon namespace governance | Accepted |
-| [0013](0013-moderation-strategy.md) | Moderation strategy — atproto labelers, illegal-content floor, UK age-verification gate | Accepted |
-| [0014](0014-device-testing-strategy.md) | Device testing strategy — emulators for CI, real devices for video/P2P | Accepted |
-| [0015](0015-tier3-p2p-testing-lambdatest.md) | Tier-3 real-device P2P testing runs on LambdaTest/TestMu | Accepted |
-| [0016](0016-testing-strategy-where-each-kind-of-test-lives.md) | Testing strategy — where each kind of test lives | Accepted |
-| [0017](0017-appview-postgres-is-a-rebuildable-index.md) | The AppView's Postgres is a rebuildable index, one of many | Accepted |
+| [0013](0013-moderation-strategy.md) | Moderation strategy — atproto labelers, illegal-content floor, UK age-verification gate | Accepted (partial) |
+| [0014](0014-device-testing-strategy.md) | Device testing strategy — self-hosted emulators for CI, real devices for video/P2P | Accepted (partial) |
+| [0015](0015-tier3-p2p-testing-lambdatest.md) | Tier-3 real-device P2P testing runs on LambdaTest/TestMu | Accepted (partial) |
+| [0016](0016-testing-strategy-where-each-kind-of-test-lives.md) | Testing strategy — where each kind of test lives | Accepted (partial) |
+| [0017](0017-appview-postgres-is-a-rebuildable-index.md) | The AppView's Postgres is a rebuildable index, one of many | Accepted (partial) |
+| [0018](0018-content-origin-mp4-webseeds.md) | Content origin is one MP4 per video on R2, served as a webseed; no origin seeder | Proposed |
+| [0019](0019-v1-uses-existing-pds-via-oauth.md) | v1 uses each user's existing PDS through atproto OAuth; no custodial PDS | Accepted (partial) |
 
 Forward-looking items that are **not yet decisions** — unresolved design problems, deferred decisions, and explicit out-of-scope — live in [`../open-problems/`](../open-problems/README.md), a tortok-specific extension to the stock discipline (each entry carries a phase-gated `Must resolve by` header). `uv run docs/scripts/doctool.py lint` checks this table against the decision files.
 

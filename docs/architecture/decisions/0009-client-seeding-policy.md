@@ -2,7 +2,7 @@
 
 **Current architecture:** [P2P & torrent engine](../p2p-torrent.md)
 
-**Status:** Accepted — 2026-04-14
+**Status:** Accepted (2026-04-14). The 2026-04-19 "Drop HLS, webseed-only" amendment below is restated in [Decision 0018](0018-content-origin-mp4-webseeds.md) (proposed).
 
 **Context.** Phase 2 integrates WebTorrent into the Expo client and
 measures P2P offload for the first time. Two things have to be

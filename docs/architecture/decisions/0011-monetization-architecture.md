@@ -2,9 +2,7 @@
 
 **Current architecture:** [Monetization](../monetization.md)
 
-**Status:** Accepted — 2026-04-17. Amended 2026-04-29 — NSIDs are
-`app.tortok.payout.destination` and `app.tortok.payout.pool` (reverse-
-DNS rooted at `tortok.app`); see Decision 0012.
+**Status:** Accepted (partial) (2026-04-17). NSIDs set by [Decision 0012](0012-lexicon-namespace.md) (2026-04-29).
 
 **Context.** The release-plan discussion forced the monetization
 question earlier than expected. The public wedge settled as "your

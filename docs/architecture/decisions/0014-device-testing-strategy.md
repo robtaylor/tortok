@@ -2,7 +2,7 @@
 
 **Current architecture:** [P2P & torrent engine](../p2p-torrent.md)
 
-**Status:** Accepted — 2026-07-01. Tier-3 vendor choice revised by Decision 0015 (2026-11-04).
+**Status:** Accepted (partial) (2026-07-01). Tier-3 vendor choice revised by [Decision 0015](0015-tier3-p2p-testing-lambdatest.md) (2026-11-04).
 
 **Context.** Decision 0009 deliberately scoped the Phase 2 WebTorrent spike
 to simulators only and deferred real-device validation to "the phase

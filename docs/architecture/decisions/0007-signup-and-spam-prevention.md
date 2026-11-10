@@ -2,9 +2,7 @@
 
 **Current architecture:** [Auth & signup](../auth-signup.md)
 
-**Status:** Accepted. Amended 2026-04-29 — signup is now atproto OAuth
-against the user's existing PDS, not a custodial email + password flow.
-See "Amendment 2026-04-29" below.
+**Status:** Accepted. Signup flow revised by [Decision 0019](0019-v1-uses-existing-pds-via-oauth.md) (2026-11-10). The amendment below was written into this record on 2026-04-29; 0019 is the record of that change.
 
 **Amendment 2026-04-29.** This decision originally specified a clean,
 TorTok-branded signup with atproto as invisible backend plumbing. That
