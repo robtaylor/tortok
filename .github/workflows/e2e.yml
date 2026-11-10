@@ -1,0 +1,156 @@
+# End-to-end tests: the Detox suite (tortok/e2e/) on the iOS simulator and
+# the Android emulator, against a local stack started by scripts/e2e-up.sh:
+# a throwaway PLC + PDS with a test account, the backend with its own
+# Postgres, the tracker, and the content server seeding the five test clips.
+# Nothing here touches production or bsky.social.
+#
+# GitHub-hosted runners, free for this public repository. See
+# docs/architecture/decisions/spikes/test-pds-in-ci.md.
+
+name: e2e
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  E2E_DIR: /tmp/tortok-e2e
+  DETOX_ARGS: --headless --record-logs failing --take-screenshots failing --artifacts-location ../e2e-artifacts
+
+jobs:
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      DETOX_IOS_DEVICE: iPhone 17 Pro
+      E2E_PG_URL: postgresql://localhost:5432
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            test-content/package-lock.json
+            test-network/package-lock.json
+            tortok/package-lock.json
+      - name: Postgres and applesimutils
+        run: |
+          brew install postgresql@17
+          brew tap wix/brew && brew install applesimutils
+          PG="$(brew --prefix postgresql@17)/bin"
+          echo "$PG" >> "$GITHUB_PATH"
+          brew services start postgresql@17
+          for _ in $(seq 30); do "$PG/pg_isready" -h localhost && break; sleep 1; done
+      - name: Install
+        run: |
+          pids=()
+          for d in backend test-content test-network tortok; do (cd "$d" && npm ci) & pids+=($!); done
+          for p in "${pids[@]}"; do wait "$p"; done
+      # The stack doesn't depend on the app, so it starts before the long build.
+      - name: Start the local stack
+        run: scripts/e2e-up.sh
+      - name: Build the app (release, with test sign-in)
+        working-directory: tortok
+        run: |
+          npx expo prebuild --platform ios
+          npm run e2e:build:ios
+      - name: Detox
+        working-directory: tortok
+        run: |
+          # DETOX_ARGS is a list of flags, split on purpose.
+          # shellcheck disable=SC2086
+          npm run e2e:test:ios -- --cleanup $DETOX_ARGS
+      - name: Stop the local stack
+        if: always()
+        run: scripts/e2e-down.sh
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-ios
+          path: |
+            e2e-artifacts
+            ${{ env.E2E_DIR }}/*.log
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DETOX_AVD: e2e
+      E2E_PG_URL: postgresql://postgres:postgres@localhost:5432
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            test-content/package-lock.json
+            test-network/package-lock.json
+            tortok/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Install
+        run: |
+          pids=()
+          for d in backend test-content test-network tortok; do (cd "$d" && npm ci) & pids+=($!); done
+          for p in "${pids[@]}"; do wait "$p"; done
+      # The stack doesn't depend on the app, so it starts before the long build.
+      - name: Start the local stack
+        run: scripts/e2e-up.sh
+      - name: Build the app (release, with test sign-in)
+        working-directory: tortok
+        run: |
+          npx expo prebuild --platform android
+          npm run e2e:build:android
+      - name: Detox on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          avd-name: e2e
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          working-directory: tortok
+          # No system error dialogs: a hung system UI on the emulator would
+          # otherwise cover the app ("System UI isn't responding").
+          script: |
+            adb shell settings put global hide_error_dialogs 1
+            npm run e2e:test:android -- $DETOX_ARGS
+      - name: Stop the local stack
+        if: always()
+        run: scripts/e2e-down.sh
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-android
+          path: |
+            e2e-artifacts
+            ${{ env.E2E_DIR }}/*.log

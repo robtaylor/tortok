@@ -1,54 +1,23 @@
-import { device, element, by, expect, waitFor } from 'detox';
-import { resetKeychainAndLaunch, login, waitForApp } from './helpers';
+import { element, by, waitFor } from 'detox';
+import { freshLaunch, openTab, relaunch, signInAndWaitForFeed, waitForFeed, waitForLoginScreen } from './helpers';
 
-describe('Session Persistence', () => {
-  it('should persist login across app restarts', async () => {
-    // Fresh install + login
-    await resetKeychainAndLaunch();
-    await login();
-
-    await waitFor(element(by.id('signInButton')))
-      .not.toExist()
-      .withTimeout(8000);
-
-    // Relaunch without clearing state (no keychain reset)
-    await device.disableSynchronization();
-    await device.launchApp({ newInstance: true });
-
-    // Should still be logged in — no login screen
-    await waitFor(element(by.text('Sign in to continue')))
-      .not.toBeVisible()
-      .withTimeout(8000);
+describe('Session', () => {
+  it('keeps the session across a relaunch', async () => {
+    await freshLaunch();
+    await signInAndWaitForFeed();
+    await relaunch();
+    await waitForFeed();
   });
 
-  it('should clear session on logout', async () => {
-    // Login
-    await resetKeychainAndLaunch();
-    await login();
-
-    await waitFor(element(by.id('signInButton')))
-      .not.toExist()
-      .withTimeout(8000);
-
-    // Logout — enable sync for tab/button taps to wait for animations
-    await device.enableSynchronization();
-    await element(by.label('Profile, tab, 3 of 3')).tap();
-    await device.disableSynchronization();
-    await waitFor(element(by.id('logoutButton')))
-      .toBeVisible()
-      .withTimeout(5000);
-    await device.enableSynchronization();
+  it('signs out, and stays signed out after a relaunch', async () => {
+    await freshLaunch();
+    await signInAndWaitForFeed();
+    await openTab('profileTab');
+    await waitFor(element(by.id('logoutButton'))).toBeVisible().withTimeout(5000);
     await element(by.id('logoutButton')).tap();
-    await device.disableSynchronization();
+    await waitForLoginScreen(10000);
 
-    await waitFor(element(by.text('Sign in to continue')))
-      .toBeVisible()
-      .withTimeout(5000);
-
-    // Relaunch — should still be logged out
-    await device.launchApp({ newInstance: true });
-    await waitFor(element(by.text('Sign in to continue')))
-      .toBeVisible()
-      .withTimeout(8000);
+    await relaunch();
+    await waitForLoginScreen();
   });
 });

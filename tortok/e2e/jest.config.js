@@ -2,7 +2,8 @@
 module.exports = {
   rootDir: '..',
   testMatch: ['<rootDir>/e2e/**/*.test.ts'],
-  testTimeout: 120000,
+  // Session tests launch twice and sign in; Android launches are slower.
+  testTimeout: 240000,
   maxWorkers: 1,
   transform: {
     '^.+\\.tsx?$': 'ts-jest',

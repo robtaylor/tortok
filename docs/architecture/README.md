@@ -8,7 +8,7 @@ If you're an agent or a new reader, start here: this page maps every area to its
 |---|---|---|
 | P2P & torrent engine | [p2p-torrent](p2p-torrent.md) | 0001, 0008, 0009, 0014, 0015, 0016, 0018, 0020 |
 | Federation (atproto) | [federation](federation.md) _(stub)_ | 0002, 0003, 0010, 0012, 0019 |
-| Client (Expo / React Native) | [client](client.md) | 0004, 0007, 0009, 0016, 0017, 0019 |
+| Client (Expo / React Native) | [client](client.md) | 0004, 0007, 0009, 0016, 0017, 0019, 0021 |
 | Backend / AppView | [backend](backend.md) | 0005, 0006, 0007, 0017 |
 | Auth & signup | [auth-signup](auth-signup.md) _(stub)_ | 0007, 0019 |
 | Monetization | [monetization](monetization.md) _(stub)_ | 0011 |

@@ -1,6 +1,6 @@
 # Decision 0016 — Testing strategy — where each kind of test lives
 
-**Status:** Accepted (partial) (2026-11-09).
+**Status:** Accepted (partial) (2026-11-09). Commitments 3 (self-hosted emulators) and 6 (e2e login through OAuth) revised by [Decision 0021](0021-e2e-on-hosted-runners.md) (2026-11-10).
 
 **Current architecture:** [P2P & torrent engine § Device testing](../p2p-torrent.md#device-testing).
 
