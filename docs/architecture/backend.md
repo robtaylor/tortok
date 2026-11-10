@@ -92,7 +92,7 @@ In local development `scripts/dev-up.sh` starts the backend (`npm run dev` on :8
 ## Deployment and configuration
 
 - **Image:** `backend/Dockerfile` is a two-stage `node:18-alpine` build. It runs as a non-root user, copies `schema.sql` next to the compiled `dist/db/`, bakes `backend/content/` into the image, and health-checks `/health`.
-- **Fly.io** is the only deployment target. `backend/fly.toml` deploys app `tortok-api` in `lhr` on `shared-cpu-1x` / 512 MB machines. The machine count isn't in `fly.toml`; it's set with `fly scale count` and is 1 (checked 2026-11-09), so there is exactly one in-process seeder. with HTTPS forced and a `/health` check. It never auto-stops its machine (`auto_stop_machines = "off"`) so the in-process seeder never idles out, and stops machines with `SIGTERM` and a 10 s `kill_timeout`, inside which the 8 s shutdown deadline fits. This is the production URL the client defaults to; it answers `/health` as `tortok-api.fly.dev`.
+- **Fly.io** is the only deployment target. `backend/fly.toml` deploys app `tortok-api` in `lhr` on `shared-cpu-1x` / 512 MB machines. The machine count isn't in `fly.toml`; it's set with `fly scale count` and is 1 (checked 2026-11-09), so there is exactly one in-process seeder. The app forces HTTPS and has a `/health` check. It never auto-stops its machine (`auto_stop_machines = "off"`) so the in-process seeder never idles out, and stops machines with `SIGTERM` and a 10 s `kill_timeout`, inside which the 8 s shutdown deadline fits. This is the production URL the client defaults to; it answers `/health` as `tortok-api.fly.dev`.
 - **Environment:** documented in `backend/.env.example`. Required: `JWT_SECRET` always; `DATABASE_URL`, `CONTENT_ORIGIN_URL` and `TRACKER_URLS` in production. Optional with code defaults: `PORT`, `NODE_ENV`, `JWT_EXPIRES_IN`, `INSTANCE_DOMAIN`, `INSTANCE_NAME`, `ALLOWED_ORIGINS`, `TURN_SECRET` (plus the two seeder variables outside production). `scripts/init-dev-secrets.sh` (run by `dev-up.sh`) fills in `JWT_SECRET` and `TURN_SECRET` for local development.
 
 ## Constraints
@@ -122,10 +122,10 @@ In local development `scripts/dev-up.sh` starts the backend (`npm run dev` on :8
 
 | Part | Gap | Tracking |
 |---|---|---|
-| AppView ingest | Nothing subscribes to or polls a PDS; no `app.tortok.video.post` records are indexed. The planned unified `posts` table and `services/atprotoIngest.ts` do not exist. | [`phase-3-atproto.md`](../plans/phase-3-atproto.md) Unit 2.5 (v2) Phase A |
-| Feed cutover | `/videos/feed` reads the legacy `videos` table, not atproto records. | Phase 3 Unit 2.5 (v2) Phase B; Phase 4 (Decision 0006) |
-| Retire legacy auth and write paths | `/auth/*`, `users`, `POST /videos` and the JWT middleware are still live. | Phase 3 Unit 2.5 (v2) Phase C |
-| Bluesky bridge | No bridge code on the backend; the attempt-1 tables are dropped on boot. | Phase 3 Unit 2.5 (v2) Phase D; [federation](federation.md) |
+| AppView ingest | Nothing subscribes to or polls a PDS; no `app.tortok.video.post` records are indexed. The planned unified `posts` table and `services/atprotoIngest.ts` do not exist. | [`phase-3-atproto.md`](../plans/phase-3-atproto.md) Unit 2.5A |
+| Feed cutover | `/videos/feed` reads the legacy `videos` table, not atproto records. | Phase 3 Unit 2.5B; Phase 4 (Decision 0006) |
+| Retire legacy auth and write paths | `/auth/*`, `users`, `POST /videos` and the JWT middleware are still live. | Phase 3 Unit 2.5C |
+| Bluesky bridge | No bridge code on the backend; the attempt-1 tables are dropped on boot. | Phase 3 Unit 2.5D; [federation](federation.md) |
 | Seeder extraction | The seeder still runs in the API process rather than as a separate worker reached over an internal API. | [p2p-torrent](p2p-torrent.md#implementation-status) |
 | Own PDS | No PDS is run; users log in against their existing PDS. | [`open-problems/own-pds.md`](open-problems/own-pds.md) |
 | Social graph | `follows` table and count triggers exist, with no routes. | Later phase |

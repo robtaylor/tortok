@@ -2,7 +2,7 @@
 //
 // Phase 3 Unit 2: replaces the legacy email/password backend login with
 // PAR + DPoP OAuth against the user's atproto PDS (typically
-// bsky.social). See plans/squishy-stargazing-hopcroft.md.
+// bsky.social). See docs/plans/phase-3-atproto.md, Unit 2.
 //
 // IMPORTANT — client metadata duplication:
 //   The bundled `assets/oauth-client-metadata.json` MUST stay

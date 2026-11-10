@@ -5,14 +5,14 @@ Decision 0011 (interface-first payout, first-party pool committed,
 Stripe+USDC-on-Base leading V1 rail candidate). Rail commitment
 gated on two prerequisites.
 **Must resolve by:** Sub-problem A (payout-destination Lexicon) —
-Phase 3, not rail-dependent. Sub-problem C (first-party pool rail) —
+Phase 4, not rail-dependent. Sub-problem C (first-party pool rail) —
 before V1 pool launch, gated on P1 (Apple App Store position) and
 P2 (US-incorporation decision). Sub-problem B (general pool
 primitive) — deferred to V2.
 **Blocks:** First-party pool implementation; in-app surfacing of
 creator payout destinations.
-**Related decision records:** Decision 0002 (AT Protocol + Lexicons), Decision 0005 (own PDS
-+ AppView), **Decision 0011 (monetization architecture)**.
+**Related decision records:** Decision 0002 (AT Protocol + Lexicons), Decision 0005 (AppView),
+**Decision 0011 (monetization architecture)**.
 
 ## The philosophy (decided)
 
@@ -51,16 +51,18 @@ What TorTok *does* provide:
   relies on us for.
 - **A profile surface where creators can publish external monetization
   links** — Patreon URL, Substack, merch shop, YouTube channel, etc.
-  These go in the user profile record on our PDS and federate
-  normally.
+  These go in records in the creator's own repo, on whatever PDS
+  they use, and federate normally.
 - **Optional: federated pool→payout primitives** — see sub-problem B
   below. This is additive and doesn't change anything above.
 
 ## Sub-problem A: Creator payout destination lexicon
 
 **Status:** Not yet designed.
-**Must resolve by:** Phase 3, when the PDS is live and the first user
-profile records exist.
+**Must resolve by:** Phase 4. It was first set for Phase 3 on the
+assumption that tortok would run its own PDS; v1 uses each creator's
+existing PDS instead (`own-pds.md`), and the Phase 3 plan doesn't
+schedule it. The records live in the creator's own repo either way.
 
 When a creator wants to link to their Patreon, the simplest answer is
 a `description` field on their profile with a URL in it. That's good
@@ -94,7 +96,7 @@ A creator publishes one record per destination. Clients fetch all
 records of this type from a creator's repo and render them on the
 profile page.
 
-**Decision to make in Phase 3:**
+**Decision to make in Phase 4:**
 - Which destination kinds do we ship at launch? (Probably:
   `patreon`, `substack`, `url`. Lightning is great but adds UX
   complexity — defer.)
@@ -347,45 +349,16 @@ Lightning (candidate 3) was not researched in this pass because its
 small audience is well-understood; it remains a parallel optional
 rail for crypto-native creators rather than a V1 primary candidate.
 
-### V1 direction (recorded in Decision 0011, 2026-04-17)
+### V1 direction (Decision 0011, 2026-04-17)
 
-**Architect the payout layer behind an interface. Commit to the
-first-party pool as a product. Defer the V1 rail commitment pending
-two explicit prerequisites.**
-
-Decision 0011 is the authoritative record of the
-decision. The summary below reflects what Decision 0011 commits to.
-
-1. The *interface* is the stable primitive. Sub-problem A's
-   `app.tortok.payout.destination` Lexicon is the contract; which backend
-   routes money per pool is an implementation detail. Ship the
-   Lexicon even before any pool mechanism goes live — it unblocks
-   external-destination linking (Patreon, LN address, URL) on day
-   one.
-2. The first-party "support open content" pool is a committed
-   product surface, not a mechanism-bound feature. It can launch on
-   any rail that satisfies the constraints.
-3. **Prerequisite P1: Apple App Store written position on
-   Guideline 3.1.1** for a fan-allocated PWYW pool that distributes
-   to creators. If Apple confirms IAP applies, the pool is web-only
-   for V1; native app ships the rail later or never.
-4. **Prerequisite P2: Decide whether to incorporate tortok in the
-   US.** This is a company decision (not a product decision) with
-   implications beyond monetization. The Stripe+USDC rail requires
-   it; the Lightning rail doesn't; the OC rail depends on the host's
-   requirements.
-5. After P1 and P2 resolve, the monetization decision record picks the V1 rail.
-   Leading candidate is Stripe+USDC-on-Base, with explicit
-   acceptance of: softened custody principle (transient Stripe
-   float), creator KYC (accepted as acceptable friction), and a
-   chargeback-asymmetry operational policy. Lightning runs as a
-   parallel optional rail for crypto-native creators. OC is
-   deprioritized due to automation and platform-risk blockers.
-6. "Click to create your own pool" (Sub-problem B) is **V2, not V1**.
-   Neither researched rail supports it cleanly. The general
-   `app.tortok.payout.pool` primitive ships when there is a rail that
-   supports per-pool instantiation without platform-level onboarding
-   for each new pool.
+[Decision 0011](../decisions/0011-monetization-architecture.md) is the
+record. In short: the payout layer sits behind an interface, with
+Sub-problem A's Lexicon as the contract; the first-party pool is a
+committed product; the V1 rail waits on two prerequisites, Apple's
+written position on Guideline 3.1.1 (P1) and whether tortok
+incorporates in the US (P2); Stripe+USDC-on-Base is the leading rail,
+with Lightning as an optional parallel one; and "click to create your
+own pool" (Sub-problem B) is V2.
 
 **Other mechanisms discussed and where they land:**
 
@@ -451,9 +424,8 @@ Confirming the philosophy-decided part doesn't need any new infra:
   `view-counting.md`. The resolve-by trigger is already "before
   monetization," which this file confirms.
 - **No payment processor** → not needed, no decision record change required.
-- **No KYC/PII separation** → not needed, the `monetization-PII`
-  concern I flagged in an earlier draft of this file has been
-  retracted.
+- **No KYC/PII separation** → not needed. An earlier draft of this
+  file raised a `monetization-PII` concern; it was retracted.
 - **No paid content gating** → not needed, Decision 0008's R2+P2P model
   is untouched.
 - **No ad serving** → not needed, not built, not planned.
@@ -480,15 +452,15 @@ A resolved `monetization.md` splits into three (updated 2026-04-17):
 2. **A first-party-pool decision record** that picks an operating mechanism for
    the PWYW "support open content" pool (Sub-problem C), defines
    fan UX, and resolves the contradiction with the existing
-   "TorTok does not operate the pool" principle. Likely the next
-   monetization decision record after the inbound-federation work in Decision 0010.
+   "TorTok does not operate the pool" principle. Decision 0011 set
+   the direction; this record picks the rail once P1 and P2 resolve.
 3. **A third-party-pool decision record** (possibly much later) that ships the
    `app.tortok.payout.pool` + `poolAcceptance` lexicons, the pool
    discovery UX, and the abuse/trust story (Sub-problem B). This
    one is optional — we can ship TorTok without it and add it when
    there's demand.
 
-Sub-problem A and the external-monetization philosophy depend on
-`view-counting.md` resolving first. **Sub-problem C does not** —
-fan-allocated distribution sidesteps the view-count trust problem,
-which loosens the sequencing on the first-party pool decision record.
+External monetization depends on `view-counting.md` resolving first,
+because sponsors and funders pay against counts. Neither Sub-problem A
+nor Sub-problem C does: a payout link needs no view count, and
+fan-allocated distribution sidesteps the view-count trust problem.

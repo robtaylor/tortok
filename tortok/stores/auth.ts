@@ -7,11 +7,10 @@ import {
   signOut as oauthSignOut,
 } from '@/lib/atproto/oauth';
 
-// Phase 3 Unit 2 (option b in plans/squishy-stargazing-hopcroft.md):
+// Phase 3 Unit 2 (option b in docs/plans/phase-3-atproto.md):
 // `did` is the new atproto identity. `token` + `user` remain for
-// legacy backend compat during the Unit 2 → 3 transition; Unit 5
-// removes them once the legacy email/password and feed endpoints
-// are retired.
+// legacy backend compat until Unit 2.5C removes them along with the
+// legacy email/password and feed endpoints.
 type AuthState = {
   token: string | null;
   user: User | null;

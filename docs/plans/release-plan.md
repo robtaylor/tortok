@@ -37,7 +37,10 @@ What we **don't** lead with publicly:
 
 What the architecture lets us prove if asked:
 - Creator's follow graph is portable (AT Proto)
-- Creator's content is durable beyond any single company (P2P + R2)
+- Creator's posts are signed records in their own repo, so no single
+  company holds them. The video bytes are a different story: today they
+  depend on tortok's R2 origin (see
+  [`cross-deployment-transport.md`](../architecture/open-problems/cross-deployment-transport.md))
 - Platform doesn't take a cut of creator earnings (monetization
   philosophy + Sub-problem C of `monetization.md`)
 - Federated with Bluesky (Decision 0010)
@@ -46,11 +49,12 @@ What the architecture lets us prove if asked:
 
 ## Release shape
 
-Three phases. Phase A and Phase B run in parallel from launch day.
-Phase C is a *promotion event*, triggered by either readiness or an
-exogenous catalyst.
+Three stages: **Beta**, **Ramp** and **1.0**. Beta and Ramp run in
+parallel from launch day. 1.0 is a *promotion event*, triggered by
+either readiness or an exogenous catalyst. Decisions 0010 and 0011
+predate these names and call the stages Phase A, Phase B and Phase C.
 
-### Phase A — Open beta
+### Beta — Open beta
 
 - **TestFlight Public Link** (iOS) — open registration via URL, no
   invite gating. Hard cap: 10,000 active testers.
@@ -64,15 +68,16 @@ No invite-only phase. (See "Lessons from the cold-start research"
 below — Bluesky's 21-month closed phase cost them at least one
 exodus catalyst.)
 
-### Phase B — Engine ramp (overlapping Phase A from day one)
+### Ramp — Engine ramp (overlapping Beta from day one)
 
 - Hand-emailed creator outreach (Track 1 below)
 - Bluesky bridge (Decision 0010) carries the cold-start load
 - Iterate UX based on real usage; ship fast
-- Load test seeder fleet under simulated catalyst load
+- Load test the tracker, TURN and content origin under simulated
+  catalyst load
 - Build and tune the native upgrade funnel from bridged content
 
-### Phase C — App Store and Play Store 1.0 promotion
+### 1.0 — App Store and Play Store promotion
 
 Triggered by either:
 - **Readiness** — product feels unembarrassing, infra has been load
@@ -88,20 +93,22 @@ operating at this scale") and unlocks App Store search discovery.
 Coordinated with: one HN launch (the only one), one substantive
 Substack/long-form essay, seed creators amplifying.
 
-### Phase A launch criteria (must be true before opening the link)
+### Beta launch criteria (must be true before opening the link)
 
 - Decision 0010 inbound bridge live, with opt-out tested in CI
 - Web client production-grade (not a stub) — primary share surface
-- Seeder fleet load-tested at 10k concurrent peers on a single
-  torrent
+- Tracker and content origin load-tested at 10k concurrent peers on
+  a single torrent
+- Staging environment, image promotion and production monitoring in
+  place (WS3 and WS4 of
+  [`environments-staging-production-and-their-checks.md`](environments-staging-production-and-their-checks.md))
 - Cost floor verified — see Track 4
 - TestFlight build with 90-day-renewal release rhythm in place
 - App Store Review Guidelines (Apple §1.2 UGC, §5.2 IP) read; we
   have rehearsed answers for the bridged-content moderation
   question
 - Crash and error reporting wired (so we can iterate fast in
-  Phase B)
-- Phase 2 P2P client work either complete or feature-flag-gated off
+  Ramp)
 
 ---
 
@@ -172,16 +179,16 @@ Explicitly **not** doing:
 
 Two directions, both load-bearing.
 
-**Inbound (Decision 0010, Phase 2.5):** Bluesky video posts render natively
+**Inbound (Decision 0010, Phase 3 Unit 2.5D):** Bluesky video posts render natively
 in the tortok feed. This is the cold-start solution — a new tortok
 user sees real content from real creators on day one without us
 having onboarded a single tortok-native creator.
 
-**Outbound (subset of Phase 3 work, pull forward to overlap with
-Phase 2.5):** tortok video posts embed natively in Bluesky timelines.
-Every shared tortok URL on Bluesky becomes a recruitment surface.
-This is the reason the web client must be production-grade by Phase
-A launch — Bluesky embeds open in a web view first, app second.
+**Outbound (Phase 3 Unit 3 onwards):** tortok video posts embed
+natively in Bluesky timelines. Every shared tortok URL on Bluesky
+becomes a recruitment surface. This is the reason the web client must
+be production-grade by the Beta launch: Bluesky embeds open in a web
+view first, app second.
 
 Together these form the unified federation pitch: "same network,
 different lens." Without both, the pitch is asymmetric and feels
@@ -197,7 +204,7 @@ Phase 3 ships, it's the conversion event.
 Two failure modes to plan against:
 
 **Cash burn before catalyst.** Solo dev, no salary burn. Floor is
-infra: R2 + Fly.io seeders + tracker + coturn + domain + Apple/Play
+infra: R2 + the Fly.io API, database, tracker and coturn + domains + Apple/Play
 developer accounts + a small dev sandbox. Per Decision 0008 the idle
 floor is roughly $30–$50/mo at zero users. Add Apple ($99/yr) and
 Play ($25 once) and you're looking at ~$50/mo durable.
@@ -214,11 +221,12 @@ after demand is real.
 X exodus moment. Our P2P architecture is *better positioned* for
 spike absorption than a centralized service (peer bandwidth
 contributes), but only if the bootstrap path doesn't fall over.
-Specifically the tracker, the seeders, and (for bridged content)
-the AppView's firehose subscription must scale or fail gracefully.
+Specifically the tracker, the content origin, and (for bridged
+content) the AppView's Jetstream subscription must scale or fail
+gracefully.
 
 **Pre-launch load test.** Simulate 10k concurrent peers on a single
-torrent against our seeder fleet. If it falls over, fix before
+torrent against our tracker and content origin. If it falls over, fix before
 opening the TestFlight link. Ditto for the bridge ingest under
 firehose-event spike conditions.
 
@@ -229,15 +237,16 @@ Stub. Detailed design lives in
 discussion contributed Sub-problem C (the first-party PWYW
 "support open content" pool with fan-allocated distribution).
 
-What this track needs to deliver before Phase B graduates:
+What this track needs to deliver before Ramp graduates:
 - Sub-problem A shipped: `app.tortok.payout.destination` lexicon for
   external-link payout surfaces (Patreon, Substack, etc.) on
   creator profiles
-- Sub-problem C designed: the first-party pool decision record landed,
-  operating mechanism chosen (likely fiscal-host or Lightning,
-  per the open file)
+- Sub-problem C's rail chosen. Decision 0011 committed to the
+  first-party pool and named Stripe+USDC-on-Base the leading rail,
+  pending Apple's Guideline 3.1.1 position and the US-incorporation
+  decision
 
-**Not blocking Phase A.** Phase A can launch with the wedge story
+**Not blocking Beta.** Beta can launch with the wedge story
 intact and "monetization coming soon" honest. Creators don't need
 to be paid by tortok in week 1 — they need the *promise* of being
 paid in a way the wedge respects.
@@ -250,17 +259,14 @@ Hard dependencies (must be true before the named milestone):
 
 | Milestone | Hard dependencies |
 |-----------|-------------------|
-| Phase A open beta | Decision 0010 bridge live; web client prod-grade; seeder load test passed; outbound embed prototype working in Bluesky |
-| Phase B graduation | Sub-problem A shipped; first-party pool decision record landed; engine creators (50+) actively posting native content |
-| Phase C 1.0 promotion | Catalyst window OR ≥3 months of stable Phase B operation; App Review pre-clearance; HN/essay launch coordinated |
+| Beta | Decision 0010 bridge live; web client prod-grade; tracker and origin load test passed; staging and monitoring in place; outbound embed prototype working in Bluesky |
+| Ramp graduation | Sub-problem A shipped; pool rail chosen; engine creators (50+) actively posting native content |
+| 1.0 promotion | Catalyst window OR ≥3 months of stable Ramp operation; App Review pre-clearance; HN/essay launch coordinated |
 
 Soft dependencies (nice to have, not blocking):
 
-- Decision 0006 Phase 3 PDS work — nice to have for outbound federation,
-  but the outbound embed prototype can run against a reference PDS
-  instance pre-launch
-- Decision 0006 Phase 4 AppView cutover — completes the "we run our own
-  infra end-to-end" story but isn't user-visible
+- Decision 0006 Phase 4 AppView work (ingest hardening, view
+  counting, ranking) — not user-visible at Beta
 - `view-counting.md` resolution — needed for external monetization
   trust; not needed for Sub-problem C's fan-allocated pool
 
@@ -281,7 +287,7 @@ Bluesky launches.
    AT Proto / Bluesky is our Twitter-of-2010. Inbound and outbound
    federation are how we ride it.
 4. **Catalysts are exogenous; preparedness is what we control.**
-   Phase C is a readiness-or-catalyst trigger, not a calendar date.
+   1.0 is a readiness-or-catalyst trigger, not a calendar date.
 5. **Subtract before you add.** Pick one public story (the wedge),
    bury everything else. The architecture is the proof, not the
    pitch.
@@ -329,34 +335,30 @@ Key properties:
 
 - **Specific seed creator list.** Need a Bluesky scout pass to
   identify Halo and Engine candidates. Defer until ~6 weeks before
-  Phase A launch so the list is fresh.
+  the Beta launch so the list is fresh.
 - **Cost floor verification.** Need an actual infra cost audit at
   current zero-traffic state to confirm the ~$50/mo target.
 - **Substack essay outline.** Topic: ownership on the open web. Author
   voice / pitching strategy TBD.
 - **App Review pre-clearance.** Worth a low-stakes inquiry before
-  Phase C — ask Apple Developer Relations whether bridged-content
+  1.0 — ask Apple Developer Relations whether bridged-content
   rendering raises any §5.2 IP flags. Battery is a second review risk:
   Apple rejects apps that drain the battery in the background, and the
   retired MVP specs called for a visible seeding indicator and a user
   toggle. Decision 0009 chose automatic battery and network gating with
-  no visible control; decide before Phase C whether App Review needs one.
+  no visible control; decide before 1.0 whether App Review needs one.
 - **Playback and battery targets.** The retired MVP specs proposed
   video start under 3 s, no rebuffering after the first load, and battery
   drain under 10 %/h while watching (under 7 %/h on iOS). None is a launch
-  criterion today. Decide whether to adopt them as Phase A criteria, and
+  criterion today. Decide whether to adopt them as Beta criteria, and
   measure them in the real-device tiers (Decisions 0014, 0015).
-- **Monetization decision record ordering.** Sub-problem A and Sub-problem C
-  decision records both want to ship before Phase B graduates. Which goes
-  first? Depends on whether the operating-mechanism research for
-  Sub-problem C has a clear answer.
 
 ---
 
 ## What this document does not cover
 
 - Detailed UX specifications (separate concern)
-- Detailed seeder load-test plan (engineering ticket)
+- Detailed load-test plan (engineering ticket)
 - Specific ad / press budget — there isn't one and there shouldn't
   be one until the wedge is proven
 - Post-1.0 roadmap (premature)

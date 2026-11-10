@@ -39,6 +39,8 @@ An always-on WebTorrent peer, as the backend's `SeederService` is today and the 
 Pros: a fast, always-present peer in every swarm.
 Cons: phones and browsers only connect over WebRTC, so the seeder must be reachable over UDP. On Fly that means binding to `fly-global-services` and probably a dedicated IPv4, which has never been shown to work. It needs a spike first. With R2 egress free, a seeder rarely beats the webseed.
 
+If tortok runs seeders, it also has to choose what they hold. The Phase 0b seeder design (Decision 0008, L2) planned demand-pull caching only, with pre-warming as a later config change. PeerTube's three pre-warming strategies were the candidates: `most-views` (top N by views over 7 days), `trending` (accelerating view rate) and `recently-added` (the newest N posts). The starting guesses were N = 100 per strategy, a 100 GB LRU cap per seeder, and refreshes every 30 minutes (every 6 hours for `most-views`). The first two rank on view counts, so they're only as trustworthy as [`view-counting.md`](view-counting.md) makes them.
+
 ### 3. Seeders anyone can run
 
 Volunteers or other deployments seed content they choose.
