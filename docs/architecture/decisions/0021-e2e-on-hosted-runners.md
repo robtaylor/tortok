@@ -20,7 +20,7 @@ Three things changed the picture:
 
 ## Decision
 
-1. **Detox runs in CI on GitHub-hosted runners, on every pull request:** the iOS simulator on `macos-26` and the Android emulator on `ubuntu-latest` with KVM (`.github/workflows/e2e.yml`). Both run release builds, so no Metro server is involved.
+1. **Detox runs in CI on GitHub-hosted runners, on every pull request that changes code** (the app, the backend, the test stack or the workflow; docs-only changes skip it): the iOS simulator on `macos-26` and the Android emulator on `ubuntu-latest` with KVM (`.github/workflows/e2e.yml`). Both run release builds, so no Metro server is involved.
 2. **Each job starts its own stack** with `scripts/e2e-up.sh`: a throwaway PLC and PDS with a test account (`test-network/start.mjs`), the backend with its own Postgres database, the local tracker, and the content server that seeds and serves the test clips. Nothing touches production or `bsky.social`, which keeps Decision 0016's rule that end-to-end tests never run against production.
 3. **E2e builds sign in with an app password against that PDS,** through a form on the login screen that exists only when the bundle is built with `EXPO_PUBLIC_E2E=1` (`tortok/lib/atproto/devSignIn.ts`). This replaces Decision 0016's commitment 6 for routine runs.
 4. **The real OAuth sign-in gets its own small suite later,** run rarely and by hand against a real account, rather than on every pull request.

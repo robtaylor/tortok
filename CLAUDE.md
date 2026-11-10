@@ -154,7 +154,8 @@ Most changes don't need a checkpoint. These do:
 A change to the app updates the Detox tests it affects, on both iOS and
 Android, in the same pull request; a change to the backend ships with its
 integration tests. CI (`.github/workflows/ci.yml` and `e2e.yml`) runs both on
-every pull request. Don't merge a code change that leaves either red.
+every pull request (e2e only when code changes). Don't merge a code change
+that leaves either red.
 
 ## When *not* to stop
 
