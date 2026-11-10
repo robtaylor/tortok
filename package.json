@@ -3,7 +3,6 @@
   "license": "Apache-2.0",
   "scripts": {
     "deploy:web": "bash scripts/deploy-web.sh",
-    "smoke:atproto": "node scripts/atproto-smoke-test.mjs",
     "smoke:r2": "node scripts/r2-smoke-test.mjs",
     "seed:fixtures": "node scripts/seed-fixtures.mjs"
   },

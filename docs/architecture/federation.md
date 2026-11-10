@@ -15,9 +15,11 @@ PDSes, the AppView that indexes them, and the inbound Bluesky-video bridge.
 
 - **Built:** the `app.tortok.video.post` Lexicon
   (`lexicons/app/tortok/video/post.json`); atproto OAuth login in the client
-  ([client](client.md#authentication)); and `scripts/atproto-smoke-test.mjs`,
-  which round-trips one record against `bsky.social` with an app password.
-- **Not built:** AppView ingest and the `posts` table (Phase 3 Unit 2.5A),
+  ([client](client.md#authentication)); AppView ingest of
+  `app.tortok.video.post` records into `posts`
+  ([backend](backend.md#atproto-ingest)); and `scripts/seed-fixtures.mjs`,
+  which publishes the test clips as records from the dev account.
+- **Not built:** the feed reading `posts` (Phase 3 Unit 2.5B),
   publishing from the app (Unit 3), and the Bluesky bridge (Unit 2.5D). See the
   [Phase 3 plan](../plans/phase-3-atproto.md). This doc is written in full after
   Unit 2.5.

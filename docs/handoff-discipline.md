@@ -63,7 +63,7 @@ When a handoff's work is done — whether in the next session or several session
 | "Gotcha: Hermes is missing `AbortSignal.throwIfAborted`" | A code comment near the polyfill (`tortok/lib/polyfills.ts`), or `CLAUDE.md` if it cuts across files |
 | "Build dep / env var Z is required for dev" | `.env.example` and the quickstart in the root `README.md`, not a handoff |
 | "Subsystem A doesn't yet do B" | Plan doc as a new open item, or a decision-record-tracked walk-back if it's a deferred design choice |
-| "Run `npm run smoke:atproto` to verify" | The verification block in the relevant plan doc, or the quickstart in the root `README.md` |
+| "Run `npm run seed:fixtures` to verify" | The verification block in the relevant plan doc, or the quickstart in the root `README.md` |
 | "Launch criteria: A, B, C must hold before opening signups" | `docs/plans/release-plan.md` |
 
 After migration, the handoff file is removed in the same commit as the migration:
