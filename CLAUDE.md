@@ -180,8 +180,9 @@ one:
 - **New open problem** → add `open-problems/<name>.md` with the standard
   header (Status, Must resolve by, Blocks, Related decisions) and a
   bullet in `open-problems/README.md`.
-- **Phase complete** → update Decision 0006's phase status, this
-  CLAUDE.md's phases table, and the active plan in `docs/plans/`.
+- **Phase complete** → update this CLAUDE.md's phases table and the
+  active plan in `docs/plans/`. Decision 0006 is a frozen record of
+  the original phasing; don't edit its body to track progress.
 - Then **run `uv run docs/scripts/doctool.py lint`** and clear it before
   committing.
 

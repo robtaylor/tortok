@@ -2,11 +2,7 @@
 
 **Current architecture:** [Federation](../federation.md)
 
-**Status:** Accepted. Amended 2026-04-29 — NSID is `app.tortok.video.post`
-(reverse-DNS rooted at `tortok.app`); see Decision 0012. The example record
-shape below has been updated to match the formal Lexicon definition in
-`lexicons/app/tortok/video/post.json` (notably `aspectRatio` is now
-`{width: int, height: int}` to match `app.bsky.embed.defs#aspectRatio`).
+**Status:** Accepted (partial). NSID set by [Decision 0012](0012-lexicon-namespace.md) (2026-04-29). The example record below was edited after acceptance to match `lexicons/app/tortok/video/post.json`; the Lexicon file is authoritative.
 
 **Context.** Publishing is the central design question. We need federation,
 identity, and attestation. Options surveyed: ActivityPub (the PeerTube /

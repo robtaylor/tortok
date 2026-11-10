@@ -2,7 +2,7 @@
 
 **Current architecture:** [P2P & torrent engine](../p2p-torrent.md)
 
-**Status:** Accepted
+**Status:** Accepted (partial). Web clients play from the webseed over HTTP, not through WebTorrent; see the area doc.
 
 **Context.** The current tree has two torrent engines: a stubbed libtorrent
 C++ bridge (`TorTok/Services/Torrent/TorrentEngine.swift`, never implemented)

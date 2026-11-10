@@ -2,7 +2,7 @@
 
 **Current architecture:** [P2P & torrent engine](../p2p-torrent.md)
 
-**Status:** Accepted
+**Status:** Accepted. A revision of L1's stored format, L2 and L4 is proposed in [Decision 0018](0018-content-origin-mp4-webseeds.md).
 
 **Context.** Decision 0005 extracts the WebTorrent seeder from the Express
 process but does not specify where it runs, how origin storage is

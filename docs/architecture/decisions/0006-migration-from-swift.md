@@ -2,7 +2,7 @@
 
 **Current architecture:** [Architecture overview](../README.md)
 
-**Status:** Accepted
+**Status:** Accepted. Phase status is not kept here: see the phases table in [`CLAUDE.md`](../../../CLAUDE.md) and the [plans](../../plans/). The phase notes below were edited after acceptance and have gone stale. Phase 3 scope revised by [Decision 0019](0019-v1-uses-existing-pds-via-oauth.md); the AppView's data source by [Decision 0017](0017-appview-postgres-is-a-rebuildable-index.md).
 
 Each phase below is independently shippable. If we stop at the end of any
 phase, we have a working product; we just have fewer of the features.

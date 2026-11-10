@@ -190,7 +190,7 @@ The suite therefore can't sign in against the current app.
 ## Decisions behind this
 
 - [Decision 0004 — Client is Expo + React Native + TypeScript](decisions/0004-client-expo-react-native.md)
-- [Decision 0007 — Signup UX and spam prevention](decisions/0007-signup-and-spam-prevention.md) — login is atproto OAuth against the user's existing PDS.
+- [Decision 0007 — Signup UX and spam prevention](decisions/0007-signup-and-spam-prevention.md) and [Decision 0019 — v1 uses each user's existing PDS through atproto OAuth](decisions/0019-v1-uses-existing-pds-via-oauth.md) — login is atproto OAuth against the user's existing PDS.
 - [Decision 0009 — Client seeding policy](decisions/0009-client-seeding-policy.md) — what the feed seeds back, via `useSeedPolicy`.
 - [Decision 0016 — Testing strategy](decisions/0016-testing-strategy-where-each-kind-of-test-lives.md) — targeted client unit tests; Detox as the start of tier 1.
 - [Decision 0017 — The AppView's Postgres is a rebuildable index](decisions/0017-appview-postgres-is-a-rebuildable-index.md) — the client must choose its AppView at runtime.

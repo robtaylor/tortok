@@ -21,3 +21,4 @@ that cutover.
 ## Decisions behind this
 
 - [Decision 0007 — Signup UX and spam prevention](decisions/0007-signup-and-spam-prevention.md)
+- [Decision 0019 — v1 uses each user's existing PDS through atproto OAuth](decisions/0019-v1-uses-existing-pds-via-oauth.md)

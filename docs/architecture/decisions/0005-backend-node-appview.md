@@ -2,7 +2,7 @@
 
 **Current architecture:** [Backend / AppView](../backend.md)
 
-**Status:** Accepted. Own-PDS hosting and the own-PDS firehose source revised by [Decision 0017](0017-appview-postgres-is-a-rebuildable-index.md) (2026-11-09); the AppView and seeder-worker direction is unchanged.
+**Status:** Accepted (partial). Own-PDS hosting and the own-PDS firehose source revised by [Decision 0017](0017-appview-postgres-is-a-rebuildable-index.md) (2026-11-09); the AppView and seeder-worker direction is unchanged.
 
 **Context.** The existing backend (`backend/`) is Node/Express/Postgres
 running on Cloud Run, with a WebTorrent seeder glued into the same process.
