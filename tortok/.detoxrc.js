@@ -7,6 +7,7 @@
 // backend. Start that backend first with scripts/e2e-up.sh.
 //
 // Env: DETOX_IOS_DEVICE  simulator type (default iPhone 17 Pro)
+//      DETOX_IOS_UDID    a specific simulator, overriding the type (CI)
 //      DETOX_AVD         Android emulator AVD name (default Medium_Phone_API_35)
 //      E2E_ANDROID_ARCH  ABI to build for the emulator (default x86_64;
 //                        arm64-v8a on Apple silicon)
@@ -44,7 +45,10 @@ module.exports = {
   devices: {
     simulator: {
       type: 'ios.simulator',
-      device: { type: process.env.DETOX_IOS_DEVICE ?? 'iPhone 17 Pro' },
+      // CI passes the UDID of the simulator it warmed up; otherwise by type.
+      device: process.env.DETOX_IOS_UDID
+        ? { id: process.env.DETOX_IOS_UDID }
+        : { type: process.env.DETOX_IOS_DEVICE ?? 'iPhone 17 Pro' },
     },
     emulator: {
       type: 'android.emulator',
