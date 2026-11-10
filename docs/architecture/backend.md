@@ -91,7 +91,7 @@ In local development `scripts/dev-up.sh` starts the backend (`npm run dev` on :8
 
 ## Deployment and configuration
 
-- **Image:** `backend/Dockerfile` is a two-stage `node:18-alpine` build. It runs as a non-root user, copies `schema.sql` next to the compiled `dist/db/`, bakes `backend/content/` into the image, and health-checks `/health`.
+- **Image:** `backend/Dockerfile` is a two-stage `node:22-alpine` build. It runs as a non-root user, copies `schema.sql` next to the compiled `dist/db/`, bakes `backend/content/` into the image, and health-checks `/health`.
 - **Fly.io** is the only deployment target. `backend/fly.toml` deploys app `tortok-api` in `lhr` on `shared-cpu-1x` / 512 MB machines. The machine count isn't in `fly.toml`; it's set with `fly scale count` and is 1 (checked 2026-11-09), so there is exactly one in-process seeder. The app forces HTTPS and has a `/health` check. It never auto-stops its machine (`auto_stop_machines = "off"`) so the in-process seeder never idles out, and stops machines with `SIGTERM` and a 10 s `kill_timeout`, inside which the 8 s shutdown deadline fits. This is the production URL the client defaults to; it answers `/health` as `tortok-api.fly.dev`.
 - **Environment:** documented in `backend/.env.example`. Required: `JWT_SECRET` always; `DATABASE_URL`, `CONTENT_ORIGIN_URL` and `TRACKER_URLS` in production. Optional with code defaults: `PORT`, `NODE_ENV`, `JWT_EXPIRES_IN`, `INSTANCE_DOMAIN`, `INSTANCE_NAME`, `ALLOWED_ORIGINS`, `TURN_SECRET` (plus the two seeder variables outside production). `scripts/init-dev-secrets.sh` (run by `dev-up.sh`) fills in `JWT_SECRET` and `TURN_SECRET` for local development.
 
@@ -101,7 +101,7 @@ In local development `scripts/dev-up.sh` starts the backend (`npm run dev` on :8
 - **Accounts:** usernames are alphanumeric, 3–30 characters; display names 1–100 characters.
 - **Request bodies** are capped at 10 MB. The backend accepts metadata only; video bytes never pass through it.
 - **Single process:** the seeder, the API and the schema bootstrap share one process, so the API machine is also the origin seeder and is kept always-on.
-- **Tests:** `npm test` runs Jest over `src/__tests__/`, which holds only a placeholder smoke test. No route, middleware or schema behaviour is under test. CI (`.github/workflows/ci.yml`) runs `tsc` and `npm test` on Node 18 with a Postgres 17 service, on every pull request and every push to `main`.
+- **Tests:** `npm test` runs Jest over `src/__tests__/`, which holds only a placeholder smoke test. No route, middleware or schema behaviour is under test. CI (`.github/workflows/ci.yml`) runs `tsc` and `npm test` on Node 22 with a Postgres 17 service, on every pull request and every push to `main`.
 
 ## Implementation status
 

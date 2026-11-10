@@ -26,6 +26,7 @@ deciding whether to upgrade.
 
 ### Changed
 
+- The backend and tracker run on Node 22 (was Node 18, out of support since April 2025), in their Docker images and in CI.
 - Production backend (`tortok-api` on Fly.io) keeps one machine running at all times, so the in-process origin seeder no longer stops when traffic idles.
 - Backend seeder announces only to tortok's own trackers (`TRACKER_URLS`; local tracker in dev, `tortok-tracker.fly.dev` in production), not public `wss://` trackers.
 - Content is served from `content.tortok.net`, the R2 bucket's custom domain behind Cloudflare's cache, instead of the rate-limited `r2.dev` URL. Production webseeds, torrent files and posters use it.
