@@ -219,12 +219,18 @@ describe('AtprotoIngest: backfill', () => {
     expect(await db.query('SELECT did, source FROM known_accounts')).toEqual([{ did: BOB, source: 'seed' }]);
   });
 
-  it('keeps a row indexed while the listing was running', async () => {
+  it('runs on its own, without start(): prunes, saves the profile, keeps rows indexed mid-listing', async () => {
     const { ingest } = makeIngest({ fetch: pdsWith([]) });
+    await ingest.handleEvent(commit(ALICE, 'stale', 'create', validRecord()));
+    await ingest.whenProfilesSettled();
+    await db.query("UPDATE posts SET indexed_at = NOW() - INTERVAL '1 hour'");
+    await db.query('DELETE FROM profiles');
+
     const backfill = ingest.backfill(ALICE);
     await ingest.handleEvent(commit(ALICE, 'fresh', 'create', validRecord()));
     await backfill;
     expect((await posts()).map((p) => p.rkey)).toEqual(['fresh']);
+    expect(await db.query('SELECT did FROM profiles')).toEqual([{ did: ALICE }]);
   });
 
   it('rejects an invalid seed DID up front', () => {
