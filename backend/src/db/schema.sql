@@ -152,3 +152,60 @@ FOR EACH ROW EXECUTE FUNCTION update_video_count();
 -- DROPs are idempotent and these table names will not be reused.
 DROP TABLE IF EXISTS bridged_posts;
 DROP TABLE IF EXISTS bridge_cursor;
+
+-- Phase 3 Unit 2.5A: atproto-native index (Decision 0017). Everything
+-- below is rebuildable from the network except ingest_cursor and
+-- known_accounts, which are operator-local (Decision 0017 item 2).
+
+-- One row per indexed post record. Blobs are stored as CIDs; the feed
+-- builds URLs on the AppView's blob route at read time.
+CREATE TABLE IF NOT EXISTS posts (
+    at_uri TEXT PRIMARY KEY,                -- at://did/collection/rkey
+    did TEXT NOT NULL,
+    collection TEXT NOT NULL,               -- 'app.tortok.video.post' | 'app.bsky.feed.post'
+    rkey TEXT NOT NULL,
+    cid TEXT NOT NULL,                      -- record CID; a change means an edit
+    text TEXT,                              -- caption
+    video_cid TEXT,                         -- bridged posts: the video blob
+    thumbnail_cid TEXT,                     -- poster blob
+    duration_ms INTEGER,
+    width INTEGER,                          -- the record's aspectRatio
+    height INTEGER,
+    hashtags TEXT[],
+    magnet_link TEXT,                       -- app.tortok rows
+    info_hash TEXT,
+    torrent_cid TEXT,                       -- torrentBlob (Decision 0020)
+    hls_url TEXT,                           -- app.bsky rows (Decision 0010)
+    record_created_at TIMESTAMPTZ NOT NULL,
+    indexed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_posts_collection_created
+    ON posts (collection, record_created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_did ON posts (did);
+CREATE INDEX IF NOT EXISTS idx_posts_info_hash ON posts (info_hash);
+
+-- Authors, resolved from their DID document and their PDS's
+-- app.bsky.actor.profile record. handle is NULL when it doesn't verify.
+CREATE TABLE IF NOT EXISTS profiles (
+    did TEXT PRIMARY KEY,
+    handle TEXT,
+    display_name TEXT,
+    avatar_cid TEXT,
+    pds_endpoint TEXT,
+    refreshed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Operator-local: where ingest resumes the Jetstream stream (time_us).
+CREATE TABLE IF NOT EXISTS ingest_cursor (
+    key TEXT PRIMARY KEY,
+    cursor BIGINT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Operator-local: accounts backfilled with listRecords on boot.
+-- source is how the DID became known: 'jetstream' or 'seed'.
+CREATE TABLE IF NOT EXISTS known_accounts (
+    did TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    added_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

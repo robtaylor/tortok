@@ -114,7 +114,7 @@ the hand-run Detox suite described in [client](client.md#testing).
 - [Decision 0008](decisions/0008-seeder-storage-cdn.md) — seeder, storage, and CDN infrastructure (R2 origin, four layers).
 - [Decision 0009](decisions/0009-client-seeding-policy.md) — Phase 2 client seeding scope and policy.
 - [Decision 0018](decisions/0018-content-origin-mp4-webseeds.md) _(proposed)_ — one MP4 per video on R2 as the webseed; no origin seeder.
-- [Decision 0020](decisions/0020-torrent-metadata-as-pds-blob.md) _(proposed)_ — posts carry their `.torrent` as a PDS blob, so they start with no peer.
+- [Decision 0020](decisions/0020-torrent-metadata-as-pds-blob.md) — posts carry their `.torrent` as a PDS blob, so they start with no peer.
 - [Decision 0014](decisions/0014-device-testing-strategy.md) — device testing strategy (three tiers).
 - [Decision 0015](decisions/0015-tier3-p2p-testing-lambdatest.md) — tier-3 real-device P2P testing on LambdaTest/TestMu.
 - [Decision 0016](decisions/0016-testing-strategy-where-each-kind-of-test-lives.md) — testing strategy: tier 1 as the primary regression gate, integration tests for new backend code, no legacy-backend backfill.
