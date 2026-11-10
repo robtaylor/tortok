@@ -47,7 +47,8 @@ jobs:
       - name: Postgres and applesimutils
         run: |
           brew install postgresql@17
-          brew tap wix/brew && brew install applesimutils
+          # applesimutils comes from Wix's tap, which Homebrew won't load until trusted.
+          brew tap wix/brew && brew trust wix/brew && brew install applesimutils
           PG="$(brew --prefix postgresql@17)/bin"
           echo "$PG" >> "$GITHUB_PATH"
           brew services start postgresql@17
