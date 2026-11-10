@@ -382,6 +382,16 @@ Afterwards the only way content reaches the app is through atproto.
 13. **AppView URL setting.** An in-app AppView base-URL setting,
     defaulting to tortok's, replaces the build-time `EXPO_PUBLIC_API_URL`
     (decision 4 below).
+14. **AppView custom domain.** Serve the `tortok-api` Fly app as
+    `appview.tortok.app`: a Fly certificate plus a DNS record in the
+    Cloudflare `tortok.app` zone. The URL setting's default is that
+    domain, so `tortok-api.fly.dev` never ships in a user build. The Fly
+    app keeps its name; nothing user-facing shows it. The domain is on
+    `tortok.app`, not `tortok.net`, because the AppView is part of the
+    app and `tortok.net` is kept for content. It also gives the later
+    service DID a stable host (`did:web:appview.tortok.app`). Decided
+    with the user on 2026-11-10, along with keeping ingest in the
+    `tortok-api` process until it needs to scale on its own.
 
 **Removal checklist** (checked against the code 2026-11-09; each item is
 unused once 2.5B and 2.5C land, unless noted):
