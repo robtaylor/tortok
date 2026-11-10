@@ -30,7 +30,7 @@ Write the notes in the `[Unreleased]` section of [`CHANGELOG.md`](../CHANGELOG.m
 
 For maintainers cutting a release:
 
-1. **Verify the checks pass.** There is no CI yet (no `.github/`); Decision 0016 and the [environments plan](plans/environments-staging-production-and-their-checks.md) set it up. Until then, run the backend and client unit tests and the Detox suite by hand.
+1. **Verify the checks pass.** CI (`.github/workflows/ci.yml`) must be green on `main`: it runs the backend typecheck and tests and the doc linter. The client unit tests and the Detox suite aren't in CI yet, so run them by hand.
 
 2. **Roll the `[Unreleased]` section in [`CHANGELOG.md`](../CHANGELOG.md) into a numbered version block.** Format follows [Keep a Changelog](https://keepachangelog.com/). Update the link references at the bottom. Leave a fresh empty `[Unreleased]` section.
 

@@ -101,7 +101,7 @@ In local development `scripts/dev-up.sh` starts the backend (`npm run dev` on :8
 - **Accounts:** usernames are alphanumeric, 3–30 characters; display names 1–100 characters.
 - **Request bodies** are capped at 10 MB. The backend accepts metadata only; video bytes never pass through it.
 - **Single process:** the seeder, the API and the schema bootstrap share one process, so the API machine is also the origin seeder and is kept always-on.
-- **Tests:** `npm test` runs Jest over `src/__tests__/`, which holds only a placeholder smoke test. No route, middleware or schema behaviour is under test.
+- **Tests:** `npm test` runs Jest over `src/__tests__/`, which holds only a placeholder smoke test. No route, middleware or schema behaviour is under test. CI (`.github/workflows/ci.yml`) runs `tsc` and `npm test` on Node 18 with a Postgres 17 service, on every pull request and every push to `main`.
 
 ## Implementation status
 
