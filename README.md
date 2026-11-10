@@ -114,3 +114,9 @@ lists each area of the system with its current-state reference and the
 decisions behind it. Questions not yet decided live in
 [`docs/architecture/open-problems/`](docs/architecture/open-problems/README.md),
 such as how to count views that can be trusted without tracking viewers.
+
+## Licence
+
+tortok is licensed under the [Apache License 2.0](LICENSE). The Big Buck Bunny
+test clips are © Blender Foundation under CC-BY 3.0; see
+[`test-content/clips/CREDITS.md`](test-content/clips/CREDITS.md).

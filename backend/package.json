@@ -16,7 +16,7 @@
     "video"
   ],
   "author": "TorTok",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",

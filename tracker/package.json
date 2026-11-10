@@ -1,6 +1,7 @@
 {
   "name": "tortok-tracker",
   "version": "1.0.0",
+  "license": "Apache-2.0",
   "description": "WebTorrent tracker for TorTok P2P video delivery",
   "type": "module",
   "main": "server.js",
