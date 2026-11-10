@@ -29,11 +29,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 18 }
+        with: { node-version: 22 }
       - run: npm ci && npm run build
         working-directory: backend
-      - uses: actions/setup-node@v4
-        with: { node-version: 22 }
       - run: npm ci
         working-directory: test-network
       - run: node spike.mjs
@@ -53,11 +51,9 @@ jobs:
           for _ in $(seq 30); do "$(brew --prefix postgresql@17)/bin/pg_isready" -h localhost && break; sleep 1; done
           "$(brew --prefix postgresql@17)/bin/createdb" -h localhost tortok_pds_spike
       - uses: actions/setup-node@v4
-        with: { node-version: 18 }
+        with: { node-version: 22 }
       - run: npm ci && npm run build
         working-directory: backend
-      - uses: actions/setup-node@v4
-        with: { node-version: 22 }
       - run: npm ci
         working-directory: test-network
       - run: node spike.mjs
