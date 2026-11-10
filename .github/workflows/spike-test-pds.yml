@@ -1,0 +1,64 @@
+# Spike only (docs/architecture/decisions/spikes/test-pds-in-ci.md): does a
+# throwaway PLC + PDS run on GitHub-hosted runners, and can tortok's ingest
+# backfill from it? Deleted when the spike resolves.
+name: spike-test-pds
+
+on:
+  push:
+    branches: [spike/test-pds]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tortok_pds_spike
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      SPIKE_DB_URL: postgresql://postgres:postgres@localhost:5432/tortok_pds_spike
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 18 }
+      - run: npm ci && npm run build
+        working-directory: backend
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+        working-directory: test-network
+      - run: node spike.mjs
+        working-directory: test-network
+
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    env:
+      SPIKE_DB_URL: postgresql://localhost:5432/tortok_pds_spike
+    steps:
+      - uses: actions/checkout@v4
+      - name: Postgres
+        run: |
+          brew install postgresql@17
+          brew services start postgresql@17
+          for _ in $(seq 30); do "$(brew --prefix postgresql@17)/bin/pg_isready" -h localhost && break; sleep 1; done
+          "$(brew --prefix postgresql@17)/bin/createdb" -h localhost tortok_pds_spike
+      - uses: actions/setup-node@v4
+        with: { node-version: 18 }
+      - run: npm ci && npm run build
+        working-directory: backend
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+        working-directory: test-network
+      - run: node spike.mjs
+        working-directory: test-network

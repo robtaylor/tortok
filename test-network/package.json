@@ -1,0 +1,12 @@
+{
+  "name": "tortok-test-network",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Throwaway PLC + PDS for end-to-end tests (spike)",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@atproto/api": "^0.19.11",
+    "@atproto/dev-env": "0.7.5"
+  }
+}
