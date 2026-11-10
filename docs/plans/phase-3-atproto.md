@@ -7,7 +7,7 @@
 - ✅ **Unit 0** — Decision 0012 (Lexicon namespace governance) merged; canonical NSID is **`app.tortok.*`** (reverse-DNS rooted at `tortok.app`); schema lives at `lexicons/app/tortok/video/post.json`; AppView+PDS cost note added to Deferred Decisions in [`open-problems/README.md`](../architecture/open-problems/README.md).
 - ✅ **Unit 1** — Standalone Node smoke test (`scripts/atproto-smoke-test.mjs`) round-trips an `app.tortok.video.post` record against `bsky.social` using app-password auth.
 - ✅ **Unit 2** — OAuth round-trip verified end to end on the iOS simulator (2026-05-02). Android and web haven't been verified. `tortok.app` is live on Cloudflare Pages, `@atproto/oauth-client-expo` is integrated, the Hermes polyfills are in `tortok/lib/polyfills.ts`, the login screen pre-fills the last handle, and the auth store has 7 unit tests.
-- ➡️ **Unit 2.5** — replanned 2026-05-02 after a failed first attempt, rescoped 2026-11-09. Step 2.5-0 (cleanup) is done; 2.5A (ingest) is next. Its sub-phases run 2.5-0 → 2.5A ingest → 2.5B feed cutover → 2.5C retire legacy → 2.5D Bluesky bridge → 2.5E final checks. It absorbs Units 4 (mostly), 5 and 6.
+- ➡️ **Unit 2.5** — replanned 2026-05-02 after a failed first attempt, rescoped 2026-11-09. Steps 2.5-0 (cleanup) and 2.5A (ingest, 2026-11-10; built and checked against the live network, not yet deployed) are done; 2.5B (feed cutover) is next. Its sub-phases run 2.5-0 → 2.5A ingest → 2.5B feed cutover → 2.5C retire legacy → 2.5D Bluesky bridge → 2.5E final checks. It absorbs Units 4 (mostly), 5 and 6.
 - **Unit 3** — after Unit 2.5; the client publishes `app.tortok.video.post` via the user's PDS.
 - **Unit 7** — web cookie auth, not started.
 - ✅ **Moderation parallel track** — Decision 0013 landed 2026-04-29 (atproto labelers + illegal-content floor + UK age-verification gate); `open-problems/moderation.md` deleted.
@@ -325,11 +325,16 @@ flow into a unified `posts` table that the feed reads from. The legacy
    - It uses app-password auth and caches the session, because the account
      allows 10 logins a day.
    - It's idempotent: records that already exist are skipped.
-   - It deletes the 2026-04-30 localhost smoke-test record.
+   - Records in the collection that aren't fixtures are listed, and
+     deleted with `--prune`. The 2026-04-30 localhost smoke-test record
+     was deleted on the first run.
+   - Its clip list and torrent builder are shared with
+     `seed-prod-test-content.mjs` (`scripts/lib/test-clips.mjs`), so the
+     infohashes always match R2.
 
-4. **Integration tests** for ingest against a real Postgres, with fixtures
-   for both `app.tortok.video.post` and bridged `app.bsky.feed.post`
-   shapes (Decision 0016, commitment 2).
+4. **Integration tests** for ingest against a real Postgres (Decision
+   0016, commitment 2). Tests for the bridged `app.bsky.feed.post` shape
+   land with the bridge in 2.5D; 2.5A only checks that ingest ignores it.
 
 **Done =** running `seed-fixtures.mjs` publishes five records; within
 seconds the ingest worker has copied them to `posts`, and

@@ -11,10 +11,12 @@ import { initializeDatabase, closeDatabase } from './db';
 import authRoutes from './routes/auth';
 import videoRoutes from './routes/videos';
 import { seeder } from './services/seeder';
+import { ingestFromEnv } from './services/atprotoIngest';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 let server: http.Server | undefined;
+const ingest = ingestFromEnv();
 
 // Middleware
 app.use(helmet());
@@ -134,6 +136,10 @@ async function start() {
       // Continue without seeder - not critical
     }
 
+    // Index atproto records (Phase 3 Unit 2.5A). A failure here is fatal:
+    // the feed moves onto this index in 2.5B.
+    await ingest.start();
+
     // Start listening
     server = app.listen(PORT, () => {
       console.log('');
@@ -153,7 +159,7 @@ async function start() {
 
 // Graceful shutdown. Fly.io sends SIGINT by default (fly.toml can
 // override it), docker/dev-down send SIGTERM, Ctrl+C sends SIGINT — handle
-// both. Order: stop accepting HTTP and stop seeding, then close the pool,
+// both. Order: stop accepting HTTP, seeding and ingest, then close the pool,
 // under a hard deadline so a stuck step can't block the platform's kill.
 const SHUTDOWN_DEADLINE_MS = 8000;
 let shuttingDown = false;
@@ -174,7 +180,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
     const httpClosed = server ? promisify(server.close.bind(server))() : undefined;
     // Idle keep-alive sockets would otherwise hold close() open.
     server?.closeIdleConnections();
-    await Promise.all([httpClosed, seeder.destroy()]);
+    await Promise.all([httpClosed, seeder.destroy(), ingest.stop()]);
     console.log('HTTP server closed');
     await closeDatabase();
     process.exit(0);

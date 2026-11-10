@@ -1,6 +1,6 @@
 # Decision 0020 — Video posts carry their torrent metadata as a PDS blob
 
-**Status:** Proposed.
+**Status:** Accepted (partial) (2026-11-10). The Lexicon, the fixture records and the AppView's index carry `torrentBlob`; clients don't use it until Phase 3 Unit 2.5B.
 
 **Current architecture:** [P2P & torrent engine](../p2p-torrent.md).
 

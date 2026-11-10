@@ -30,42 +30,22 @@
 
 import 'dotenv/config';
 import fs from 'fs';
-import path from 'path';
 import { createRequire } from 'module';
-import { promisify } from 'util';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import {
+  CLIPS, CLIP_META, buildClipTorrent, clipFiles, PUBLIC_URL, requireEnv,
+} from './lib/test-clips.mjs';
 
-// create-torrent, parse-torrent (ESM-only) and pg live in backend/node_modules.
-const backendModules = new URL('../backend/node_modules/', import.meta.url);
-const createTorrent = (await import(new URL('create-torrent/index.js', backendModules))).default;
-const { default: parseTorrent, toMagnetURI } = await import(new URL('parse-torrent/index.js', backendModules));
+// pg lives in backend/node_modules.
 const { Client } = createRequire(new URL('../backend/package.json', import.meta.url))('pg');
 
 const DRY_RUN = process.argv.includes('--dry-run');
-const ROOT = new URL('..', import.meta.url).pathname;
-const CONTENT = path.join(ROOT, 'test-content');
-const TRACKERS = (process.env.TRACKER_URLS ?? 'wss://tortok-tracker.fly.dev')
-  .split(',').map((u) => u.trim()).filter(Boolean);
-const PUBLIC_URL = (process.env.CONTENT_ORIGIN_URL ?? 'https://content.tortok.net').replace(/\/$/, '');
-const PREFIX = process.env.R2_PREFIX ?? 'test-content';
 const OWNER_USERNAME = process.env.OWNER_USERNAME ?? 'testuser';
 const R2_BUCKET = process.env.R2_BUCKET ?? 'tortok-content';
-
-// Must match test-content/make-test-clips.sh output.
-const CLIPS = [
-  { name: 'bbb-01', caption: 'Big Buck Bunny — opening shot #bbb #test' },
-  { name: 'bbb-02', caption: 'Big Buck Bunny — butterfly scene #bbb #test' },
-  { name: 'bbb-03', caption: 'Big Buck Bunny — the chase #bbb #test' },
-  { name: 'bbb-04', caption: 'Big Buck Bunny — squirrel tricks #bbb #test' },
-  { name: 'bbb-05', caption: 'Big Buck Bunny — finale #bbb #test' },
-];
-const META = { durationSeconds: 20, width: 608, height: 1080, hashtags: ['bbb', 'test'] };
-
-function requireEnv(name) {
-  const v = process.env[name];
-  if (!v) throw new Error(`${name} is not set`);
-  return v;
-}
+const META = {
+  durationSeconds: CLIP_META.durationMs / 1000, width: CLIP_META.width, height: CLIP_META.height,
+  hashtags: CLIP_META.tags,
+};
 
 const s3 = DRY_RUN ? null : new S3Client({
   region: 'auto',
@@ -86,46 +66,24 @@ async function put(key, body, contentType) {
 
 async function main() {
   // Fail before any upload: every input file exists, and a DB target is set.
-  const inputs = CLIPS.map((clip) => ({
-    ...clip,
-    clipPath: path.join(CONTENT, 'clips', `${clip.name}.mp4`),
-    posterPath: path.join(CONTENT, 'posters', `${clip.name}.jpg`),
-  }));
-  const missing = inputs.flatMap((c) => [c.clipPath, c.posterPath]).filter((f) => !fs.existsSync(f));
-  if (missing.length) throw new Error(`missing input files:\n  ${missing.join('\n  ')}`);
+  const inputs = CLIPS.map((clip) => ({ ...clip, ...clipFiles(clip) }));
   const databaseUrl = DRY_RUN ? null : requireEnv('DATABASE_URL');
-  if (TRACKERS.length === 0) throw new Error('TRACKER_URLS contains no tracker URLs');
 
   const prepared = [];
-  for (const { clipPath, posterPath, ...clip } of inputs) {
-    const keys = {
-      clip: `${PREFIX}/${clip.name}.mp4`,
-      poster: `${PREFIX}/posters/${clip.name}.jpg`,
-      torrent: `${PREFIX}/${clip.name}.torrent`,
-    };
-    const clipUrl = publicUrl(keys.clip);
-
-    // Single-file torrent: the webseed URL is the file itself. No `name:`
-    // option — the name must stay the file's basename.
-    const torrentBuf = await promisify(createTorrent)(clipPath,
-      { announceList: [TRACKERS], urlList: [clipUrl] });
-    const parsed = await parseTorrent(torrentBuf);
-    if (!parsed.urlList?.includes(clipUrl) || !TRACKERS.every((t) => parsed.announce?.includes(t))) {
-      throw new Error(`${clip.name}: torrent is missing its webseed or tracker`);
-    }
-    const magnet = toMagnetURI(parsed);
-
-    await put(keys.clip, fs.readFileSync(clipPath), 'video/mp4');
-    await put(keys.poster, fs.readFileSync(posterPath), 'image/jpeg');
-    await put(keys.torrent, torrentBuf, 'application/x-bittorrent');
+  for (const clip of inputs) {
+    const { torrentBuf, infoHash, magnet } = await buildClipTorrent(clip.clipPath, clip.clipUrl);
+    await put(clip.keys.clip, fs.readFileSync(clip.clipPath), 'video/mp4');
+    await put(clip.keys.poster, fs.readFileSync(clip.posterPath), 'image/jpeg');
+    await put(clip.keys.torrent, torrentBuf, 'application/x-bittorrent');
     console.log(`${DRY_RUN ? '[dry-run] ' : ''}uploaded ${clip.name}: ${magnet}`);
 
     prepared.push({
-      ...clip,
-      infoHash: parsed.infoHash,
+      name: clip.name,
+      caption: `${clip.title} ${CLIP_META.tags.map((tag) => `#${tag}`).join(' ')}`,
+      infoHash,
       magnet,
-      torrentFileUrl: publicUrl(keys.torrent),
-      posterUrl: publicUrl(keys.poster),
+      torrentFileUrl: publicUrl(clip.keys.torrent),
+      posterUrl: publicUrl(clip.keys.poster),
     });
   }
 
