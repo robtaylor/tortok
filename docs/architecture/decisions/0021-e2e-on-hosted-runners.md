@@ -40,7 +40,7 @@ Three things changed the picture:
 - The app carries a test sign-in form in e2e builds, gated by a build-time flag that user builds never set.
 - The real OAuth flow isn't covered on every pull request.
 - The runners' network belongs to GitHub, so the two-emulator P2P offload check may need a different home when it's built.
-- CI time: each job builds the app from scratch, around 20–30 minutes per platform without caching.
+- CI time, measured on 2026-11-10 before warm caches: about 22 minutes for Android and 38 for iOS. The hosted macOS runner (3 cores, 7 GB) is the bottleneck: a stock iOS simulator takes about 3.6 GB. CI slims it to about 1 GB with `simslim` (MobAI-App/simslim, pinned), which disables background services the tests don't use; all 14 tests pass on a slimmed simulator. The workflow runs only when code changes.
 
 ## Walk-back options
 

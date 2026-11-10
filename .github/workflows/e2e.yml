@@ -93,6 +93,10 @@ jobs:
           ccache --show-stats || true
       # The first launch on a freshly booted simulator takes minutes; pay it
       # once here rather than inside the first test file's timeouts.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
       - name: Warm up the simulator
         run: |
           # Names repeat across installed runtimes; use the newest runtime's
@@ -101,8 +105,13 @@ jobs:
             '[.devices | to_entries | sort_by(.key)[] | select(.key | test("iOS")) | .value[] | select(.name == $name)] | last | .udid')
           test -n "$udid" && test "$udid" != null
           echo "DETOX_IOS_UDID=$udid" >> "$GITHUB_ENV"
-          xcrun simctl boot "$udid" || true
+          # Slim the simulator (MobAI-App/simslim): it disables ~170 background
+          # services the tests don't use, taking it from ~3.6 GB to ~1 GB on a
+          # 7 GB runner. Pinned; `simslim on` reboots it slim and leaves it up.
+          go install github.com/mobai-app/simslim/cmd/simslim@v0.14.0
+          "$(go env GOPATH)/bin/simslim" on "$udid" --boot-timeout 15m --spawn-timeout 5m
           xcrun simctl bootstatus "$udid" -b
+          "$(go env GOPATH)/bin/simslim" measure "$udid"
           xcrun simctl install "$udid" tortok/ios/build/Build/Products/Release-iphonesimulator/tortok.app
           xcrun simctl launch "$udid" com.anonymous.tortok
           sleep 90
