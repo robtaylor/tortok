@@ -190,7 +190,7 @@ relaunch, and sign-out.
   `homeTab`, `recordTab` and `profileTab`.
 - **Running it:** `npm run e2e:build:ios` then `npm run e2e:test:ios` (or the
   `android` pair) from `tortok/`, after `npx expo prebuild` and with the stack
-  up. CI runs both platforms on every pull request
+  up. CI runs both platforms on every pull request that changes code
   (`.github/workflows/e2e.yml`).
 
 ## Implementation status

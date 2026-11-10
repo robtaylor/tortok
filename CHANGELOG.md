@@ -19,7 +19,7 @@ deciding whether to upgrade.
 
 ### Added
 
-- End-to-end tests run in CI on every pull request, on the iOS simulator and the Android emulator: sign-in, the feed, playback, pause, swiping, tabs, profile and sign-out (Detox, against a throwaway local stack with its own atproto PDS; Decision 0021).
+- End-to-end tests run in CI on every pull request that changes code, on the iOS simulator and the Android emulator: sign-in, the feed, playback, pause, swiping, tabs, profile and sign-out (Detox, against a throwaway local stack with its own atproto PDS; Decision 0021).
 - CI on GitHub Actions: the backend typecheck and Jest suite (with a Postgres 17 service) and the doc linter run on every pull request and push to `main`.
 - tortok is licensed under Apache-2.0 (`LICENSE`), and the repository is public.
 - `scripts/seed-prod-test-content.mjs` publishes the Big Buck Bunny test clips to an environment (R2 upload + feed rows), each playable from its R2 webseed with no seeder.

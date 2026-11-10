@@ -9,10 +9,20 @@
 
 name: e2e
 
+# Only when code the app depends on changes: docs-only and planning PRs
+# skip it (each run takes 20-40 minutes).
 on:
   pull_request:
+    paths: &code
+      - tortok/**
+      - backend/**
+      - test-network/**
+      - test-content/**
+      - scripts/e2e-*.sh
+      - .github/workflows/e2e.yml
   push:
     branches: [main]
+    paths: *code
   workflow_dispatch:
 
 concurrency:
