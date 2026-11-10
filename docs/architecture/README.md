@@ -6,7 +6,7 @@ If you're an agent or a new reader, start here: this page maps every area to its
 
 | Area | Reference | Decisions behind it |
 |---|---|---|
-| P2P & torrent engine | [p2p-torrent](p2p-torrent.md) | 0001, 0008, 0009, 0014, 0015, 0016, 0018 |
+| P2P & torrent engine | [p2p-torrent](p2p-torrent.md) | 0001, 0008, 0009, 0014, 0015, 0016, 0018, 0020 |
 | Federation (atproto) | [federation](federation.md) _(stub)_ | 0002, 0003, 0010, 0012, 0019 |
 | Client (Expo / React Native) | [client](client.md) | 0004, 0007, 0009, 0016, 0017, 0019 |
 | Backend / AppView | [backend](backend.md) | 0005, 0006, 0007, 0017 |
