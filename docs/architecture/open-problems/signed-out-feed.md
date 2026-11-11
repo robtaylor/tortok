@@ -47,9 +47,19 @@ to be counted separately.
    prompt to sign in. Limits how many anonymous views there can be, at the cost
    of a harder wall later.
 
+## Current leaning (2026-11-11)
+
+Not a decision. Candidate 2 with signed-out views not counted at all. Under
+`view-counting.md`'s current leaning, clients report watching through
+`sendInteractions`, which the user's PDS authenticates; a signed-out client
+has no PDS to do that, so not counting its views falls out of the design
+rather than needing a separate bucket. It also matches how TikTok's
+qualified views, the ones monetization pays on, count one per account (see
+`view-counting.md`).
+
 ## What would settle it
 
-- Which view-counting approach `view-counting.md` lands on, and whether it can
-  use views with no DID at all.
+- Which view-counting approach `view-counting.md` lands on, and whether a
+  public play count shown to everyone should include signed-out plays.
 - Whether moderation or launch criteria (Decision 0013) require an account
   before content is shown.
