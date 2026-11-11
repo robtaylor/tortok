@@ -241,6 +241,26 @@ publish every user's watch history. That is why views end up as private,
 trusted data unless approach 2 or 3 makes them provable without revealing
 who watched.
 
+## Prior art: TikTok's two counts (read 2026-11-11)
+
+According to a guide by a seller of TikTok views
+([getlikes.com](https://getlikes.com/guides/what-counts-as-a-view-on-tiktok/)),
+citing TikTok's Creator Academy page on qualified views, TikTok keeps two
+numbers. Neither claim has been checked against TikTok's own pages.
+
+- **The public count** shown on a video counts a play the moment it starts,
+  with no minimum watch time, and every loop counts again. TikTok removes
+  views it judges invalid, and the number can lag by hours.
+- **Qualified views**, which monetization pays on, need at least 5 seconds
+  of watching from the For You feed (30 seconds from search), on videos
+  over a minute long, and count one view per account per video. Ads,
+  promotion and fraud are excluded.
+
+The split fits tortok's approach 1: a cheap, generous public number, and a
+strict, per-account number for anything money depends on. Per-account
+dedup needs an account behind each view, which is one reason not to count
+signed-out views ([`signed-out-feed.md`](signed-out-feed.md)).
+
 ## Current leaning (2026-11-09)
 
 Not a decision. Approach 6 is the target, because it is the only candidate
