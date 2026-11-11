@@ -168,7 +168,9 @@ jobs:
         options: >-
           --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      STALE_CACHE_PREFIX: gradle-
+      # Only Gradle's home entry is keyed by commit; its other entries
+      # (dependencies, transforms, ...) are keyed by content and stay valid.
+      STALE_CACHE_PREFIX: gradle-home-
       DETOX_AVD: e2e
       E2E_PG_URL: postgresql://postgres:postgres@localhost:5432
     steps:
