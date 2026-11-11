@@ -51,7 +51,12 @@ rm -f "$E2E_NETWORK_FILE"
 start_svc network "$REPO_ROOT/test-network" node start.mjs
 start_svc tracker "$REPO_ROOT/test-content" node tracker.mjs
 start_svc content "$REPO_ROOT/test-content" node seeder.mjs
+# The test stack has no Jetstream, and must not reach Bluesky's (the
+# backend's default), so ingest points at a closed local port and retries
+# quietly, with no seed accounts (set empty, so a local backend/.env can't
+# add any). The feed doesn't read ingested posts until Phase 3 Unit 2.5B.
 NODE_ENV=test PORT=8080 DATABASE_URL="$DB_URL" JWT_SECRET=e2e-only \
+  JETSTREAM_URL=ws://127.0.0.1:9/subscribe INGEST_SEED_DIDS='' \
   start_svc backend "$REPO_ROOT/backend" node -r ts-node/register/transpile-only src/index.ts
 
 wait_for network "test -f '$E2E_NETWORK_FILE'"
