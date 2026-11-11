@@ -398,10 +398,15 @@ export class AtprotoIngest {
   }
 }
 
-/** Build the service from the environment (`JETSTREAM_URL`, `INGEST_SEED_DIDS`). */
+/**
+ * Build the service from the environment: `JETSTREAM_URL`,
+ * `INGEST_SEED_DIDS`, and `PLC_DIRECTORY_URL` (default https://plc.directory;
+ * the e2e stack points it at its own PLC).
+ */
 export function ingestFromEnv(): AtprotoIngest {
   return new AtprotoIngest({
     jetstreamUrl: process.env.JETSTREAM_URL || undefined,
     seedDids: (process.env.INGEST_SEED_DIDS ?? '').split(',').map((d) => d.trim()).filter(Boolean),
+    identity: new IdentityResolver({ plcDirectory: process.env.PLC_DIRECTORY_URL || undefined }),
   });
 }

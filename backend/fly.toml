@@ -21,6 +21,9 @@ kill_timeout = 10
   # atproto ingest backfills these on boot: the dev account that holds the
   # test fixtures (scripts/seed-fixtures.mjs).
   INGEST_SEED_DIDS = "did:plc:teqobv6pqer5nw7roqrgi55v"
+  # Origin of the feed's blob URLs (posters, avatars, .torrent files); the
+  # app sits behind Fly's TLS-terminating proxy, so the request says http.
+  PUBLIC_BASE_URL = "https://tortok-api.fly.dev"
 
 [http_service]
   internal_port = 8080

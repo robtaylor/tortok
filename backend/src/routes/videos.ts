@@ -1,9 +1,21 @@
-import { Router, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import { query, getClient } from '../db';
 import { AuthRequest, authenticateJWT, optionalAuth } from '../middleware/auth';
 import { validate, schemas } from '../middleware/validate';
+import { trackerUrls } from '../config';
+import { feedItem, feedPage, type FeedContext } from '../services/feedView';
 
 const router = Router();
+const TRACKERS = trackerUrls();
+
+/**
+ * Blob URLs point at PUBLIC_BASE_URL (set in deployed environments, which
+ * sit behind a TLS-terminating proxy), else at the host the request used.
+ */
+function feedContext(req: Request): FeedContext {
+  const blobBase = (process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  return { blobBase, trackers: TRACKERS };
+}
 
 /**
  * POST /videos
@@ -88,59 +100,18 @@ router.post('/', authenticateJWT, validate(schemas.createVideo), async (req: Aut
 
 /**
  * GET /feed
- * Get video feed
+ * Indexed app.tortok.video.post records, newest first (Phase 3 Unit 2.5B;
+ * shape in services/feedView.ts). Paged by `offset`; `nextCursor` is the
+ * next offset.
  */
-router.get('/feed', optionalAuth, async (req: AuthRequest, res: Response) => {
+router.get('/feed', async (req: Request, res: Response) => {
   try {
-    const limit = parseInt(req.query.limit as string) || 20;
-    const offset = parseInt(req.query.offset as string) || 0;
-    const userId = req.user?.userId;
-
-    // Get videos with user info and hashtags
-    const videos = await query<any>(
-      `SELECT
-        v.id, v.caption, v.magnet_link, v.torrent_file_url, v.poster_url,
-        v.duration_seconds, v.width, v.height, v.like_count, v.view_count, v.created_at,
-        u.id as user_id, u.username, u.display_name, u.avatar_url,
-        COALESCE(
-          (SELECT array_agg(h.name)
-           FROM hashtags h
-           JOIN video_hashtags vh ON vh.hashtag_id = h.id
-           WHERE vh.video_id = v.id),
-          ARRAY[]::text[]
-        ) as hashtags,
-        ${userId ? `EXISTS(SELECT 1 FROM likes WHERE user_id = $3 AND video_id = v.id) as is_liked` : 'false as is_liked'}
-       FROM videos v
-       JOIN users u ON v.user_id = u.id
-       ORDER BY v.created_at DESC
-       LIMIT $1 OFFSET $2`,
-      userId ? [limit, offset, userId] : [limit, offset]
-    );
-
-    const formattedVideos = videos.map((v: any) => ({
-      id: v.id,
-      user: {
-        id: v.user_id,
-        username: v.username,
-        displayName: v.display_name,
-        avatarURL: v.avatar_url,
-      },
-      caption: v.caption,
-      magnetLink: v.magnet_link,
-      torrentFileUrl: v.torrent_file_url,
-      posterURL: v.poster_url,
-      durationSeconds: v.duration_seconds,
-      width: v.width,
-      height: v.height,
-      hashtags: v.hashtags || [],
-      likeCount: v.like_count || 0,
-      isLiked: v.is_liked || false,
-      createdAt: v.created_at,
-    }));
-
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 50);
+    const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
+    const videos = await feedPage(limit, offset, feedContext(req));
     res.json({
-      videos: formattedVideos,
-      nextCursor: videos.length === limit ? (offset + limit).toString() : null,
+      videos,
+      nextCursor: videos.length === limit ? String(offset + limit) : null,
       hasMore: videos.length === limit,
     });
   } catch (error) {
@@ -240,59 +211,16 @@ router.post('/:id/view', optionalAuth, validate(schemas.recordView), async (req:
 
 /**
  * GET /videos/:id
- * Get a single video
+ * One indexed post by AT-URI (URL-encoded), in the feed's shape.
  */
-router.get('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const videoId = req.params.id;
-    const userId = req.user?.userId;
-
-    const videos = await query<any>(
-      `SELECT
-        v.id, v.caption, v.magnet_link, v.torrent_file_url, v.poster_url,
-        v.duration_seconds, v.width, v.height, v.like_count, v.view_count, v.created_at,
-        u.id as user_id, u.username, u.display_name, u.avatar_url,
-        COALESCE(
-          (SELECT array_agg(h.name)
-           FROM hashtags h
-           JOIN video_hashtags vh ON vh.hashtag_id = h.id
-           WHERE vh.video_id = v.id),
-          ARRAY[]::text[]
-        ) as hashtags,
-        ${userId ? `EXISTS(SELECT 1 FROM likes WHERE user_id = $2 AND video_id = v.id) as is_liked` : 'false as is_liked'}
-       FROM videos v
-       JOIN users u ON v.user_id = u.id
-       WHERE v.id = $1`,
-      userId ? [videoId, userId] : [videoId]
-    );
-
-    if (videos.length === 0) {
+    const video = await feedItem(req.params.id, feedContext(req));
+    if (!video) {
       res.status(404).json({ error: 'Video not found' });
       return;
     }
-
-    const v = videos[0];
-
-    res.json({
-      id: v.id,
-      user: {
-        id: v.user_id,
-        username: v.username,
-        displayName: v.display_name,
-        avatarURL: v.avatar_url,
-      },
-      caption: v.caption,
-      magnetLink: v.magnet_link,
-      torrentFileUrl: v.torrent_file_url,
-      posterURL: v.poster_url,
-      durationSeconds: v.duration_seconds,
-      width: v.width,
-      height: v.height,
-      hashtags: v.hashtags || [],
-      likeCount: v.like_count || 0,
-      isLiked: v.is_liked || false,
-      createdAt: v.created_at,
-    });
+    res.json(video);
   } catch (error) {
     console.error('Get video error:', error);
     res.status(500).json({ error: 'Internal server error' });
