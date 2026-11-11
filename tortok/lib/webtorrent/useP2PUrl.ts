@@ -34,7 +34,7 @@ export function useP2PUrl(playback: TorrentPlayback | null, tag?: string): strin
 
   useEffect(() => {
     const current = latest.current;
-    if (!magnetLink || !current) {
+    if (!magnetLink || !current) { // the same condition; both narrow the types
       setUrl(null);
       return;
     }

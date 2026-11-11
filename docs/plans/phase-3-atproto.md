@@ -368,8 +368,9 @@ them.
    (the AppView supplies them; the Phase 3 requirement in
    [`cross-deployment-transport.md`](../architecture/open-problems/cross-deployment-transport.md)).
    Each feed item carries a `sources` object beyond its magnet, holding
-   extra webseed URLs and extra tracker URLs. The AppView fills it for
-   content it can serve, from `CONTENT_ORIGIN_URL` and its tracker list.
+   extra webseed URLs and extra tracker URLs. The AppView lists its own
+   trackers (`TRACKER_URLS`) and, once mirrors exist, webseeds for copies it
+   knows of; today `webseeds` is empty.
    The client passes them to WebTorrent's
    `client.add(magnet, { urlList, announce })`, which merges them with the
    magnet's own webseeds and trackers (WebTorrent 2.8.5, `lib/torrent.js`).
@@ -449,9 +450,10 @@ unused once 2.5B and 2.5C land, unless noted):
   `validate.ts`), `webtorrent` (with the seeder), and their `@types/*`.
   `uuid` is already unused and can go in any change.
 - Backend config: `JWT_SECRET` (code, `.env.example`,
-  `scripts/init-dev-secrets.sh`); `TRACKER_URLS` (seeder only);
+  `scripts/init-dev-secrets.sh`); `CONTENT_ORIGIN_URL` (seeder only);
   `kill_timeout`/`auto_stop_machines = "off"` in `fly.toml` revert to
-  scale-to-zero. `CONTENT_ORIGIN_URL` stays: 2.5B's `sources` use it.
+  scale-to-zero. `TRACKER_URLS` stays: the feed's `sources` list it
+  (`backend/src/config.ts`).
 - Schema: the six legacy tables (step 10).
 - Client: `app/(auth)/register.tsx`; the auth store's `token`, `user`
   and legacy `signIn`; `lib/api.ts`'s `login`, `register`, `likeVideo`,

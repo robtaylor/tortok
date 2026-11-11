@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { requestUrl, release } from './client';
-import type { Video } from '@/lib/api';
+import { torrentOf, type TorrentPlayback, type Video } from '@/lib/api';
 
 /** Number of adjacent cells to prefetch in each direction. */
 const PREFETCH_WINDOW = 1;
@@ -27,12 +27,13 @@ export function usePrefetch(videos: Video[], activeIndex: number): void {
   const held = useRef(new Map<string, HeldEntry>());
 
   useEffect(() => {
-    const desired = new Map<string, { video: Video; pos: string }>();
+    const desired = new Map<string, { video: Video; torrent: TorrentPlayback; pos: string }>();
     for (let offset = -PREFETCH_WINDOW; offset <= PREFETCH_WINDOW; offset++) {
       if (offset === 0) continue; // active cell manages its own torrent
       const v = videos[activeIndex + offset];
       const pos = offset === 1 ? 'next' : offset === -1 ? 'prev' : `${offset}`;
-      if (v) desired.set(v.playback.magnetLink, { video: v, pos });
+      const torrent = v && torrentOf(v);
+      if (torrent) desired.set(torrent.magnetLink, { video: v, torrent, pos });
     }
 
     // Release magnets that scrolled out of range
@@ -45,13 +46,13 @@ export function usePrefetch(videos: Video[], activeIndex: number): void {
     }
 
     // Acquire new magnets and prefetch first bytes
-    for (const [magnet, { video, pos }] of desired) {
+    for (const [magnet, { video, torrent, pos }] of desired) {
       if (held.current.has(magnet)) continue;
       const entry: HeldEntry = { bridgeUrl: null, abort: new AbortController() };
       held.current.set(magnet, entry);
 
       const pre = `[${pos}] [prefetch:${video.caption.slice(0, 20)}]`;
-      requestUrl(video.playback)
+      requestUrl(torrent)
         .then((url) => {
           // Guard: magnet may have been released while we awaited
           if (!held.current.has(magnet)) {

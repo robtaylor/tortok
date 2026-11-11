@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
-import type { Video } from '@/lib/api';
+import { torrentOf, type Video } from '@/lib/api';
 import { notifyWatched, stopAll, pauseSeeding, resumeSeeding } from './seedPolicy';
 import { subscribeToConditionChanges } from './deviceConditions';
 
@@ -20,8 +20,8 @@ export function useSeedPolicy(activeVideo: Video | null): void {
 
   // Notify seed policy when active video changes.
   useEffect(() => {
-    if (!activeVideo) return;
-    const { playback } = activeVideo;
+    const playback = activeVideo && torrentOf(activeVideo);
+    if (!activeVideo || !playback) return;
     if (playback.magnetLink === prevMagnet.current) return;
     prevMagnet.current = playback.magnetLink;
 

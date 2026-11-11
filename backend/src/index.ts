@@ -11,7 +11,6 @@ import { initializeDatabase, closeDatabase, query } from './db';
 import authRoutes from './routes/auth';
 import videoRoutes from './routes/videos';
 import { createBlobRouter } from './routes/blob';
-import { pdsFor } from './services/feedView';
 import { seeder } from './services/seeder';
 import { ingestFromEnv } from './services/atprotoIngest';
 
@@ -118,7 +117,7 @@ app.get('/turn/credentials', (req, res) => {
 // Routes
 app.use('/auth', authRoutes);
 app.use('/videos', videoRoutes);
-app.use('/blob', createBlobRouter({ pdsFor }));
+app.use('/blob', createBlobRouter());
 
 // 404 handler
 app.use((req, res) => {

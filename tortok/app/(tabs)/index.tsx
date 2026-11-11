@@ -15,7 +15,7 @@ import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useQuery } from '@tanstack/react-query';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { authorLabel, getFeed, type Video } from '@/lib/api';
+import { authorLabel, getFeed, torrentOf, type Video } from '@/lib/api';
 import { useP2PUrl } from '@/lib/webtorrent/useP2PUrl';
 import { usePrefetch } from '@/lib/webtorrent/usePrefetch';
 import { useSeedPolicy } from '@/lib/webtorrent/useSeedPolicy';
@@ -97,11 +97,11 @@ const VideoItem = memo(function VideoItem({
 
   // --- Display state ---
   const [displayState, setDisplayState] = useState<DisplayState>(
-    !video.posterURL && !video.playback.magnetLink ? 'empty' : 'idle',
+    !video.posterURL && !torrentOf(video) ? 'empty' : 'idle',
   );
 
   // Only the active cell resolves a URL.
-  const p2pUrl = useP2PUrl(isActive ? video.playback : null, tag);
+  const p2pUrl = useP2PUrl(isActive ? torrentOf(video) : null, tag);
 
   // Stable player — created once at mount, source swapped via replaceAsync.
   // Avoids 500-750ms native player construction cost on every scroll.
@@ -230,7 +230,7 @@ const VideoItem = memo(function VideoItem({
   };
 
   const hashtagLine = useMemo(
-    () => video.hashtags.map((h) => (h.startsWith('#') ? h : `#${h}`)).join(' '),
+    () => video.hashtags.join(' '),
     [video.hashtags],
   );
 
@@ -324,7 +324,6 @@ const VideoItem = memo(function VideoItem({
       </View>
 
       <View style={styles.actionsOverlay}>
-        {/* No Like button: Phase 3 ships no likes. */}
         <TouchableOpacity style={styles.actionButton}>
           <FontAwesome name="comment-o" size={30} color="#fff" />
         </TouchableOpacity>
@@ -600,10 +599,5 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     alignItems: 'center',
-  },
-  actionCount: {
-    color: '#fff',
-    fontSize: 12,
-    marginTop: 4,
   },
 });

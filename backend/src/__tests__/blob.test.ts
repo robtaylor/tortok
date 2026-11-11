@@ -42,6 +42,7 @@ describe('GET /blob/:did/:cid', () => {
         return new Response(upstream.body, { status: upstream.status, headers: { 'content-type': upstream.type } });
       }) as typeof fetch,
       maxBytes: 100_000,
+      cacheBytes: 0, // each test sees the PDS
     }));
     server = app.listen(0);
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -95,9 +96,46 @@ describe('GET /blob/:did/:cid', () => {
     expect((await fetch(`${base}/blob/${ALICE}/${POSTER_CID}`)).status).toBe(502);
   });
 
-  it('refuses a blob over the size limit', async () => {
+  it('refuses a blob over the size limit, even with no Content-Length', async () => {
     const big = Buffer.alloc(200_000, 1);
     upstream = { status: 200, body: big, type: 'image/jpeg' };
     expect((await fetch(`${base}/blob/${ALICE}/${blobCid(big)}`)).status).toBe(413);
+  });
+
+  it('answers a matching If-None-Match with 304, without contacting the PDS', async () => {
+    const res = await fetch(`${base}/blob/${ALICE}/${POSTER_CID}`, { headers: { 'If-None-Match': `"${POSTER_CID}"` } });
+    expect(res.status).toBe(304);
+    expect(requested).toEqual([]);
+  });
+});
+
+describe('GET /blob/:did/:cid with its cache', () => {
+  let server: http.Server;
+  let base: string;
+  let calls = 0;
+
+  beforeAll(() => {
+    const app = express();
+    app.use('/blob', createBlobRouter({
+      pdsFor: async () => PDS,
+      fetch: (async () => {
+        calls++;
+        await new Promise((r) => setTimeout(r, 20));
+        return new Response(POSTER, { headers: { 'content-type': 'image/jpeg' } });
+      }) as typeof fetch,
+    }));
+    server = app.listen(0);
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+  afterAll(() => server.close());
+
+  it('fetches a blob once for concurrent and later requests', async () => {
+    const url = `${base}/blob/${ALICE}/${POSTER_CID}`;
+    const first = await Promise.all([fetch(url), fetch(url), fetch(url)]);
+    expect(first.map((r) => r.status)).toEqual([200, 200, 200]);
+    const again = await fetch(url);
+    expect(Buffer.from(await again.arrayBuffer()).equals(POSTER)).toBe(true);
+    expect(again.headers.get('etag')).toBe(`"${POSTER_CID}"`);
+    expect(calls).toBe(1);
   });
 });

@@ -136,6 +136,9 @@ export type TorrentPlayback = {
   sources: Sources;
 };
 
+/** How a post plays. Bridged Bluesky posts (Phase 3 Unit 2.5D) add an HLS kind. */
+export type Playback = TorrentPlayback;
+
 /** An indexed `app.tortok.video.post`, as GET /videos/feed serves it. */
 export type Video = {
   /** The record's AT-URI. */
@@ -149,7 +152,7 @@ export type Video = {
     avatarURL: string | null;
   };
   caption: string;
-  playback: TorrentPlayback;
+  playback: Playback;
   posterURL: string | null;
   durationSeconds: number;
   width: number | null;
@@ -165,11 +168,16 @@ export type FeedResponse = {
   hasMore: boolean;
 };
 
-export function getFeed(token?: string | null, cursor?: string) {
+export function getFeed(cursor?: string) {
   const params = new URLSearchParams();
   params.set('limit', '10');
   if (cursor) params.set('offset', cursor);
-  return request<FeedResponse>(`/videos/feed?${params}`, { token });
+  return request<FeedResponse>(`/videos/feed?${params}`);
+}
+
+/** The post's torrent, or null if it doesn't play over WebTorrent. */
+export function torrentOf(video: Video): TorrentPlayback | null {
+  return video.playback.kind === 'torrent' ? video.playback : null;
 }
 
 /** How to show an author: their verified handle, else their display name, else their DID. */
