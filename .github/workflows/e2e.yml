@@ -83,14 +83,15 @@ jobs:
             ios-build-
       - name: Build the app (release, with test sign-in)
         working-directory: tortok
+        # The Detox build runs the compiler through ccache (see .detoxrc.js).
         env:
-          USE_CCACHE: "1"
           CCACHE_MAXSIZE: 2G
         run: |
-          export CCACHE_DIR="$HOME/.ccache"
+          export CCACHE_DIR="$HOME/.ccache" CCACHE_BASEDIR="$GITHUB_WORKSPACE"
           npx expo prebuild --platform ios
+          ccache --zero-stats
           npm run e2e:build:ios
-          ccache --show-stats || true
+          ccache --show-stats -v
       # The first launch on a freshly booted simulator takes minutes; pay it
       # once here rather than inside the first test file's timeouts.
       - uses: actions/setup-go@v5

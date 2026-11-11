@@ -13,6 +13,19 @@
 //                        arm64-v8a on Apple silicon)
 
 /** @type {Detox.DetoxConfig} */
+// With ccache on PATH, the release build compiles C, C++ and Objective-C
+// through it. React Native's USE_CCACHE wrapper is silently skipped on
+// Xcode 26, whose explicit modules don't recognise it, so ccache is handed to
+// Xcode as C_COMPILER_LAUNCHER instead (as Nitro and Reanimated do). The
+// config is React Native's own ccache.conf (sloppiness for module compiles);
+// the compiler is checked by version string, since runner image updates touch
+// clang's mtime without changing it. Swift isn't cached.
+const IOS_CCACHE =
+  'c=$(command -v ccache) &&' +
+  ' export CCACHE_CONFIGPATH="$PWD/node_modules/react-native/scripts/xcode/ccache.conf"' +
+  ' CCACHE_COMPILERCHECK="string:$(xcrun clang --version | head -1)"' +
+  ' XCODE_CCACHE="C_COMPILER_LAUNCHER=$c CLANG_ENABLE_EXPLICIT_MODULES_WITH_COMPILER_LAUNCHER=YES"; ';
+
 module.exports = {
   testRunner: {
     args: {
@@ -31,7 +44,8 @@ module.exports = {
       type: 'ios.app',
       binaryPath: 'ios/build/Build/Products/Release-iphonesimulator/tortok.app',
       build:
-        'cd ios && xcodebuild -workspace tortok.xcworkspace -scheme tortok -configuration Release -sdk iphonesimulator -derivedDataPath build -quiet',
+        IOS_CCACHE +
+        'cd ios && xcodebuild -workspace tortok.xcworkspace -scheme tortok -configuration Release -sdk iphonesimulator -derivedDataPath build -quiet $XCODE_CCACHE',
     },
     'android.release': {
       type: 'android.apk',
