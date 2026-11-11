@@ -43,6 +43,13 @@ read `window.location.protocol`, and React Native has no `window.location`
 outside development builds, so any `ws://` tracker crashed a release build.
 The patch reads it with optional chaining. `plugins/withDetoxAndroid.js` is a
 local config plugin that adds Detox's Android test runner at `expo prebuild`.
+`plugins/withQuietDependencyWarnings.js` silences compiler warnings from
+dependencies' native code: `inhibit_all_warnings!` for every pod, and
+suppressed Kotlin, Java and C/C++ warnings for every Android module except
+`app`. The app's own native code still warns. About 580 iOS warnings remain
+(umbrella headers, libtool, nullability, Hermes), left for the SDK 55
+upgrade. Prebuilding with `TORTOK_NATIVE_WARNINGS=1` removes the plugin's
+blocks and brings every warning back.
 
 ## Navigation and session gating
 
