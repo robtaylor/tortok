@@ -4,7 +4,10 @@
   "scripts": {
     "deploy:web": "bash scripts/deploy-web.sh",
     "smoke:r2": "node scripts/r2-smoke-test.mjs",
-    "seed:fixtures": "node scripts/seed-fixtures.mjs"
+    "seed:fixtures": "node scripts/seed-fixtures.mjs",
+    "deploy:backend": "bash scripts/deploy-backend.sh",
+    "smoke": "node scripts/smoke.mjs",
+    "test:scripts": "node --test scripts/smoke.test.mjs"
   },
   "dependencies": {
     "@atproto/api": "^0.13.0",

@@ -3,6 +3,7 @@
 # backend: typecheck and the Jest suite. The ingest integration tests need a
 # real Postgres (Decision 0016, commitment 2); each test file creates and
 # drops its own database on the service container below.
+# scripts: tests for the repo scripts that have them (the smoke check).
 # docs: the doc linter (links, decision index, statuses), as CLAUDE.md asks
 # before every doc commit.
 
@@ -52,6 +53,17 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit -p .
       - run: npm test -- --ci
+
+  scripts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # No install: the tested scripts use only Node's standard library.
+      - run: npm run test:scripts
 
   docs:
     runs-on: ubuntu-latest
