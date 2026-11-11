@@ -35,6 +35,10 @@ Each has a `Must resolve by:` header stating the phase that forces it.
   by Phase 3 (clients must learn extra video sources at runtime before real
   records fix their magnets), Phase 4 for mirrors vs seeders. Covers the
   permanent content domain, durability, key layout and piece size.
+- **[`signed-out-feed.md`](signed-out-feed.md)** — resolve by Phase 4 with
+  `view-counting.md`, before public release at the latest. Whether people can
+  watch the feed before signing in: easier onboarding and sign-in-free
+  production smoke tests, against views with no account behind them.
 - **[`own-pds.md`](own-pds.md)** — parked. v1 uses users' existing atproto
   identities (typically `bsky.social`); no tortok PDS is in scope. Documents the
   costs we're avoiding, the risks taken on, and the triggers that would force a
