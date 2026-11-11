@@ -31,10 +31,11 @@ Each has a `Must resolve by:` header stating the phase that forces it.
   before V1 rail commitment: Apple App Store Guideline 3.1.1 written position,
   and the tortok US-incorporation decision. Sub-problem A (payout-destination
   Lexicon) is unblocked and resolves by Phase 4, independently of the rail.
-- **[`cross-deployment-transport.md`](cross-deployment-transport.md)** — resolve
-  by Phase 3 (clients must learn extra video sources at runtime before real
-  records fix their magnets), Phase 4 for mirrors vs seeders. Covers the
-  permanent content domain, durability, key layout and piece size.
+- **[`cross-deployment-transport.md`](cross-deployment-transport.md)** — partly
+  resolved: runtime sources come from the AppView (Decision 0022). Key layout
+  and piece size resolve by Phase 3 Unit 3, before real records fix their
+  magnets; mirrors vs seeders by Phase 4. Also covers the permanent content
+  domain and durability.
 - **[`signed-out-feed.md`](signed-out-feed.md)** — resolve by Phase 4 with
   `view-counting.md`, before public release at the latest. Whether people can
   watch the feed before signing in: easier onboarding and sign-in-free
