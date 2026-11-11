@@ -8,8 +8,9 @@ import type { AddressInfo } from 'net';
 import type { Identity, Profile } from '../atproto/identity';
 import { createTestDb, TestDb } from './helpers/testDb';
 import { validRecord } from './helpers/fixtures';
+import { VIDEO_POST_NSID } from '../atproto/videoPost';
 
-const NSID = 'app.tortok.video.post';
+const NSID = VIDEO_POST_NSID;
 const ALICE = 'did:plc:aaaaaaaaaaaaaaaaaaaaaaaa';
 const BOB = 'did:plc:bbbbbbbbbbbbbbbbbbbbbbbb';
 const PDS = 'https://pds.example.com';

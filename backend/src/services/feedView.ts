@@ -9,10 +9,9 @@
 //   webseeds only where it knows a copy exists, which is none yet.
 
 import { query } from '../db';
+import { VIDEO_POST_NSID } from '../atproto/videoPost';
 
-export const VIDEO_POST = 'app.tortok.video.post';
-
-export interface FeedRow {
+interface FeedRow {
   at_uri: string;
   did: string;
   cid: string;
@@ -66,12 +65,15 @@ export interface FeedContext {
   trackers: string[];
 }
 
-const COLUMNS = `
-  p.at_uri, p.did, p.cid, p.text, p.thumbnail_cid, p.duration_ms, p.width, p.height,
-  p.hashtags, p.magnet_link, p.torrent_cid, p.record_created_at,
-  pr.handle, pr.display_name, pr.avatar_cid`;
+// Every feed read: playable app.tortok.video.post rows with their author.
+const SELECT_POSTS = `
+  SELECT p.at_uri, p.did, p.cid, p.text, p.thumbnail_cid, p.duration_ms, p.width, p.height,
+         p.hashtags, p.magnet_link, p.torrent_cid, p.record_created_at,
+         pr.handle, pr.display_name, pr.avatar_cid
+    FROM posts p LEFT JOIN profiles pr ON pr.did = p.did
+   WHERE p.collection = $1 AND p.magnet_link IS NOT NULL`;
 
-export function toFeedItem(row: FeedRow, ctx: FeedContext): FeedItem {
+function toFeedItem(row: FeedRow, ctx: FeedContext): FeedItem {
   const blob = (cid: string | null) => (cid ? `${ctx.blobBase}/blob/${row.did}/${cid}` : null);
   return {
     id: row.at_uri,
@@ -101,29 +103,13 @@ export function toFeedItem(row: FeedRow, ctx: FeedContext): FeedItem {
 /** Newest first; ties broken by AT-URI so pages don't overlap. */
 export async function feedPage(limit: number, offset: number, ctx: FeedContext): Promise<FeedItem[]> {
   const rows = await query<FeedRow>(
-    `SELECT ${COLUMNS}
-       FROM posts p LEFT JOIN profiles pr ON pr.did = p.did
-      WHERE p.collection = $1 AND p.magnet_link IS NOT NULL
-      ORDER BY p.record_created_at DESC, p.at_uri
-      LIMIT $2 OFFSET $3`,
-    [VIDEO_POST, limit, offset],
+    `${SELECT_POSTS} ORDER BY p.record_created_at DESC, p.at_uri LIMIT $2 OFFSET $3`,
+    [VIDEO_POST_NSID, limit, offset],
   );
   return rows.map((r) => toFeedItem(r, ctx));
 }
 
 export async function feedItem(atUri: string, ctx: FeedContext): Promise<FeedItem | null> {
-  const [row] = await query<FeedRow>(
-    `SELECT ${COLUMNS}
-       FROM posts p LEFT JOIN profiles pr ON pr.did = p.did
-      WHERE p.at_uri = $1 AND p.magnet_link IS NOT NULL`,
-    [atUri],
-  );
+  const [row] = await query<FeedRow>(`${SELECT_POSTS} AND p.at_uri = $2`, [VIDEO_POST_NSID, atUri]);
   return row ? toFeedItem(row, ctx) : null;
-}
-
-/** The PDS an indexed author's blobs come from, for the blob route. */
-export async function pdsFor(did: string): Promise<string | null> {
-  const [row] = await query<{ pds_endpoint: string | null }>(
-    'SELECT pds_endpoint FROM profiles WHERE did = $1', [did]);
-  return row?.pds_endpoint ?? null;
 }
