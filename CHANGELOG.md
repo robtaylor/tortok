@@ -32,6 +32,7 @@ deciding whether to upgrade.
 
 ### Changed
 
+- Native build logs are mostly quiet: dependencies' compiler warnings are suppressed at `expo prebuild` (iOS from about 3,700 to about 580, Android from about 730 to about 5). `TORTOK_NATIVE_WARNINGS=1` brings them back.
 - The backend and tracker run on Node 22 (was Node 18, out of support since April 2025), in their Docker images and in CI.
 - Production backend (`tortok-api` on Fly.io) keeps one machine running at all times, so the in-process origin seeder no longer stops when traffic idles.
 - Backend seeder announces only to tortok's own trackers (`TRACKER_URLS`; local tracker in dev, `tortok-tracker.fly.dev` in production), not public `wss://` trackers.

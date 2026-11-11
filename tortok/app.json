@@ -67,7 +67,8 @@
         }
       ],
       "expo-web-browser",
-      "./plugins/withDetoxAndroid"
+      "./plugins/withDetoxAndroid",
+      "./plugins/withQuietDependencyWarnings"
     ],
     "experiments": {
       "typedRoutes": true
