@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import { envOrDevDefault, trackerUrls } from '../config';
 
 interface TorrentInfo {
   infoHash: string;
@@ -14,15 +15,6 @@ interface WebTorrentInstance {
   torrents: any[];
   destroy: (callback: () => void) => void;
   on: (event: string, callback: (...args: any[]) => void) => void;
-}
-
-function envOrDevDefault(name: string, devDefault: string): string {
-  const value = process.env[name];
-  if (value !== undefined) return value;
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error(`${name} must be set in production`);
-  }
-  return devDefault;
 }
 
 class SeederService {
@@ -40,11 +32,7 @@ class SeederService {
     // and boot fails without them; only local dev has defaults: the
     // test-content server on :8090 and the tracker from scripts/dev-up.sh.
     this.contentOrigin = envOrDevDefault('CONTENT_ORIGIN_URL', 'http://localhost:8090');
-    this.announce = envOrDevDefault('TRACKER_URLS', 'ws://localhost:8000')
-      .split(',').map((u) => u.trim()).filter(Boolean);
-    if (this.announce.length === 0) {
-      throw new Error('TRACKER_URLS is set but contains no tracker URLs');
-    }
+    this.announce = trackerUrls();
   }
 
   async initialize(): Promise<void> {
