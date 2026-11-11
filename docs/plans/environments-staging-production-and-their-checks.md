@@ -25,7 +25,7 @@ Give tortok two backend environments, staging and production, a single smoke scr
 
 ### WS1 — Deployed-version visibility
 
-**Status:** Not started.
+**Status:** Done 2026-11-11. `/health` reports `sha`, `buildTime` and `database`; `scripts/deploy-backend.sh` passes the build args. Deploys are also blue-green, so traffic moves only once the new machine's `/health` passes, which it can only do after reaching Postgres.
 
 `/health` reports the git SHA and build time the image was built from (a build arg baked in by the `Dockerfile`), so any check can assert what is actually running. This alone would have caught the seven-month-stale production.
 
@@ -55,7 +55,7 @@ Phase 3 Unit 2.5 changes what "content per environment" means. Until 2.5C, each 
 
 ### WS2 — Smoke script, run against any environment
 
-**Status:** Not started.
+**Status:** Done 2026-11-11: `scripts/smoke.mjs`, tested against a stub backend in CI (`scripts/smoke.test.mjs`), including the no-webseed failure. The webseed check verifies the first and last pieces against the `.torrent` from `torrentFileUrl`, with no WebTorrent client.
 
 One script, `scripts/smoke.mjs <base-url> [--expect-sha <sha>]`, that is read-only and safe to run against production. It is also the API contract check Decision 0016 runs before tier 1.
 
@@ -88,7 +88,7 @@ One script, `scripts/smoke.mjs <base-url> [--expect-sha <sha>]`, that is read-on
 
 ### WS4 — Production monitoring and schema rehearsal
 
-**Status:** Not started. Required before public release.
+**Status:** Scheduled smoke done 2026-11-11 (`.github/workflows/smoke.yml`, every 15 minutes; alerting is GitHub's failed-run email). It also fails when production is missing a backend commit that reached `main` over a day ago. Schema rehearsal not started. Required before public release.
 
 **Deliverables:**
 

@@ -6,6 +6,12 @@ kill_timeout = 10
 
 [build]
 
+# Start the new machine alongside the old one and move traffic only once its
+# /health checks pass (Postgres reachable included); a broken image never
+# serves, and the old machine keeps running.
+[deploy]
+  strategy = "bluegreen"
+
 [env]
   PORT = "8080"
   # Baked into every magnet the seeder creates; the code has no production

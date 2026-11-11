@@ -7,7 +7,7 @@ import crypto from 'crypto';
 import http from 'http';
 import path from 'path';
 import { promisify } from 'util';
-import { initializeDatabase, closeDatabase } from './db';
+import { initializeDatabase, closeDatabase, query } from './db';
 import authRoutes from './routes/auth';
 import videoRoutes from './routes/videos';
 import { seeder } from './services/seeder';
@@ -43,10 +43,20 @@ app.use('/content', express.static(path.join(__dirname, '../content'), {
   }
 }));
 
-// Health check
-app.get('/health', (req, res) => {
+// Health check: liveness, so it answers 200 whenever the process is serving.
+// The server only listens once start() has reached Postgres, so passing it
+// also gates Fly's blue-green deploys on the database. After that, a
+// Postgres outage is reported (`database`) rather than failing the check,
+// so Fly doesn't route around the only machine and take down routes that
+// don't need the database; the smoke check (scripts/smoke.mjs) fails on it.
+// `sha` and `buildTime` are the image's Dockerfile build args.
+app.get('/health', async (req, res) => {
+  const dbOk = await query('SELECT 1').then(() => true, () => false);
   res.json({
     status: 'healthy',
+    database: dbOk ? 'ok' : 'unreachable',
+    sha: process.env.GIT_SHA || null,
+    buildTime: process.env.BUILD_TIME || null,
     timestamp: new Date().toISOString(),
     instance: process.env.INSTANCE_DOMAIN || 'localhost',
   });
