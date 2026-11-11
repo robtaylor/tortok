@@ -17,6 +17,14 @@ does no P2P. `client.ts` holds the shared refcounted torrent manager and
 `types.ts` the shared surface. Playback URLs are
 resolved through `useP2PUrl.ts`, and `usePrefetch.ts` warms upcoming feed items.
 
+Each torrent is added from its `.torrent` (fetched from the AppView's blob
+route, Decision 0020) when it loads, else from its magnet, and with the
+feed item's extra `sources` (Decision 0022): `client.add(torrent, { urlList,
+announce })`, which WebTorrent 2.8.5 appends to the torrent's own webseeds
+and trackers. The backend lists its own trackers there, so its clients find
+each other even when a post's magnet names another deployment's tracker; it
+lists no extra webseeds until mirrors exist.
+
 On Hermes the WebRTC surface needs the polyfills in `polyfills.native.ts`,
 notably a `self` shim and `AbortSignal.timeout`. Without them, BEP-19 webseed
 fetches fall back to a slow WebRTC path. `metro.config.js` wires the matching module
@@ -96,8 +104,9 @@ the hand-run Detox suite described in [client](client.md#testing).
   None of the three device-testing tiers is stood up yet; they begin once
   Phase 3 work clears, tiers 1 and 2 before the tier-3 rig (Decision 0014).
 - **Open:** where bytes come from once several deployments serve the same
-  posts, and how clients learn sources beyond the magnet; see
+  posts (mirrors or seeders), the content key layout and piece size; see
   [`open-problems/cross-deployment-transport.md`](open-problems/cross-deployment-transport.md).
+  How clients learn extra sources is settled (Decision 0022).
 - **Unvalidated on real devices:** the 89–91% offload was two simulators on
   one machine. Whether phones seed reliably over WebRTC behind real NAT, the
   real offload ratio, and the battery cost of Decision 0009's starting numbers

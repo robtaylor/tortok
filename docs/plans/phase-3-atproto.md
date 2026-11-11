@@ -2,12 +2,12 @@
 
 **Status:** Active — the current phase (Decision 0006 Phase 3).
 
-## Status (2026-11-10)
+## Status (2026-11-11)
 
 - ✅ **Unit 0** — Decision 0012 (Lexicon namespace governance) merged; canonical NSID is **`app.tortok.*`** (reverse-DNS rooted at `tortok.app`); schema lives at `lexicons/app/tortok/video/post.json`; AppView+PDS cost note added to Deferred Decisions in [`open-problems/README.md`](../architecture/open-problems/README.md).
 - ✅ **Unit 1** — Standalone Node smoke test (`scripts/atproto-smoke-test.mjs`) round-trips an `app.tortok.video.post` record against `bsky.social` using app-password auth.
 - ✅ **Unit 2** — OAuth round-trip verified end to end on the iOS simulator (2026-05-02). Android and web haven't been verified. `tortok.app` is live on Cloudflare Pages, `@atproto/oauth-client-expo` is integrated, the Hermes polyfills are in `tortok/lib/polyfills.ts`, the login screen pre-fills the last handle, and the auth store has 7 unit tests.
-- ➡️ **Unit 2.5** — replanned 2026-05-02 after a failed first attempt, rescoped 2026-11-09. Steps 2.5-0 (cleanup) and 2.5A (ingest, 2026-11-10; built and checked against the live network, not yet deployed) are done; 2.5B (feed cutover) is next. Its sub-phases run 2.5-0 → 2.5A ingest → 2.5B feed cutover → 2.5C retire legacy → 2.5D Bluesky bridge → 2.5E final checks. It absorbs Units 4 (mostly), 5 and 6.
+- ➡️ **Unit 2.5** — replanned 2026-05-02 after a failed first attempt, rescoped 2026-11-09. Steps 2.5-0 (cleanup), 2.5A (ingest, deployed 2026-11-11) and 2.5B (the feed reads indexed posts, with a blob route and runtime sources, 2026-11-11) are done; 2.5C (retire legacy) is next. Its sub-phases run 2.5-0 → 2.5A ingest → 2.5B feed cutover → 2.5C retire legacy → 2.5D Bluesky bridge → 2.5E final checks. It absorbs Units 4 (mostly), 5 and 6.
 - **Unit 3** — after Unit 2.5; the client publishes `app.tortok.video.post` via the user's PDS.
 - **Unit 7** — web cookie auth, not started.
 - ✅ **Moderation parallel track** — Decision 0013 landed 2026-04-29 (atproto labelers + illegal-content floor + UK age-verification gate); `open-problems/moderation.md` deleted.
@@ -344,13 +344,15 @@ seconds the ingest worker has copied them to `posts`, and
 returns those five rows. Restarting the backend with an empty `posts`
 table refills it from backfill.
 
-#### 2.5B — Feed cutover + client fixes (~1 day)
+#### 2.5B — Feed cutover + client fixes (~1 day) ✅ DONE 2026-11-11
 
 Goal: the feed reads `posts`, not `videos`, and the client works after
 OAuth login. The legacy write routes still exist but nothing calls
 them.
 
-5. **Modify `backend/src/routes/videos.ts`.**
+5. ✅ **Modify `backend/src/routes/videos.ts`.** Done: `services/feedView.ts`
+   maps `posts` + `profiles` to the feed item; `routes/blob.ts` checks each
+   blob against its CID before serving it as immutable.
    - `GET /videos/feed` reads `posts ORDER BY record_created_at DESC`.
    - Mapping: `at_uri → id`, `profiles` → `user.*`,
      `magnet_link/hls_url → playback`, and `thumbnail_cid`,
@@ -362,7 +364,8 @@ them.
      cache can't go stale. It serves posters, avatars and `.torrent`
      files, keeping images on a CDN as the legacy R2 posters are today.
 
-6. **Runtime sources** (the Phase 3 requirement in
+6. ✅ **Runtime sources**, per [Decision 0022](../architecture/decisions/0022-clients-learn-extra-video-sources-from-their-appview.md)
+   (the AppView supplies them; the Phase 3 requirement in
    [`cross-deployment-transport.md`](../architecture/open-problems/cross-deployment-transport.md)).
    Each feed item carries a `sources` object beyond its magnet, holding
    extra webseed URLs and extra tracker URLs. The AppView fills it for
@@ -382,8 +385,12 @@ them.
    - ✅ Done early, with the Detox baseline (2026-11-10): the feed query
      no longer depends on the legacy token, and Profile renders the OAuth
      handle and DID with a sign-out button.
-   - The Like button is hidden, since Phase 3 ships no likes.
-   - `tortok/lib/api.ts` types follow any renamed response fields.
+   - ✅ The Like button is gone, since Phase 3 ships no likes.
+   - ✅ `tortok/lib/api.ts` types follow the new feed shape; the author shows
+     as `@handle`, else display name, else DID.
+   - ✅ Tests moved with it: the e2e stack publishes the fixtures to its own
+     PDS and the backend indexes them; the smoke check reads `playback` and
+     `sources` and checks posters.
 
 **Done =** after OAuth login on the iOS simulator, the feed shows the
 seeded records and plays them through WebTorrent, and sign-out works
