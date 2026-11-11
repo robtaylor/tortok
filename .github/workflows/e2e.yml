@@ -40,7 +40,11 @@ jobs:
   ios:
     runs-on: macos-26
     timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: write # to delete this ref's superseded cache entries
     env:
+      STALE_CACHE_PREFIX: ios-build-
       DETOX_IOS_DEVICE: iPhone 17 Pro
       E2E_PG_URL: postgresql://localhost:5432
     steps:
@@ -126,6 +130,21 @@ jobs:
       - name: Stop the local stack
         if: always()
         run: scripts/e2e-down.sh
+      # Build caches are keyed by commit, so every push saves a new entry
+      # (after this step, in the cache action's post step). Keep one per ref:
+      # drop the entries this run restored from, so PR pushes don't fill the
+      # repo's 10 GB cache and evict main's. Only on success, because a failed
+      # run saves nothing to replace them; a re-run keeps its own commit's.
+      - &drop-stale-caches
+        name: Drop this ref's superseded build caches
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh cache list --ref "$GITHUB_REF" --key "$STALE_CACHE_PREFIX" --limit 100 --json id,key \
+            --jq ".[] | select(.key | contains(\"$GITHUB_SHA\") | not) | .id" |
+            xargs -r -n1 gh cache delete
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -137,6 +156,9 @@ jobs:
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: write # to delete this ref's superseded cache entries
     services:
       postgres:
         image: postgres:17
@@ -146,6 +168,7 @@ jobs:
         options: >-
           --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     env:
+      STALE_CACHE_PREFIX: gradle-
       DETOX_AVD: e2e
       E2E_PG_URL: postgresql://postgres:postgres@localhost:5432
     steps:
@@ -168,8 +191,11 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      # Caches Gradle's dependencies and build outputs (written from main).
+      # Caches Gradle's dependencies and build outputs. PRs write too: their
+      # entries are scoped to the merge ref, which every push to the PR shares.
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
       - name: Install
         run: |
           pids=()
@@ -201,6 +227,7 @@ jobs:
       - name: Stop the local stack
         if: always()
         run: scripts/e2e-down.sh
+      - *drop-stale-caches
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
