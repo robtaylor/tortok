@@ -6,6 +6,7 @@
 
 import { Platform } from 'react-native';
 import { requestUrl, release } from './client';
+import type { TorrentPlayback } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
 // Constants (Decision 0009 starting numbers)
@@ -23,8 +24,7 @@ const EVICTION_INTERVAL_MS = 60_000;
 // ---------------------------------------------------------------------------
 
 type SeedEntry = {
-  magnetLink: string;
-  torrentFileUrl: string | null;
+  playback: TorrentPlayback;
   watchedAt: number;
   bytesEstimate: number;
   holding: boolean;
@@ -43,15 +43,11 @@ let paused = false;
  * (bumps refcount) and adds to the queue. Evicts oldest entries if
  * over budget.
  */
-export function notifyWatched(
-  magnetLink: string | null,
-  torrentFileUrl: string | null,
-  bytesEstimate: number,
-): void {
-  if (!magnetLink) return;
+export function notifyWatched(playback: TorrentPlayback | null, bytesEstimate: number): void {
+  if (!playback) return;
 
   // Already in queue — move to front and refresh timestamp.
-  const idx = seedQueue.findIndex((e) => e.magnetLink === magnetLink);
+  const idx = seedQueue.findIndex((e) => e.playback.magnetLink === playback.magnetLink);
   if (idx >= 0) {
     const entry = seedQueue.splice(idx, 1)[0];
     entry.watchedAt = Date.now();
@@ -61,8 +57,7 @@ export function notifyWatched(
 
   // New entry — acquire hold before adding.
   const entry: SeedEntry = {
-    magnetLink,
-    torrentFileUrl,
+    playback,
     watchedAt: Date.now(),
     bytesEstimate,
     holding: false,
@@ -120,7 +115,7 @@ export function resumeSeeding(): void {
 function acquireHold(entry: SeedEntry): void {
   if (entry.holding) return;
   entry.holding = true;
-  requestUrl(entry.magnetLink, entry.torrentFileUrl).catch(() => {
+  requestUrl(entry.playback).catch(() => {
     entry.holding = false;
   });
 }
@@ -128,7 +123,7 @@ function acquireHold(entry: SeedEntry): void {
 function releaseHold(entry: SeedEntry): void {
   if (!entry.holding) return;
   entry.holding = false;
-  release(entry.magnetLink);
+  release(entry.playback.magnetLink);
 }
 
 function evict(): void {

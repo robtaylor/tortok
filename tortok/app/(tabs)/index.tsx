@@ -15,8 +15,7 @@ import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useQuery } from '@tanstack/react-query';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { getFeed, likeVideo, type Video } from '@/lib/api';
-import { useAuthStore } from '@/stores/auth';
+import { authorLabel, getFeed, type Video } from '@/lib/api';
 import { useP2PUrl } from '@/lib/webtorrent/useP2PUrl';
 import { usePrefetch } from '@/lib/webtorrent/usePrefetch';
 import { useSeedPolicy } from '@/lib/webtorrent/useSeedPolicy';
@@ -54,20 +53,18 @@ const VideoItem = memo(function VideoItem({
   video,
   isActive,
   offset,
-  token,
   videoWidth,
   videoHeight,
 }: {
   video: Video;
   isActive: boolean;
   offset: number;
-  token: string | null;
   videoWidth: number;
   videoHeight: number;
 }) {
   const pos = offset === 0 ? 'curr' : offset === 1 ? 'next' : offset === -1 ? 'prev' : 'off';
   const tag = video.caption.slice(0, 20);
-  const vid = video.id.slice(0, 6);
+  const vid = (video.id.split('/').pop() ?? video.id).slice(0, 6); // the record key
   const pre = `[${pos}] [${vid}:${tag}]`;
   // Ref so event listeners always log the current position, not the one
   // captured at registration time (player is stable → effects don't re-run).
@@ -98,23 +95,13 @@ const VideoItem = memo(function VideoItem({
     );
   }, []);
 
-  // --- Like state ---
-  const [delta, setDelta] = useState<-1 | 0 | 1>(0);
-  const [likePending, setLikePending] = useState(false);
-  const liked = delta === 0 ? video.isLiked : delta === 1;
-  const likeCount = video.likeCount + delta;
-
   // --- Display state ---
   const [displayState, setDisplayState] = useState<DisplayState>(
-    !video.posterURL && !video.magnetLink ? 'empty' : 'idle',
+    !video.posterURL && !video.playback.magnetLink ? 'empty' : 'idle',
   );
 
   // Only the active cell resolves a URL.
-  const p2pUrl = useP2PUrl(
-    isActive ? video.magnetLink : null,
-    video.torrentFileUrl,
-    tag,
-  );
+  const p2pUrl = useP2PUrl(isActive ? video.playback : null, tag);
 
   // Stable player — created once at mount, source swapped via replaceAsync.
   // Avoids 500-750ms native player construction cost on every scroll.
@@ -243,27 +230,9 @@ const VideoItem = memo(function VideoItem({
   };
 
   const hashtagLine = useMemo(
-    () => video.hashtags.map((h) => `#${h}`).join(' '),
+    () => video.hashtags.map((h) => (h.startsWith('#') ? h : `#${h}`)).join(' '),
     [video.hashtags],
   );
-
-  const handleLike = async () => {
-    if (!token || likePending) return;
-    const nextLiked = !liked;
-    const nextDelta: -1 | 0 | 1 =
-      nextLiked === video.isLiked ? 0 : nextLiked ? 1 : -1;
-    const prevDelta = delta;
-    setDelta(nextDelta);
-    setLikePending(true);
-    try {
-      await likeVideo(video.id, nextLiked, token);
-    } catch (err) {
-      console.warn('like request failed, rolling back', err);
-      setDelta(prevDelta);
-    } finally {
-      setLikePending(false);
-    }
-  };
 
   const showPoster = displayState === 'idle' || displayState === 'loading' || !isActive;
   const showVideo = isActive && (displayState === 'playing' || displayState === 'paused');
@@ -344,7 +313,7 @@ const VideoItem = memo(function VideoItem({
 
       <View style={styles.bottomOverlay}>
         <Text style={styles.username} testID={isActive ? 'activeVideoAuthor' : undefined}>
-          @{video.user.username}
+          {authorLabel(video.author)}
         </Text>
         <Text style={styles.caption} numberOfLines={2} testID={isActive ? 'activeVideoCaption' : undefined}>
           {video.caption}
@@ -355,19 +324,7 @@ const VideoItem = memo(function VideoItem({
       </View>
 
       <View style={styles.actionsOverlay}>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={handleLike}
-          disabled={likePending}
-        >
-          <FontAwesome
-            name={liked ? 'heart' : 'heart-o'}
-            size={30}
-            color={liked ? '#ff2d55' : '#fff'}
-          />
-          <Text style={styles.actionCount}>{likeCount}</Text>
-        </TouchableOpacity>
-
+        {/* No Like button: Phase 3 ships no likes. */}
         <TouchableOpacity style={styles.actionButton}>
           <FontAwesome name="comment-o" size={30} color="#fff" />
         </TouchableOpacity>
@@ -385,7 +342,6 @@ const VideoItem = memo(function VideoItem({
 // ---------------------------------------------------------------------------
 
 export default function FeedScreen() {
-  const token = useAuthStore((s) => s.token);
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<FlatList>(null);
   const [layout, setLayout] = useState<{ w: number; h: number } | null>(null);
@@ -403,11 +359,10 @@ export default function FeedScreen() {
     ? Math.min(layout?.w ?? fallbackW, Math.round(videoHeight * PHONE_ASPECT))
     : (layout?.w ?? fallbackW);
 
-  // The feed is public, so it loads with or without a legacy token. OAuth
-  // sign-in never creates one; gating on it left the feed empty.
+  // The feed is public: it needs no session.
   const { data, isLoading, error } = useQuery({
-    queryKey: ['feed', token],
-    queryFn: () => getFeed(token),
+    queryKey: ['feed'],
+    queryFn: () => getFeed(),
   });
 
   const videos = useMemo(() => data?.videos ?? [], [data]);
@@ -433,12 +388,11 @@ export default function FeedScreen() {
         video={item}
         isActive={index === activeIndex}
         offset={index - activeIndex}
-        token={token}
         videoWidth={videoWidth}
         videoHeight={videoHeight}
       />
     ),
-    [activeIndex, token, videoWidth, videoHeight],
+    [activeIndex, videoWidth, videoHeight],
   );
 
   // Web: mouse drag to scroll between videos.

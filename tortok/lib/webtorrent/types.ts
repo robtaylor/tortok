@@ -41,7 +41,13 @@ export type Torrent = {
 /** chunk-store constructor — MemoryChunkStore / FSAChunkStore / future RNFS store */
 export type ChunkStoreCtor = new (chunkLength: number, opts?: unknown) => unknown;
 
-export type AddOpts = { store?: ChunkStoreCtor };
+export type AddOpts = {
+  store?: ChunkStoreCtor;
+  /** Extra trackers, added to the torrent's own (WebTorrent concatenates them). */
+  announce?: string[];
+  /** Extra webseeds (BEP 19), added to the torrent's own and deduplicated. */
+  urlList?: string[];
+};
 
 export type WebTorrentClient = {
   add: (
