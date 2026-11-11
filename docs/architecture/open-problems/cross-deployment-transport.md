@@ -1,9 +1,9 @@
 # Open problem: Where video bytes come from across deployments
 
-**Status:** Unresolved. Problem statement, candidate approaches, and one requirement that Phase 3 must meet.
-**Must resolve by:** Phase 3 for the runtime-source requirement below, because the first real records are published then and their magnets can't be changed afterwards. Phase 4 for choosing between seeders and mirrors.
+**Status:** Partly resolved. The Phase 3 requirement (how clients learn extra sources) is met by Decision 0022 (Proposed): each AppView lists extra webseeds and trackers per feed item. Mirrors vs seeders, the content key layout and piece size remain open.
+**Must resolve by:** Unit 3 of Phase 3 for the content key layout and piece size, because the first real records are published then and their magnets can't be changed afterwards. Phase 4 for choosing between seeders and mirrors.
 **Blocks:** publishing `app.tortok.video.post` records with production URLs (Phase 3); any third-party AppView serving tortok video reliably.
-**Related decision records:** Decision 0001 (WebTorrent end to end), Decision 0002 (AT Protocol), Decision 0008 (R2 origin and CDN), Decision 0010 (Bluesky bridge), Decision 0017 (the AppView's Postgres is a rebuildable index), Decision 0020 (torrent metadata as a PDS blob).
+**Related decision records:** Decision 0001 (WebTorrent end to end), Decision 0002 (AT Protocol), Decision 0008 (R2 origin and CDN), Decision 0010 (Bluesky bridge), Decision 0017 (the AppView's Postgres is a rebuildable index), Decision 0020 (torrent metadata as a PDS blob), Decision 0022 (clients learn extra sources from their AppView).
 **Related open problems:** `own-pds.md`.
 
 ## The problem
@@ -18,6 +18,8 @@ That works while there is one deployment. Once anyone can run an AppView (Decisi
 - Durability is R2's durability. A video nobody is watching exists only in R2, so Decision 0010's "P2P-backed durability" pitch overstates what P2P provides. P2P cuts cost; R2 keeps content alive.
 
 ## The requirement Phase 3 must meet
+
+Met by [Decision 0022](../decisions/0022-clients-learn-extra-video-sources-from-their-appview.md): the AppView supplies them per feed item.
 
 **Clients learn extra sources at runtime.** The magnet's tracker and webseed are hints, not the only options. A client also asks for more sources for an infohash, either from its AppView or from published records. Piece hashes in the torrent verify every byte, so an extra source can't serve wrong data, only slow or missing data.
 
