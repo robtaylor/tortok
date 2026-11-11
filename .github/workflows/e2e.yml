@@ -19,6 +19,9 @@ on:
       - test-network/**
       - test-content/**
       - scripts/e2e-*.sh
+      - scripts/seed-fixtures.mjs
+      - scripts/lib/**
+      - package*.json
       - .github/workflows/e2e.yml
   push:
     branches: [main]
@@ -54,6 +57,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: |
+            package-lock.json
             backend/package-lock.json
             test-content/package-lock.json
             test-network/package-lock.json
@@ -70,6 +74,8 @@ jobs:
       - name: Install
         run: |
           pids=()
+          # The repo root holds scripts/seed-fixtures.mjs's dependencies; it needs no dev tools.
+          (npm ci --omit=dev) & pids+=($!)
           for d in backend test-content test-network tortok; do (cd "$d" && npm ci) & pids+=($!); done
           for p in "${pids[@]}"; do wait "$p"; done
       # The stack doesn't depend on the app, so it starts before the long build.
@@ -185,6 +191,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: |
+            package-lock.json
             backend/package-lock.json
             test-content/package-lock.json
             test-network/package-lock.json
@@ -201,6 +208,8 @@ jobs:
       - name: Install
         run: |
           pids=()
+          # The repo root holds scripts/seed-fixtures.mjs's dependencies; it needs no dev tools.
+          (npm ci --omit=dev) & pids+=($!)
           for d in backend test-content test-network tortok; do (cd "$d" && npm ci) & pids+=($!); done
           for p in "${pids[@]}"; do wait "$p"; done
       # The stack doesn't depend on the app, so it starts before the long build.
