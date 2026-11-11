@@ -31,10 +31,12 @@ describe('Feed', () => {
     // Tap the screen where a person would: the video's upper middle. The
     // caption and action overlays cover part of the video, and iOS won't let
     // Detox tap a partly covered element, even at an uncovered point.
+    // A tap takes many seconds on the hosted iOS simulator (this test runs
+    // 35-50 s there), so the state gets a wide margin after each one.
     await device.tap({ x: 200, y: 250 });
-    await waitForActiveVideo('paused', 5000);
+    await waitForActiveVideo('paused', 15000);
     await device.tap({ x: 200, y: 250 });
-    await waitForActiveVideo('playing', 5000);
+    await waitForActiveVideo('playing', 15000);
   });
 
   it('swipes to the next clip, which plays', async () => {
