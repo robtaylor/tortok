@@ -6,10 +6,10 @@ Present tense, tracking the code in `tortok/`; the *why* is in the
 [decisions behind this](#decisions-behind-this). The P2P engine the feed uses
 is documented in [p2p-torrent](p2p-torrent.md).
 
-The client is mid-way through the Phase 3 move to atproto: login is atproto
-OAuth, but the feed, likes and profile still call the legacy backend with a
-JWT that OAuth login never provides. The consequences are listed under
-[Implementation status](#implementation-status).
+The client is most of the way through the Phase 3 move to atproto: login is
+atproto OAuth, and the feed shows `app.tortok.video.post` records the
+backend has indexed. Legacy pieces that nothing uses any more are listed
+under [Implementation status](#implementation-status).
 
 ## Stack and build
 
@@ -117,10 +117,13 @@ fixed at build time.
 It wraps `fetch` with JSON bodies and an optional `Bearer` token, and
 distinguishes `APIError` (the server answered with an error status) from
 `NetworkError` (the request never completed). Exported calls: `login`,
-`register`, `getFeed` (`/videos/feed`, `limit=10`, cursor sent as `offset`),
-`likeVideo`, `recordView` and `getProfile`. Nothing in the app calls
-`recordView` or `getProfile`, and `login` has no caller since the login screen
-moved to OAuth.
+`register`, `getFeed` (`/videos/feed`, `limit=10`, cursor sent as `offset`)
+and `getProfile`. Nothing in the app calls `getProfile`, and `login` has no
+caller since the login screen moved to OAuth. `Video` is the feed item
+([backend](backend.md#videos-and-feed)): an AT-URI `id`, an `author` whose
+`handle` is `null` unless it verified, and a `playback` holding the magnet,
+the `.torrent` URL and the AppView's extra `sources`. `authorLabel()` shows
+`@handle`, else the display name, else the DID.
 
 ## Feed and player
 
@@ -131,18 +134,19 @@ swipe however fast, via `disableIntervalMomentum`) and
 column is held to a 9:16 phone width, and a mouse drag of more than 50 px moves
 one item up or down.
 
-The feed query is `useQuery(['feed', token], () => getFeed(token))`. The
-feed endpoint is public, so it runs with or without a legacy token. It loads
-the first page only; there is no pagination in the UI.
+The feed query is `useQuery(['feed'], () => getFeed())`: the feed is public
+and needs no session. It loads the first page only; there is no pagination
+in the UI.
 
 Each `VideoItem` runs a small display state machine: `idle` (poster shown),
 `loading` (poster shown, player buffering), `playing`, `paused`, `error` (with
 a Retry button) and `empty` (no poster and no magnet). Only the active item
-resolves a playback URL through `useP2PUrl(magnetLink, torrentFileUrl)`. On
-native it returns a local URL served from the torrent by the WebTorrent bridge
-(see [p2p-torrent](p2p-torrent.md#torrent-engine)). On web it skips WebTorrent
-and returns the magnet's first webseed (`ws=`) URL, so web playback is plain
-HTTP from the content origin with no P2P. Each item creates one
+resolves a playback URL through `useP2PUrl(playback)`, keyed by the magnet.
+On native it returns a local URL served from the torrent by the WebTorrent
+bridge (see [p2p-torrent](p2p-torrent.md#torrent-engine)); the torrent is
+added with the AppView's extra trackers and webseeds. On web it skips
+WebTorrent and returns the magnet's first webseed (`ws=`), else the first
+extra webseed, so web playback is plain HTTP with no P2P. Each item creates one
 `expo-video` player at mount and swaps sources with `replaceAsync`, avoiding a
 native player construction on every scroll. Players loop, unmuted; tapping the
 video toggles pause; leaving the item pauses it and returns it to `idle`.
@@ -154,9 +158,9 @@ policy, and posters for items −2 to +2 are prefetched into `expo-image`'s
 memory-and-disk cache. On web the bridge is a stub that rejects, so prefetch
 yields no URL there.
 
-The overlay shows `@username`, the caption, hashtags, and three actions. Like
-is optimistic with rollback on failure and does nothing without a legacy token.
-Comment and Share have no handlers. The item logs a per-video timing line
+The overlay shows the author (`authorLabel`), the caption, hashtags, and two
+actions, Comment and Share, which have no handlers. There is no Like button:
+Phase 3 ships no likes. The item logs a per-video timing line
 (activate → `replaceAsync` → ready → playing) and the first-frame time, for
 playback profiling.
 
@@ -184,8 +188,12 @@ relaunch, and sign-out.
 
 - **Stack:** `scripts/e2e-up.sh` starts what the app talks to, on the host: a
   throwaway PLC and PDS with a test account (`test-network/start.mjs`), the
-  backend on its own `tortok_e2e` database, the tracker, and the content
-  server, then seeds the legacy feed. `scripts/e2e-down.sh` stops it. On
+  tracker, and the content server; publishes the five test clips as
+  `app.tortok.video.post` records to the test PDS (`scripts/seed-fixtures.mjs`,
+  with local webseeds and tracker); then starts the backend on its own
+  `tortok_e2e` database, whose ingest indexes them by backfilling the test
+  account. The test handle can't verify, so the feed shows its profile's
+  display name. `scripts/e2e-down.sh` stops it. On
   Android the tests reverse the stack's ports to the emulator.
 - **Sign-in:** e2e builds are bundled with `EXPO_PUBLIC_E2E=1`, which adds a
   test sign-in form to the login screen (`lib/atproto/devSignIn.ts`): an app
@@ -207,17 +215,15 @@ relaunch, and sign-out.
   restore and revocation; the paged feed with the poster/player state machine;
   WebTorrent playback, prefetch and seeding policy on native (Phase 2, see
   [p2p-torrent](p2p-torrent.md)). Web plays from the webseed over HTTP only.
-- **Still on the legacy backend:** the feed reads the legacy `/videos/feed`,
-  and Like does nothing without a legacy token, which OAuth sign-in never
-  creates. Phase 3 Unit 2.5B moves the feed onto atproto records and Unit 2.5C
-  retires the legacy token, `user`, `register` and the legacy API calls
+- **Legacy leftovers:** the auth store's legacy token and `user`, `register`,
+  `login` and `getProfile` are unused; Phase 3 Unit 2.5C removes them
   ([`phase-3-atproto.md`](../plans/phase-3-atproto.md)).
 - **Not built: recording and upload.** The Record tab is a placeholder, out of
   scope for v1. When recording is built, it must take `CAMERA` and
   `RECORD_AUDIO` back out of `android.blockedPermissions` in `app.json`, and
   replace the iOS usage strings with ones that describe recording.
 - **Not built, other:** publishing records to the PDS (Phase 3 Unit 3), comments,
-  sharing, feed pagination, view reporting (`recordView` is unused), choosing an
+  likes, sharing, feed pagination, view reporting, choosing an
   AppView at runtime (Decision 0017; the backend URL is fixed at build time),
   and web cookie auth (Phase 3 Unit 7; web tokens sit in `localStorage` today).
 - **Placeholder identity:** the bundle identifier and package are still

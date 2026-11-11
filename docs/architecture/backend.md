@@ -2,7 +2,7 @@
 
 *Reference: the current design as it stands in the code. The why lives in the decision records linked from each section; the not-yet-built work is under [Implementation status](#implementation-status). Present tense means "true today". If a claim here is stale, the code moved and this doc didn't.*
 
-The backend (`backend/`) is a single Node + TypeScript Express process backed by Postgres. Today it serves the **legacy email/password API**: JWT auth, video metadata, the feed, likes and views. It also hosts the origin WebTorrent seeder in-process and issues TURN credentials. It has begun to become an AppView: it indexes `app.tortok.video.post` records from the network into its own tables ([Decision 0017](decisions/0017-appview-postgres-is-a-rebuildable-index.md)), but no route serves them yet. Rationale for staying on Node/TypeScript and growing into an AppView: [Decision 0005](decisions/0005-backend-node-appview.md).
+The backend (`backend/`) is a single Node + TypeScript Express process backed by Postgres. Today it serves the **legacy email/password API**: JWT auth, video metadata, the feed, likes and views. It also hosts the origin WebTorrent seeder in-process and issues TURN credentials. It has begun to become an AppView: it indexes `app.tortok.video.post` records from the network into its own tables ([Decision 0017](decisions/0017-appview-postgres-is-a-rebuildable-index.md)), and the feed serves them, with their blobs from its own blob route. Rationale for staying on Node/TypeScript and growing into an AppView: [Decision 0005](decisions/0005-backend-node-appview.md).
 
 ## Process and boot
 
@@ -27,23 +27,31 @@ Unmatched routes return `404 {"error":"Not found"}`. Uncaught route errors retur
 | GET | `/.well-known/tortok` | none | `index.ts`: static instance info (`federationEnabled: false`, `supportedProtocols: ['tortok-v1']`) |
 | GET | `/seeder/stats` | none | `index.ts`: seeder torrent/peer counts, upload speed, seeded torrent list |
 | GET | `/turn/credentials` | none | `index.ts`: ICE servers (see [TURN credentials](#turn-credentials)) |
+| GET | `/blob/:did/:cid` | none | `routes/blob.ts`: an indexed author's blob (poster, avatar, `.torrent`); see [Feed](#videos-and-feed) |
 | GET | `/content/*` | none | `express.static` over `backend/content/`, with HLS content types and `Access-Control-Allow-Origin: *` |
 | POST | `/auth/register` | none | `routes/auth.ts` |
 | POST | `/auth/login` | none | `routes/auth.ts` |
 | GET | `/auth/me` | JWT required | `routes/auth.ts` |
 | POST | `/videos` | JWT required | `routes/videos.ts`: create video + hashtags |
-| GET | `/videos/feed` | JWT optional | `routes/videos.ts`: the feed |
-| GET | `/videos/:id` | JWT optional | `routes/videos.ts`: one video |
+| GET | `/videos/feed` | none | `routes/videos.ts`, `services/feedView.ts`: indexed posts |
+| GET | `/videos/:id` | none | `routes/videos.ts`: one indexed post, by URL-encoded AT-URI |
 | POST | `/videos/:id/like` | JWT required | `routes/videos.ts`: like / unlike |
 | POST | `/videos/:id/view` | JWT optional | `routes/videos.ts`: record a view |
 | PATCH | `/videos/:id/urls` | JWT required, owner only | `routes/videos.ts`: rewrite `magnet_link` / `torrent_file_url` |
 
-The Expo client calls `/auth/login`, `/auth/register`, `/auth/me` and `/videos/feed` (`tortok/lib/api.ts`). It resolves the base URL from `EXPO_PUBLIC_API_URL`, falls back to the dev host on port 8080 in development, and uses `https://tortok-api.fly.dev` otherwise.
+The Expo client calls `/auth/register` and `/videos/feed`, and fetches the blob URLs the feed hands it (`tortok/lib/api.ts`); nothing calls the legacy like, view or create routes. It resolves the base URL from `EXPO_PUBLIC_API_URL`, falls back to the dev host on port 8080 in development, and uses `https://tortok-api.fly.dev` otherwise.
 
 ### Videos and feed
 
 - **Create** (`POST /videos`) inserts the video and its hashtags in one transaction. Hashtags are lowercased and upserted into `hashtags`, incrementing `usage_count`, then linked through `video_hashtags`.
-- **Feed** (`GET /videos/feed`) returns every video, newest first (`ORDER BY created_at DESC`), with offset pagination: `limit` (default 20) and `offset` (default 0). The response carries `nextCursor` (the next offset as a string, or `null`) and `hasMore`. There is no ranking, following filter or personalisation. With a valid JWT, each item's `isLiked` reflects the caller's likes; without one it is `false`.
+- **Feed** (`GET /videos/feed`) returns the indexed `app.tortok.video.post` rows of `posts`, joined with their author's `profiles` row, newest first by the record's `createdAt` (ties by AT-URI), with offset pagination: `limit` (default 20, at most 50) and `offset` (default 0). The response carries `nextCursor` (the next offset as a string, or `null`) and `hasMore`. There is no ranking, following filter or personalisation, and no like or view counts. Each item has:
+  - `id` (the AT-URI) and the record `cid`;
+  - `author`: DID, `handle` (`null` unless it verified), display name, avatar URL;
+  - `caption`, `hashtags` (each beginning with `#`), `durationSeconds`, `width`, `height`, `createdAt`;
+  - `posterURL`, and `playback`: `kind: 'torrent'`, the record's `magnetLink`, a `torrentFileUrl`, and `sources: { webseeds, trackers }`, the extra sources the client merges into WebTorrent ([Decision 0022](decisions/0022-clients-learn-extra-video-sources-from-their-appview.md)). `trackers` is `TRACKER_URLS`; `webseeds` is empty, since tortok has no mirrors yet.
+
+  Poster, avatar and `.torrent` URLs point at the blob route on `PUBLIC_BASE_URL` (set in `fly.toml`), or on the request's own host when it's unset.
+- **Blob** (`GET /blob/:did/:cid`) serves a blob of an author in `profiles`, fetched from the PDS their DID document names (`com.atproto.sync.getBlob`). It checks the bytes against the CID (`atproto/cid.ts`) and returns them with `Cache-Control: public, max-age=31536000, immutable`, so Cloudflare and clients cache them for good. Unknown authors get 404 without any request; blobs over 5 MB get 413; a PDS error is 502, and a timeout (10 s) 504. Only image and `application/x-bittorrent` types pass through; anything else is served as `application/octet-stream` with a sandboxing CSP, so a hostile PDS can't serve a page on this origin.
 - **Like** (`POST /videos/:id/like`, body `{liked}`) inserts or deletes the `likes` row in a transaction and changes `like_count` only when a row actually changed, so repeated likes or unlikes do not drift the counter.
 - **View** (`POST /videos/:id/view`) inserts a `views` row (`source` defaults to `http`) and increments `view_count`. The two statements are not in a transaction, and nothing deduplicates views. What a view *means* is unresolved: [`open-problems/view-counting.md`](open-problems/view-counting.md).
 - **URL rewrite** (`PATCH /videos/:id/urls`) returns 404 for an unknown video and 403 unless the caller uploaded it. There is no admin role.
@@ -90,7 +98,7 @@ Triggers keep `users.follower_count` / `following_count` in step with `follows`,
 - **Validation:** every record passes `atproto/videoPost.ts`, a hand-written check against `lexicons/app/tortok/video/post.json`: required fields, size and grapheme limits, blob MIME types, and a magnet whose infohash matches `infoHash`. An invalid record is skipped; an edit that makes a record invalid deletes the indexed version.
 - **Writes:** an upsert keyed by AT-URI replaces a row only when the record CID changes. A delete event deletes the row.
 - **Authors:** `atproto/identity.ts` resolves a DID from its own sources, not from Bluesky's AppView. The DID document (PLC directory, or `did:web`'s well-known file) gives the PDS endpoint and the claimed handle. The handle is kept only if its `_atproto` DNS TXT record or `/.well-known/atproto-did` names the same DID. The PDS's `app.bsky.actor.profile` record gives the display name and avatar. Profiles are refreshed when older than 24 hours, and at once on a Jetstream identity event for a known account.
-- **Known accounts:** a DID becomes known the first time Jetstream shows it posting a valid record, or from `INGEST_SEED_DIDS` (comma-separated). Production seeds the dev account, `tortok-dev.bsky.social`.
+- **Known accounts:** a DID becomes known the first time Jetstream shows it posting a valid record, or from `INGEST_SEED_DIDS` (comma-separated). Production seeds the dev account, `tortok-dev.bsky.social`. `PLC_DIRECTORY_URL` (default `https://plc.directory`) is where `did:plc` documents come from; the e2e stack points it at its own PLC.
 - **Backfill:** on boot, each known account's records are re-listed with `com.atproto.repo.listRecords` from its PDS, four accounts at a time. Valid records are upserted, and rows the listing no longer has are deleted, except rows indexed after the listing began.
 
 ## Seeder
@@ -122,7 +130,7 @@ In local development `scripts/dev-up.sh` starts the backend (`npm run dev` on :8
 - **Accounts:** usernames are alphanumeric, 3–30 characters; display names 1–100 characters.
 - **Request bodies** are capped at 10 MB. The backend accepts metadata only; video bytes never pass through it.
 - **Single process:** the seeder, the API and the schema bootstrap share one process, so the API machine is also the origin seeder and is kept always-on.
-- **Tests:** `npm test` runs Jest over `src/__tests__/`. Ingest has integration tests against a real Postgres: each test file creates a throwaway database from `TEST_PG_ADMIN_URL` (default the local server) and applies `schema.sql`, with Jetstream, DID resolution and PDS calls stubbed. The record validator and identity resolver have unit tests. No route or middleware behaviour is under test. CI (`.github/workflows/ci.yml`) runs `tsc` and `npm test` on Node 22 with a Postgres 17 service, on every pull request and every push to `main`.
+- **Tests:** `npm test` runs Jest over `src/__tests__/`. Ingest has integration tests against a real Postgres: each test file creates a throwaway database from `TEST_PG_ADMIN_URL` (default the local server) and applies `schema.sql`, with Jetstream, DID resolution and PDS calls stubbed. The feed routes have the same kind of integration test, with records put in through ingest. The blob route, the CID function (against a real PDS blob), the record validator and the identity resolver have unit tests. The legacy routes and middleware aren't under test. CI (`.github/workflows/ci.yml`) runs `tsc` and `npm test` on Node 22 with a Postgres 17 service, on every pull request and every push to `main`.
 
 ## Implementation status
 
@@ -132,7 +140,9 @@ In local development `scripts/dev-up.sh` starts the backend (`npm run dev` on :8
 |---|---|
 | Legacy email/password auth, JWT issue/verify | `backend/src/routes/auth.ts`, `backend/src/middleware/auth.ts` |
 | Request validation | `backend/src/middleware/validate.ts` |
-| Video create, feed, single video, like, view, owner-only URL rewrite | `backend/src/routes/videos.ts` |
+| Feed and single post from indexed records | `backend/src/routes/videos.ts`, `backend/src/services/feedView.ts` |
+| Blob route with CID check | `backend/src/routes/blob.ts`, `backend/src/atproto/cid.ts` |
+| Legacy video create, like, view, owner-only URL rewrite (uncalled) | `backend/src/routes/videos.ts` |
 | Postgres pool and boot-time schema | `backend/src/db/index.ts`, `backend/src/db/schema.sql` |
 | In-process origin seeder + stats | `backend/src/services/seeder.ts`, `backend/src/index.ts` |
 | TURN credential issuance | `backend/src/index.ts` |
@@ -144,14 +154,13 @@ In local development `scripts/dev-up.sh` starts the backend (`npm run dev` on :8
 
 | Part | Gap | Tracking |
 |---|---|---|
-| Feed cutover and blob route | `/videos/feed` reads the legacy `videos` table, not `posts`; no route serves blobs. | [`phase-3-atproto.md`](../plans/phase-3-atproto.md) Unit 2.5B |
 | Account lifecycle | Jetstream `account` events (takedown, deactivation) are ignored, and known accounts are never removed. | Phase 4 |
-| Retire legacy auth and write paths | `/auth/*`, `users`, `POST /videos` and the JWT middleware are still live. | Phase 3 Unit 2.5C |
+| Retire legacy auth and write paths | `/auth/*`, `users`, the `videos` table, `POST /videos`, like, view and URL rewrite, and the JWT middleware are still live, though nothing calls them. | Phase 3 Unit 2.5C |
 | Bluesky bridge | No bridge code on the backend; the attempt-1 tables are dropped on boot. | Phase 3 Unit 2.5D; [federation](federation.md) |
 | Seeder extraction | The seeder still runs in the API process rather than as a separate worker reached over an internal API. | [p2p-torrent](p2p-torrent.md#implementation-status) |
 | Own PDS | No PDS is run; users log in against their existing PDS. | [`open-problems/own-pds.md`](open-problems/own-pds.md) |
 | Social graph | `follows` table and count triggers exist, with no routes. | Later phase |
-| Route tests | Only ingest is under test. | — |
+| Route tests | Ingest, the feed and blob routes are under test; the legacy routes aren't. | — |
 
 ## Decisions behind this
 
