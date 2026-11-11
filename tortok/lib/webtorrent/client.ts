@@ -5,6 +5,7 @@
 
 import type { ChunkStoreCtor, Torrent, WebTorrentClient, WebTorrentCtor } from './types';
 import { destroyBridge, registerTorrent, unregisterTorrent } from './bridge';
+import type { TorrentPlayback } from '@/lib/api';
 
 const P2P_ENABLED = process.env.EXPO_PUBLIC_USE_P2P !== '0';
 
@@ -77,13 +78,14 @@ const pending = new Map<string, Promise<string | null>>();
  * When `torrentFileUrl` is provided, the .torrent file is fetched and passed
  * directly to `client.add(buffer)` — this skips the ~6s magnet resolution
  * round-trip (no tracker/peer needed for metadata). Falls back to magnet
- * resolution if the fetch fails.
+ * resolution if the fetch fails. The AppView's extra webseeds and trackers
+ * (`sources`, Decision 0022) are added to the torrent's own.
+ *
+ * Torrents are keyed by magnet link, which `release()` takes.
  */
-export async function requestUrl(
-  magnetLink: string,
-  torrentFileUrl?: string | null,
-): Promise<string | null> {
+export async function requestUrl(playback: TorrentPlayback): Promise<string | null> {
   if (!P2P_ENABLED) return null;
+  const { magnetLink } = playback;
 
   // Fast path: torrent already managed
   const existing = managed.get(magnetLink);
@@ -112,7 +114,7 @@ export async function requestUrl(
     return url;
   }
 
-  const p = doAdd(magnetLink, torrentFileUrl);
+  const p = doAdd(playback);
   pending.set(magnetLink, p);
   p.finally(() => pending.delete(magnetLink));
   return p;
@@ -134,10 +136,7 @@ async function fetchTorrentFile(url: string): Promise<Uint8Array | null> {
   }
 }
 
-async function doAdd(
-  magnetLink: string,
-  torrentFileUrl?: string | null,
-): Promise<string | null> {
+async function doAdd({ magnetLink, torrentFileUrl, sources }: TorrentPlayback): Promise<string | null> {
   const ok = await ensureClient();
   if (!ok || !client || !MemoryChunkStore) return null;
 
@@ -150,7 +149,8 @@ async function doAdd(
 
   try {
     const torrent = await new Promise<Torrent>((resolve, reject) => {
-      const t = client!.add(torrentId, { store: MemoryChunkStore! }, (torrent: Torrent) => {
+      const opts = { store: MemoryChunkStore!, announce: sources.trackers, urlList: sources.webseeds };
+      const t = client!.add(torrentId, opts, (torrent: Torrent) => {
         resolve(torrent);
       });
       t.on('error', (e: unknown) => reject(e));

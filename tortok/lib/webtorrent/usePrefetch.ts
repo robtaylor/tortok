@@ -32,7 +32,7 @@ export function usePrefetch(videos: Video[], activeIndex: number): void {
       if (offset === 0) continue; // active cell manages its own torrent
       const v = videos[activeIndex + offset];
       const pos = offset === 1 ? 'next' : offset === -1 ? 'prev' : `${offset}`;
-      if (v?.magnetLink) desired.set(v.magnetLink, { video: v, pos });
+      if (v) desired.set(v.playback.magnetLink, { video: v, pos });
     }
 
     // Release magnets that scrolled out of range
@@ -51,7 +51,7 @@ export function usePrefetch(videos: Video[], activeIndex: number): void {
       held.current.set(magnet, entry);
 
       const pre = `[${pos}] [prefetch:${video.caption.slice(0, 20)}]`;
-      requestUrl(magnet, video.torrentFileUrl)
+      requestUrl(video.playback)
         .then((url) => {
           // Guard: magnet may have been released while we awaited
           if (!held.current.has(magnet)) {

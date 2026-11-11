@@ -121,24 +121,41 @@ export function register(data: {
 
 // --- Feed ---
 
+/** Extra webseeds and trackers from the AppView, beyond the magnet's own (Decision 0022). */
+export type Sources = {
+  webseeds: string[];
+  trackers: string[];
+};
+
+/** How a post plays: over WebTorrent from its magnet, `.torrent` and extra sources. */
+export type TorrentPlayback = {
+  kind: 'torrent';
+  magnetLink: string;
+  /** The post's `.torrent` on the AppView's blob route; lets it start with no peer. */
+  torrentFileUrl: string | null;
+  sources: Sources;
+};
+
+/** An indexed `app.tortok.video.post`, as GET /videos/feed serves it. */
 export type Video = {
+  /** The record's AT-URI. */
   id: string;
-  user: {
-    id: string;
-    username: string;
-    displayName: string;
+  cid: string;
+  author: {
+    did: string;
+    /** Null when the handle doesn't verify. */
+    handle: string | null;
+    displayName: string | null;
     avatarURL: string | null;
   };
   caption: string;
-  magnetLink: string | null;
-  torrentFileUrl: string | null;
+  playback: TorrentPlayback;
   posterURL: string | null;
   durationSeconds: number;
-  width: number;
-  height: number;
+  width: number | null;
+  height: number | null;
+  /** Each begins with '#'. */
   hashtags: string[];
-  likeCount: number;
-  isLiked: boolean;
   createdAt: string;
 };
 
@@ -155,25 +172,10 @@ export function getFeed(token?: string | null, cursor?: string) {
   return request<FeedResponse>(`/videos/feed?${params}`, { token });
 }
 
-export function likeVideo(videoId: string, liked: boolean, token: string) {
-  return request(`/videos/${videoId}/like`, {
-    method: 'POST',
-    body: { liked },
-    token,
-  });
-}
-
-export function recordView(
-  videoId: string,
-  watchedDuration: number,
-  completionRate: number,
-  token?: string | null,
-) {
-  return request(`/videos/${videoId}/view`, {
-    method: 'POST',
-    body: { watchedDuration, completionRate, source: 'http' },
-    token,
-  });
+/** How to show an author: their verified handle, else their display name, else their DID. */
+export function authorLabel(author: Video['author']): string {
+  if (author.handle) return `@${author.handle}`;
+  return author.displayName || author.did;
 }
 
 // --- Profile ---

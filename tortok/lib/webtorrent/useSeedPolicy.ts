@@ -20,12 +20,13 @@ export function useSeedPolicy(activeVideo: Video | null): void {
 
   // Notify seed policy when active video changes.
   useEffect(() => {
-    if (!activeVideo?.magnetLink) return;
-    if (activeVideo.magnetLink === prevMagnet.current) return;
-    prevMagnet.current = activeVideo.magnetLink;
+    if (!activeVideo) return;
+    const { playback } = activeVideo;
+    if (playback.magnetLink === prevMagnet.current) return;
+    prevMagnet.current = playback.magnetLink;
 
     const bytes = activeVideo.durationSeconds * BITRATE_ESTIMATE;
-    notifyWatched(activeVideo.magnetLink, activeVideo.torrentFileUrl, bytes);
+    notifyWatched(playback, bytes);
   }, [activeVideo]);
 
   // Subscribe to device condition changes.
