@@ -12,7 +12,8 @@ to negotiate external sponsorships using our numbers; any federated
 pool→payout formula that distributes by view share.
 **Related decision records:** Decision 0002 (AT Protocol federation), Decision 0005 (AppView).
 **Related open problems:** `monetization.md` (the central reason this
-problem is load-bearing).
+problem is load-bearing); `signed-out-feed.md` (whether views can come
+from people who haven't signed in).
 
 ## The problem
 
