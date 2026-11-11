@@ -9,13 +9,16 @@
 //            (the given one, with --expect-sha). With --sha-file <path>, the
 //            reported SHA is also written there, for callers that compare it
 //            with main.
-//   contract /videos/feed returns items with a magnet and a .torrent URL;
-//            /turn/credentials includes a TURN server with credentials.
-//   webseed  for each feed item (up to --max-items, default 5): the .torrent's
-//            info hash matches the magnet, and its first and last pieces,
-//            fetched from the magnet's webseed (ws=) with no peers at all,
-//            match the torrent's piece hashes. So a clip that can't start
-//            without a peer fails here.
+//   contract /videos/feed returns items whose torrent playback has a magnet,
+//            a .torrent URL and sources listing at least one tracker
+//            (Decision 0022); /turn/credentials includes a TURN server with
+//            credentials.
+//   webseed  for each feed item (up to --max-items, default 5): the poster
+//            loads as an image; the .torrent (from the blob route) matches
+//            the magnet's info hash; and its first and last pieces, fetched
+//            with no peers at all from every webseed (the magnet's ws= and
+//            sources.webseeds), match the torrent's piece hashes. So a clip
+//            that can't start without a peer fails here.
 //
 // Prints one line per check and exits non-zero if any failed. No dependencies,
 // so CI can run it without an install.
@@ -127,8 +130,15 @@ async function checkFeed({ base }) {
   if (!Array.isArray(items)) throw new SmokeError('/videos/feed: no videos array');
   if (items.length === 0) throw new SmokeError('/videos/feed: empty');
   for (const v of items) {
-    if (!v.id || typeof v.magnetLink !== 'string' || typeof v.torrentFileUrl !== 'string') {
-      throw new SmokeError(`/videos/feed: item ${v.id ?? '?'} lacks id, magnetLink or torrentFileUrl`);
+    const p = v.playback;
+    if (!v.id || p?.kind !== 'torrent' || typeof p.magnetLink !== 'string') {
+      throw new SmokeError(`/videos/feed: item ${v.id ?? '?'} lacks an id or a torrent playback with a magnet`);
+    }
+    if (typeof p.torrentFileUrl !== 'string') {
+      throw new SmokeError(`/videos/feed: item ${v.id} has no .torrent, so it can't start without a peer`);
+    }
+    if (!Array.isArray(p.sources?.webseeds) || !Array.isArray(p.sources?.trackers) || p.sources.trackers.length === 0) {
+      throw new SmokeError(`/videos/feed: item ${v.id} lacks sources with at least one tracker`);
     }
   }
   return items;
@@ -147,13 +157,23 @@ async function checkTurn({ base }) {
 }
 
 async function checkWebseed(item) {
-  const magnet = new URLSearchParams(item.magnetLink.replace(/^magnet:\?/, ''));
+  const { magnetLink, torrentFileUrl, sources } = item.playback;
+  const magnet = new URLSearchParams(magnetLink.replace(/^magnet:\?/, ''));
   const btih = (magnet.get('xt') ?? '').match(/^urn:btih:([0-9a-fA-F]{40})$/)?.[1]?.toLowerCase();
   if (!btih) throw new SmokeError('magnet has no hex btih');
-  const webseeds = magnet.getAll('ws');
-  if (webseeds.length === 0) throw new SmokeError('magnet has no webseed (ws=)');
+  const webseeds = [...new Set([...magnet.getAll('ws'), ...sources.webseeds])];
+  if (webseeds.length === 0) throw new SmokeError('no webseed, in the magnet (ws=) or sources');
 
-  const res = await get(item.torrentFileUrl);
+  if (item.posterURL) {
+    const poster = await get(item.posterURL);
+    const type = poster.headers.get('content-type') ?? '';
+    await poster.arrayBuffer();
+    if (poster.status !== 200 || !type.startsWith('image/')) {
+      throw new SmokeError(`poster: HTTP ${poster.status}, ${type || 'no content type'}`);
+    }
+  }
+
+  const res = await get(torrentFileUrl);
   if (res.status !== 200) throw new SmokeError(`.torrent: HTTP ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
   const [torrent] = bdecode(buf);

@@ -43,10 +43,13 @@ export function clipFiles(clip) {
   const clipPath = path.join(CONTENT_DIR, 'clips', `${clip.name}.mp4`);
   const posterPath = path.join(CONTENT_DIR, 'posters', `${clip.name}.jpg`);
   for (const f of [clipPath, posterPath]) if (!fs.existsSync(f)) throw new Error(`missing input file ${f}`);
+  // An empty R2_PREFIX puts the files at the origin's root (the e2e
+  // stack's content server serves /<name>.mp4).
+  const key = (rest) => (PREFIX ? `${PREFIX}/${rest}` : rest);
   const keys = {
-    clip: `${PREFIX}/${clip.name}.mp4`,
-    poster: `${PREFIX}/posters/${clip.name}.jpg`,
-    torrent: `${PREFIX}/${clip.name}.torrent`,
+    clip: key(`${clip.name}.mp4`),
+    poster: key(`posters/${clip.name}.jpg`),
+    torrent: key(`${clip.name}.torrent`),
   };
   return { clipPath, posterPath, keys, clipUrl: `${PUBLIC_URL}/${keys.clip}` };
 }

@@ -35,6 +35,14 @@ const { data: account } = await agent.createAccount({
   password: crypto.randomUUID(),
 });
 const { data: appPassword } = await agent.com.atproto.server.createAppPassword({ name: 'detox' });
+// A profile record, which the backend's ingest reads for the author's
+// display name: alice.test can't verify as a handle, so the feed shows this.
+await agent.com.atproto.repo.putRecord({
+  repo: account.did,
+  collection: 'app.bsky.actor.profile',
+  rkey: 'self',
+  record: { $type: 'app.bsky.actor.profile', displayName: 'Alice Test' },
+});
 
 const info = {
   plcUrl: network.plc.url,

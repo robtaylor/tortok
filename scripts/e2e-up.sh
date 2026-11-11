@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Start everything the end-to-end tests talk to, seeded, in the background:
 #   test network  PLC :2582, PDS :2583, test account   (test-network/start.mjs)
-#   backend       :8080, run from source, its own database (tortok_e2e)
 #   tracker       :8000                                 (test-content/tracker.mjs)
 #   content       :8090, webseed + seeder for the clips (test-content/seeder.mjs)
-# then fill the legacy feed with the five test clips.
+#   backend       :8080, run from source, its own database (tortok_e2e)
+# The five test clips are published as app.tortok.video.post records to the
+# test PDS (scripts/seed-fixtures.mjs), with local webseeds and tracker, and
+# the backend's ingest indexes them by backfilling the test account, as
+# production does for its seed accounts.
 #
 # Used by CI (.github/workflows/e2e.yml) and locally before `npm run e2e:*`.
-# Expects dependencies installed in backend/, test-content/ and test-network/.
+# Expects dependencies installed in the repo root, backend/, test-content/
+# and test-network/.
 # Logs and PIDs go to $E2E_DIR.
 # Stop with scripts/e2e-down.sh.
 #
@@ -51,24 +55,32 @@ rm -f "$E2E_NETWORK_FILE"
 start_svc network "$REPO_ROOT/test-network" node start.mjs
 start_svc tracker "$REPO_ROOT/test-content" node tracker.mjs
 start_svc content "$REPO_ROOT/test-content" node seeder.mjs
-# The test stack has no Jetstream, and must not reach Bluesky's (the
-# backend's default), so ingest points at a closed local port and retries
-# quietly, with no seed accounts (set empty, so a local backend/.env can't
-# add any). The feed doesn't read ingested posts until Phase 3 Unit 2.5B.
-NODE_ENV=test PORT=8080 DATABASE_URL="$DB_URL" JWT_SECRET=e2e-only \
-  JETSTREAM_URL=ws://127.0.0.1:9/subscribe INGEST_SEED_DIDS='' \
-  start_svc backend "$REPO_ROOT/backend" node -r ts-node/register/transpile-only src/index.ts
-
 wait_for network "test -f '$E2E_NETWORK_FILE'"
 wait_for tracker "curl -sf http://localhost:8000/stats"
 # The seeder rewrites test-content/bbb-0?.magnet.txt once each clip is seeded
 # (identically, since the torrents are deterministic); its log counts them.
 wait_for content "grep -q '\[5/5\]' '$E2E_DIR/content.log' && curl -sf -o /dev/null http://localhost:8090/bbb-01.mp4"
-wait_for backend "curl -sf http://localhost:8080/health"
 
-echo "→ Legacy feed: the five test clips, owned by testuser"
-( cd "$REPO_ROOT/test-content" && DATABASE_URL="$DB_URL" node seed-db.mjs >"$E2E_DIR/seed.log" 2>&1 )
-count=$(curl -sf 'http://localhost:8080/videos/feed?limit=10' | jq '.videos | length')
-if [ "$count" != 5 ]; then echo "  feed has $count videos, expected 5" >&2; exit 1; fi
-echo "  feed serves 5 videos"
+net() { jq -r ".$1" "$E2E_NETWORK_FILE"; }
+
+echo "→ Fixtures: the five test clips as records in $(net handle)'s repo"
+# Explicit values, so a local .env (the real dev account) can't leak in;
+# the session cache stays in $E2E_DIR.
+( cd "$REPO_ROOT" && BSKY_SERVICE_URL="$(net pdsUrl)" BSKY_TEST_HANDLE="$(net handle)" \
+    BSKY_TEST_APP_PASSWORD="$(net appPassword)" XDG_CACHE_HOME="$E2E_DIR/cache" \
+    CONTENT_ORIGIN_URL=http://localhost:8090 R2_PREFIX='' TRACKER_URLS=ws://localhost:8000 \
+    node scripts/seed-fixtures.mjs >"$E2E_DIR/fixtures.log" 2>&1 ) || {
+  echo "  seed-fixtures failed; its log:" >&2; tail -30 "$E2E_DIR/fixtures.log" >&2; exit 1; }
+echo "  published ($E2E_DIR/fixtures.log)"
+
+# Ingest backfills the test account from the test PDS, resolving it through
+# the test PLC. There's no Jetstream here, and the stack must not reach
+# Bluesky's (the backend's default), so ingest points at a closed local port
+# and retries quietly.
+NODE_ENV=test PORT=8080 DATABASE_URL="$DB_URL" JWT_SECRET=e2e-only \
+  JETSTREAM_URL=ws://127.0.0.1:9/subscribe INGEST_SEED_DIDS="$(net did)" PLC_DIRECTORY_URL="$(net plcUrl)" \
+  start_svc backend "$REPO_ROOT/backend" node -r ts-node/register/transpile-only src/index.ts
+wait_for backend "curl -sf http://localhost:8080/health"
+wait_for backend "test \"\$(curl -sf 'http://localhost:8080/videos/feed?limit=10' | jq '.videos | length')\" = 5"
+echo "  feed serves the 5 indexed posts"
 echo "✓ e2e stack up"

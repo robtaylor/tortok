@@ -26,6 +26,10 @@ let base;
 const defaults = () => ({
   health: { status: 'healthy', database: 'ok', sha: 'abc123def456', buildTime: '2026-11-11T00:00:00Z' },
   magnet: (b) => `magnet:?xt=urn:btih:${BTIH}&dn=bbb-01.mp4&ws=${encodeURIComponent(`${b}/files/bbb-01.mp4`)}`,
+  // Extra sources the AppView lists (Decision 0022); `b` is the stub's base URL.
+  sources: () => ({ webseeds: [], trackers: ['wss://tracker.invalid'] }),
+  torrentFileUrl: (b) => `${b}/files/bbb-01.torrent`,
+  posterType: 'image/jpeg',
   file: FILE,
   ignoreRange: false,
   turn: { iceServers: [{ urls: 'stun:x:3478' }, { urls: 'turn:x:3478', username: 'u', credential: 'c' }] },
@@ -39,7 +43,17 @@ const server = createServer((req, res) => {
   if (req.url === '/health') return json(200, state.health);
   if (req.url === '/turn/credentials') return json(200, state.turn);
   if (req.url === '/videos/feed') {
-    return json(200, { videos: [{ id: 'v1', magnetLink: state.magnet(base), torrentFileUrl: `${base}/files/bbb-01.torrent` }] });
+    return json(200, {
+      videos: [{
+        id: 'v1',
+        posterURL: `${base}/files/poster.jpg`,
+        playback: { kind: 'torrent', magnetLink: state.magnet(base), torrentFileUrl: state.torrentFileUrl(base), sources: state.sources(base) },
+      }],
+    });
+  }
+  if (req.url === '/files/poster.jpg') {
+    res.writeHead(200, { 'content-type': state.posterType });
+    return res.end('jpeg');
   }
   if (req.url === '/files/bbb-01.torrent') {
     res.writeHead(200);
@@ -86,11 +100,42 @@ test('verifies pieces when the webseed ignores Range', async () => {
   assert.equal(code, 0, out);
 });
 
-test('fails a feed item whose magnet has no webseed', async () => {
+test('fails a feed item with no webseed in its magnet or sources', async () => {
   state = { ...defaults(), magnet: () => `magnet:?xt=urn:btih:${BTIH}&dn=bbb-01.mp4` };
   const { code, out } = await smoke();
   assert.equal(code, 1);
-  assert.match(out, /FAIL {2}webseed: v1 — magnet has no webseed \(ws=\)/);
+  assert.match(out, /FAIL {2}webseed: v1 — no webseed, in the magnet \(ws=\) or sources/);
+});
+
+test("uses the AppView's extra webseeds when the magnet names none", async () => {
+  state = {
+    ...defaults(),
+    magnet: () => `magnet:?xt=urn:btih:${BTIH}&dn=bbb-01.mp4`,
+    sources: (b) => ({ webseeds: [`${b}/files/bbb-01.mp4`], trackers: ['wss://tracker.invalid'] }),
+  };
+  const { code, out } = await smoke();
+  assert.equal(code, 0, out);
+});
+
+test('fails a feed item with no .torrent', async () => {
+  state = { ...defaults(), torrentFileUrl: () => null };
+  const { code, out } = await smoke();
+  assert.equal(code, 1);
+  assert.match(out, /FAIL {2}contract: feed — .*has no \.torrent, so it can't start without a peer/);
+});
+
+test('fails a feed item whose sources list no tracker', async () => {
+  state = { ...defaults(), sources: () => ({ webseeds: [], trackers: [] }) };
+  const { code, out } = await smoke();
+  assert.equal(code, 1);
+  assert.match(out, /lacks sources with at least one tracker/);
+});
+
+test("fails when a poster doesn't load as an image", async () => {
+  state = { ...defaults(), posterType: 'text/html' };
+  const { code, out } = await smoke();
+  assert.equal(code, 1);
+  assert.match(out, /poster: HTTP 200, text\/html/);
 });
 
 test('fails when the webseed serves bytes that do not match the torrent', async () => {
