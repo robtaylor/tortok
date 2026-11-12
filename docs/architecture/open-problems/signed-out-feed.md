@@ -16,8 +16,8 @@ signed-out onboarding design.
 Today the app shows the login screen until someone has signed in: the root
 layout redirects to `/(auth)/login` whenever there's no DID
 (`tortok/app/_layout.tsx`). The backend doesn't need a session to serve the
-feed: `GET /videos/feed` and `POST /videos/:id/view` both take an optional
-JWT (`backend/src/routes/videos.ts`).
+feed: `GET /videos/feed` takes no auth at all
+(`backend/src/routes/videos.ts`).
 
 Letting people watch before signing in, as TikTok does, has three pulls:
 
