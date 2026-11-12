@@ -13,6 +13,7 @@
     "e2e:test:ios": "detox test --configuration ios.release",
     "e2e:build:android": "EXPO_PUBLIC_E2E=1 EXPO_PUBLIC_API_URL=http://localhost:8080 detox build --configuration android.release",
     "e2e:test:android": "detox test --configuration android.release",
+    "test": "jest",
     "postinstall": "patch-package"
   },
   "dependencies": {

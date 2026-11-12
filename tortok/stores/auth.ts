@@ -1,40 +1,31 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import type { User } from '@/lib/api';
 import {
   restore as oauthRestore,
   signOut as oauthSignOut,
 } from '@/lib/atproto/oauth';
 
-// Phase 3 Unit 2 (option b in docs/plans/phase-3-atproto.md):
-// `did` is the new atproto identity. `token` + `user` remain for
-// legacy backend compat until Unit 2.5C removes them along with the
-// legacy email/password and feed endpoints.
+// The signed-in atproto identity. Only the DID is kept here; the OAuth
+// session lives in the OAuth client's own store.
 type AuthState = {
-  token: string | null;
-  user: User | null;
   did: string | null;
   // Convenience: last handle the user signed in with. Persists across
   // sign-out so the login screen can pre-fill the field on next visit.
   // Not sensitive (it's a public Bluesky handle).
   lastHandle: string | null;
   isLoading: boolean;
-  signIn: (token: string, user: User) => Promise<void>;
   signInWithDid: (did: string, handle: string) => Promise<void>;
   signOut: () => Promise<void>;
   hydrate: () => Promise<void>;
 };
 
-const TOKEN_KEY = 'tortok_auth_token';
-const USER_KEY = 'tortok_auth_user';
 const DID_KEY = 'tortok_auth_did';
 const LAST_HANDLE_KEY = 'tortok_last_handle';
 
 // On web, expo-secure-store falls back to localStorage, which is readable
-// by any XSS on the domain. Tokens stored here are effectively bearer
-// credentials exposed to script injection. See Decision 0006 Phase 3 for the
-// planned migration to HttpOnly session cookies.
+// by any XSS on the domain. See Decision 0006 Phase 3 for the planned
+// migration to HttpOnly session cookies (Phase 3 Unit 7).
 async function secureGet(key: string): Promise<string | null> {
   if (Platform.OS === 'web') {
     return localStorage.getItem(key);
@@ -59,22 +50,9 @@ async function secureDelete(key: string): Promise<void> {
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  token: null,
-  user: null,
   did: null,
   lastHandle: null,
   isLoading: true,
-
-  // Legacy email/password sign-in. Removed in Unit 5 along with the
-  // backend's `routes/auth.ts`. Kept here so callers that still hit
-  // the legacy endpoint compile during the Unit 2 → 3 transition.
-  signIn: async (token: string, user: User) => {
-    await Promise.all([
-      secureSet(TOKEN_KEY, token),
-      secureSet(USER_KEY, JSON.stringify(user)),
-    ]);
-    set({ token, user });
-  },
 
   // atproto OAuth sign-in. Persists only the DID; the live OAuthSession
   // (and its DPoP keys) is held inside the OAuth client's MMKV store
@@ -102,27 +80,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         console.warn('atproto signOut revoke failed', err);
       }
     }
-    await Promise.all([
-      secureDelete(TOKEN_KEY),
-      secureDelete(USER_KEY),
-      secureDelete(DID_KEY),
-    ]);
-    set({ token: null, user: null, did: null });
+    await secureDelete(DID_KEY);
+    set({ did: null });
   },
 
   hydrate: async () => {
     try {
-      const [token, userJson, did, lastHandle] = await Promise.all([
-        secureGet(TOKEN_KEY),
-        secureGet(USER_KEY),
+      const [did, lastHandle] = await Promise.all([
         secureGet(DID_KEY),
         secureGet(LAST_HANDLE_KEY),
       ]);
       const next: Partial<AuthState> = { isLoading: false, lastHandle };
-      if (token && userJson) {
-        next.token = token;
-        next.user = JSON.parse(userJson);
-      }
       if (did) {
         next.did = did;
         // Fire-and-forget: warm the OAuth client's session cache so

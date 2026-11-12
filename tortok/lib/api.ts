@@ -32,12 +32,6 @@ function getApiUrl(): string {
 
 const API_URL = getApiUrl();
 
-type RequestOptions = {
-  method?: string;
-  body?: unknown;
-  token?: string | null;
-};
-
 export class APIError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -55,21 +49,11 @@ export class NetworkError extends Error {
   }
 }
 
-async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (opts.token) {
-    headers['Authorization'] = `Bearer ${opts.token}`;
-  }
-
+/** GET from the AppView. Its API is read-only: writes go to the user's PDS. */
+async function request<T>(path: string): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, {
-      method: opts.method || 'GET',
-      headers,
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
-    });
+    res = await fetch(`${API_URL}${path}`);
   } catch (e) {
     throw new NetworkError(e instanceof Error ? e.message : 'Network request failed');
   }
@@ -79,44 +63,6 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     throw new APIError(res.status, data.error || 'Request failed');
   }
   return data as T;
-}
-
-// --- Auth ---
-
-export type User = {
-  id: string;
-  username: string;
-  displayName: string;
-  email: string;
-  avatarURL: string | null;
-  bio: string | null;
-  followerCount: number;
-  followingCount: number;
-  videoCount: number;
-};
-
-export type AuthResponse = {
-  token: string;
-  user: User;
-};
-
-export function login(email: string, password: string) {
-  return request<AuthResponse>('/auth/login', {
-    method: 'POST',
-    body: { email, password },
-  });
-}
-
-export function register(data: {
-  email: string;
-  username: string;
-  displayName: string;
-  password: string;
-}) {
-  return request<AuthResponse>('/auth/register', {
-    method: 'POST',
-    body: data,
-  });
 }
 
 // --- Feed ---
@@ -184,10 +130,4 @@ export function torrentOf(video: Video): TorrentPlayback | null {
 export function authorLabel(author: Video['author']): string {
   if (author.handle) return `@${author.handle}`;
   return author.displayName || author.did;
-}
-
-// --- Profile ---
-
-export function getProfile(token: string) {
-  return request<User>('/auth/me', { token });
 }
