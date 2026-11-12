@@ -101,11 +101,13 @@ are swallowed) and clears the DID.
 ## API client
 
 `lib/api.ts` talks to the AppView (described in
-[backend](backend.md#http-surface)). The base URL is chosen once at startup:
-`EXPO_PUBLIC_API_URL` if set; otherwise in dev the Metro host's address on port
-8080 (so simulators, emulators and LAN devices reach the dev machine), falling
-back to `localhost:8080`; otherwise `https://tortok-api.fly.dev`. The value is
-fixed at build time.
+[backend](backend.md#http-surface)). Which AppView is the user's choice, held
+in `stores/appview.ts`; callers pass it to each request, and the feed's query
+key includes it. Until the user picks one, the
+build's default applies: `EXPO_PUBLIC_API_URL` if the build sets it (the e2e
+builds do); otherwise in dev the Metro host's address on port 8080 (so
+simulators, emulators and LAN devices reach the dev machine); otherwise
+tortok's AppView, `https://appview.tortok.app`.
 
 It makes unauthenticated GETs, since the AppView's API is read-only, and
 distinguishes `APIError` (the server answered with an error status) from
@@ -158,7 +160,17 @@ playback profiling.
 
 `app/(tabs)/profile.tsx` shows the signed-in handle and DID from the auth
 store, with the sign-out button. It doesn't fetch the atproto profile (display
-name, avatar, bio). It has no
+name, avatar, bio).
+
+Below them, the **AppView setting** shows the AppView in use and lets the user
+enter another: an origin with no path. Release builds take only `https`, apart
+from the build's own default; development and e2e builds also take `http`.
+Before it's saved, the address must serve a feed (`GET /videos/feed?limit=1`
+answers with a `videos` array); otherwise the screen shows why and keeps the
+current one. The choice persists in MMKV (it isn't secret), read synchronously
+when the store is created, and "Use the default" forgets it. Since the feed's
+query is keyed by the AppView, a change loads the new AppView's feed. The
+screen has no
 grid of the user's own videos; the author feed that would fill one isn't
 built.
 
@@ -203,7 +215,7 @@ relaunch, and sign-out.
 ## Implementation status
 
 - **Built:** Expo app on iOS, Android and web; atproto OAuth login with session
-  restore and revocation; the paged feed with the poster/player state machine;
+  restore and revocation; an in-app AppView URL setting; the paged feed with the poster/player state machine;
   WebTorrent playback, prefetch and seeding policy on native (Phase 2, see
   [p2p-torrent](p2p-torrent.md)). Web plays from the webseed over HTTP only.
 - **Not built: recording and upload.** The Record tab is a placeholder, out of
@@ -211,9 +223,9 @@ relaunch, and sign-out.
   `RECORD_AUDIO` back out of `android.blockedPermissions` in `app.json`, and
   replace the iOS usage strings with ones that describe recording.
 - **Not built, other:** publishing records to the PDS (Phase 3 Unit 3), comments,
-  likes, sharing, feed pagination, view reporting, choosing an
-  AppView at runtime (Decision 0017; the backend URL is fixed at build time),
-  and web cookie auth (Phase 3 Unit 7; web tokens sit in `localStorage` today).
+  likes, sharing, feed pagination, view reporting, finding an AppView
+  through a service DID and PDS proxying (the setting takes a URL; decision 4
+  in [`phase-3-atproto.md`](../plans/phase-3-atproto.md)), and web cookie auth (Phase 3 Unit 7; web tokens sit in `localStorage` today).
 - **Placeholder identity:** the bundle identifier and package are still
   `com.anonymous.tortok`.
 

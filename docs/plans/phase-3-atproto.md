@@ -423,7 +423,7 @@ Afterwards the only way content reaches the app is through atproto.
     The legacy sign-up and email/password cases are already gone. From now
     on, every client change updates the Detox tests it
     affects, on both platforms, in the same pull request.
-13. **AppView URL setting.** An in-app AppView base-URL setting,
+13. ✅ **AppView URL setting.** An in-app AppView base-URL setting,
     defaulting to tortok's, replaces the build-time `EXPO_PUBLIC_API_URL`
     (decision 4 below).
 14. **AppView custom domain.** Serve the `tortok-api` Fly app as
