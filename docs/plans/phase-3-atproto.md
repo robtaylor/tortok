@@ -547,6 +547,9 @@ from the
       through `expo-video`, bypassing `useP2PUrl`.
     - A "via Bluesky" badge when the item's AT-URI is an `app.bsky.feed.post`.
     - Tap-through to the post on Bluesky, using the rkey from the AT-URI.
+    - Record watch time, completion, loops and skips per post, locally
+      (MMKV) and never sent, so future ranking has history
+      ([`feed-ranking.md`](../architecture/open-problems/feed-ranking.md)).
     - Detox cases for a bridged item, on both platforms.
 21. **Boot** `bskyFirehose` and `bskyEngagementPoller` from
     `backend/src/index.ts` alongside `atprotoIngest`. One process for v1,

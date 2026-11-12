@@ -40,6 +40,11 @@ Each has a `Must resolve by:` header stating the phase that forces it.
   `view-counting.md`, before public release at the latest. Whether people can
   watch the feed before signing in: easier onboarding and sign-in-free
   production smoke tests, against views with no account behind them.
+- **[`feed-ranking.md`](feed-ranking.md)** — resolve by Ramp graduation; the
+  client's local signal recording starts in Unit 2.5D. How a user's feed adapts
+  to them. Leaning: everything personal (behaviour and context modes) stays on
+  the device, which ranks moderated candidates from the AppView with an
+  explainable, shareable recipe in a small bounded language.
 - **[`own-pds.md`](own-pds.md)** — parked. v1 uses users' existing atproto
   identities (typically `bsky.social`); no tortok PDS is in scope. Documents the
   costs we're avoiding, the risks taken on, and the triggers that would force a
