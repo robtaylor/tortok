@@ -1,6 +1,6 @@
 # Open problem: How does a user's feed adapt to them?
 
-**Status:** Unresolved. Raised 2026-11-12 with the user, after Decision 0023 settled what the bridge indexes.
+**Status:** Unresolved. Raised 2026-11-12, after Decision 0023 settled what the bridge indexes.
 **Must resolve by:** Ramp graduation in [`release-plan.md`](../../plans/release-plan.md). Beta can ship the curated feed that is the same for everyone, but keeping engine creators' audiences coming back needs some personalisation. The decision about which signals the client records should come sooner, in Unit 2.5D, so the data exists when ranking arrives.
 **Blocks:** any personalised or ranked feed; the client's local signal store; predictive prefetch.
 **Related decision records:** Decision 0010 (the bridge), Decision 0013 (moderation), Decision 0017 (the AppView's database is a rebuildable index), Decision 0022 (clients learn sources from their AppView), Decision 0023 (what the bridge indexes).
@@ -19,7 +19,7 @@ That is ranking optimised for time spent, using context the user never sees leav
 
 ## Constraints
 
-Any candidate must meet these. Agreed with the user on 2026-11-12.
+Any candidate must meet these.
 
 1. **Everything personal stays on the device.** Behaviour (watch time, loops, skips, likes) and context (time of day, motion state, charging, network, headphones) may be used, but only on the phone. None of it is sent to the AppView or anyone else.
    - **Consequence:** ranking, filtering and prefetch for a user run on the device. The AppView serves candidates that are the same for everyone.
