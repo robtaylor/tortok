@@ -510,12 +510,41 @@ bridge indexes, and what it drops, is
 from the
 [labels spike](../architecture/decisions/spikes/bluesky-labels-on-bridged-video-posts.md).
 
-15. **Measure first.** Run a Jetstream subscriber for `app.bsky.feed.post`
+15. ✅ **Measure first.** Run a Jetstream subscriber for `app.bsky.feed.post`
     on the production machine (or one sized like it) for an hour and
     record CPU, memory and bandwidth. The spike measured 110,000–190,000
     events and 96–162 MB an hour, of which about 2% are video posts. If
     it doesn't fit beside ingest, stop and size the machine or a separate
     process before building on it.
+
+    **Measured 2026-11-12: it fits.** `scripts/jetstream-load.mjs` ran for
+    60 minutes on a throwaway machine in `tortok-api` sized like
+    production (`shared-cpu-1x`, 512 MB, `lhr`), parsing every event and
+    picking out video posts as the bridge will; the machine was destroyed
+    afterwards.
+
+    | Per minute | Median | Max |
+    |---|---|---|
+    | Events/s | 53 | 92 |
+    | CPU, % of one core | 1.8 | 2.6 |
+    | RSS, MB | 75.1 | 75.7 |
+    | Event-loop lag p99, ms | 10.8 | 10.9 |
+
+    The hour brought 200,754 events and 167 MB, 3,619 video posts (1.8%),
+    1,857 of them portrait and 220 self-labelled NSFW, with no
+    reconnects. A `shared-cpu-1x` is guaranteed 6.25% of a core and
+    bursts above that from a balance that refills while it stays under
+    ([Fly: CPU performance](https://fly.io/docs/machines/cpu-performance/)),
+    so the stream takes about 30% of that baseline, 42% at its busiest
+    minute. Production idles at about 0.1% CPU with 383 of 472 MB
+    available, so memory is no constraint either: RSS stayed flat, and
+    most of the 75 MB is Node itself, which an in-process bridge shares
+    with the backend. Loop lag sat at the monitor's 10 ms resolution,
+    so the stream adds none worth measuring. Not measured: the AppView
+    `getPosts` lookups (about 145 batched calls an hour at this rate) and
+    the database writes, both small beside parsing every event. Run the
+    bridge in the backend process; re-measure if Jetstream's rate
+    doubles.
 16. **Schema.** A `labels` table (subject URI, labeler DID, value, `neg`,
     label timestamp; keyed by subject, labeler and value) that every
     label source writes to (Decision 0023 item 2). Bridged rows go in
