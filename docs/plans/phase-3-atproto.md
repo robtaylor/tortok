@@ -2,12 +2,12 @@
 
 **Status:** Active — the current phase (Decision 0006 Phase 3).
 
-## Status (2026-11-11)
+## Status (2026-11-12)
 
 - ✅ **Unit 0** — Decision 0012 (Lexicon namespace governance) merged; canonical NSID is **`app.tortok.*`** (reverse-DNS rooted at `tortok.app`); schema lives at `lexicons/app/tortok/video/post.json`; AppView+PDS cost note added to Deferred Decisions in [`open-problems/README.md`](../architecture/open-problems/README.md).
 - ✅ **Unit 1** — Standalone Node smoke test (`scripts/atproto-smoke-test.mjs`) round-trips an `app.tortok.video.post` record against `bsky.social` using app-password auth.
 - ✅ **Unit 2** — OAuth round-trip verified end to end on the iOS simulator (2026-05-02). Android and web haven't been verified. `tortok.app` is live on Cloudflare Pages, `@atproto/oauth-client-expo` is integrated, the Hermes polyfills are in `tortok/lib/polyfills.ts`, the login screen pre-fills the last handle, and the auth store has 7 unit tests.
-- ➡️ **Unit 2.5** — replanned 2026-05-02 after a failed first attempt, rescoped 2026-11-09. Steps 2.5-0 (cleanup), 2.5A (ingest, deployed 2026-11-11) and 2.5B (the feed reads indexed posts, with a blob route and runtime sources, 2026-11-11) are done; 2.5C (retire legacy) is next. Its sub-phases run 2.5-0 → 2.5A ingest → 2.5B feed cutover → 2.5C retire legacy → 2.5D Bluesky bridge → 2.5E final checks. It absorbs Units 4 (mostly), 5 and 6.
+- ➡️ **Unit 2.5** — replanned 2026-05-02 after a failed first attempt, rescoped 2026-11-09. Steps 2.5-0 (cleanup), 2.5A (ingest, deployed 2026-11-11) and 2.5B (the feed reads indexed posts, with a blob route and runtime sources, 2026-11-11) are done. 2.5C (retire legacy) is under way: the backend and client removals and the AppView URL setting (steps 8–11 and 13) landed 2026-11-12; the custom domain (step 14) is live and its config change is in review. Its sub-phases run 2.5-0 → 2.5A ingest → 2.5B feed cutover → 2.5C retire legacy → 2.5D Bluesky bridge → 2.5E final checks. It absorbs Units 4 (mostly), 5 and 6.
 - **Unit 3** — after Unit 2.5; the client publishes `app.tortok.video.post` via the user's PDS.
 - **Unit 7** — web cookie auth, not started.
 - ✅ **Moderation parallel track** — Decision 0013 landed 2026-04-29 (atproto labelers + illegal-content floor + UK age-verification gate); `open-problems/moderation.md` deleted.
@@ -402,18 +402,23 @@ from Profile.
 Goal: drop the auth and write surface that's been dead since 2.5B.
 Afterwards the only way content reaches the app is through atproto.
 
-8. **Backend.** Delete `routes/auth.ts`, the JWT bearer path in
+8. ✅ **Backend.** Delete `routes/auth.ts`, the JWT bearer path in
    `middleware/auth.ts`, the legacy write routes in `routes/videos.ts`
    (`POST /videos`, `POST /videos/:id/like`, `POST /videos/:id/view`,
    `PATCH /videos/:id/urls`) and `/.well-known/tortok`, which also leaves
    Decision 0016's smoke contract (Decision 0017, item 6).
-9. **Seeder.** Remove `SeederService` (`services/seeder.ts`), the
+9. ✅ **Seeder.** Remove `SeederService` (`services/seeder.ts`), the
    `/seeder/stats` route and the `backend/content/tortok-test-video`
-   fixture, and set `fly.toml` back to `auto_stop_machines = "stop"`
-   (decision 1 below). Update `p2p-torrent.md` and `backend.md` in the same
-   change.
-10. **Schema.** Append DROPs for `users`, `videos`, `hashtags`,
-    `video_hashtags`, `follows` and `likes` to `schema.sql`. Keep `views`.
+   fixture. Update `p2p-torrent.md` and `backend.md` in the same
+   change. `fly.toml` stays at `auto_stop_machines = "off"`, not `"stop"`
+   as decision 1 below said: ingest runs in this process, and a stopped
+   machine misses Jetstream events (user, 2026-11-12). Revisit if ingest
+   moves to its own process.
+10. ✅ **Schema.** Replace the legacy CREATEs in `schema.sql` with DROPs for
+    `users`, `videos`, `hashtags`, `video_hashtags`, `follows`, `likes` and
+    `views`. `views` goes too, though this step first kept it (user,
+    2026-11-12): its UUID `video_id` referenced `videos`, nothing wrote it,
+    and Phase 4 designs view storage afresh.
 11. ✅ **Client.** Delete `app/(auth)/register.tsx`; the auth store's `token`,
     `user` and legacy `signIn`; and `lib/api.ts`'s legacy calls and types.
 12. **Detox.** ✅ Done early, before 2.5A merged (2026-11-10): the suite
@@ -464,18 +469,28 @@ unused once 2.5B and 2.5C land, unless noted):
   `emailTextField`, `passwordTextField` and `signUpButton`.
 - Scripts: `scripts/seed-prod-test-content.mjs` and
   `test-content/seed-db.mjs` (both write the legacy `videos` table;
-  `seed-fixtures.mjs` replaces them); `scripts/atproto-smoke-test.mjs`
+  `seed-fixtures.mjs` replaces them). The former also uploaded the clips to
+  R2, which `seed-fixtures.mjs` doesn't, so that half survives as
+  `scripts/upload-test-clips.mjs`. `create-torrent` and `parse-torrent`, which
+  `scripts/lib/test-clips.mjs` loaded from `backend/node_modules` through
+  `webtorrent`, moved to the root `package.json`, pinned exactly; `scripts/atproto-smoke-test.mjs`
   (superseded by `seed-fixtures.mjs`; already deleted in 2.5A); `scripts/r2-smoke-test.mjs`
   (written for the Phase 0b seeder).
 - Docs: `CLAUDE.md` and `open-problems/README.md` used to say the Phase 1
   feed shipped with react-native-video; it never did. Both are fixed;
   re-check nothing else repeats it.
-- Kept: `test-content/tracker.mjs` (local tracker for dev);
-  `scripts/webseed-only-test.mjs` until WS2's smoke script generalises
-  it.
+- Left for a follow-up: `test-content/seeder.mjs` still writes
+  `bbb-0?.magnet.txt` and `.torrent` files and serves posters and `.torrent`
+  files that nothing reads now, beside the tracked legacy files
+  `magnet.txt`, `poster.jpg` and `test_video.mp4`. It also builds its torrents
+  with its own `create-torrent` (webtorrent's); having it seed
+  `buildClipTorrent`'s output would leave one torrent builder.
+- Kept: `test-content/tracker.mjs` (local tracker for dev).
+  `scripts/webseed-only-test.mjs` went too: `scripts/smoke.mjs` makes its
+  check on every feed item.
 
-**Views.** Removing `POST /videos/:id/view` loses nothing today, because
-the client never calls `recordView`. Nothing records views between
+**Views.** Removing `POST /videos/:id/view` and the `views` table loses
+nothing today, because the client never calls `recordView`. Nothing records views between
 2.5C and the `sendInteractions` approach that
 [`view-counting.md`](../architecture/open-problems/view-counting.md)
 currently leans towards. That gap is accepted: nothing ranks on views

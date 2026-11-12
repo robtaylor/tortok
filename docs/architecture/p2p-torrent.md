@@ -32,17 +32,17 @@ resolution, and `polyfills.web.ts` is the lighter browser equivalent.
 
 ## Content origin and webseed
 
-The origin seeder runs today inside the backend as `SeederService`
-(`backend/src/services/seeder.ts`; process-level detail in
-[backend](backend.md#seeder)): it seeds the directories under
-`backend/content/` over WebTorrent and embeds a BEP-19 **webseed** URL in each
-torrent so the client can pull pieces over HTTP when no peers are available. In
-local development the feed's magnets come instead from the spike seeder
-(`test-content/seeder.mjs`, seeding `test-content/clips/*.mp4`). The webseed
-origin is Cloudflare **R2** in production, served through the bucket's custom
-domain `content.tortok.net` behind Cloudflare's cache, and a local content
-server (`http://localhost:8090`) in dev, set by `CONTENT_ORIGIN_URL`
-(Decision 0008's R2-origin layer). The bucket's `r2.dev` URL is not used; the
+tortok runs no origin seeder. Each published torrent carries a BEP-19
+**webseed** URL, so the client pulls pieces over HTTP when no peers are
+available. The webseed origin is Cloudflare **R2** in production, served
+through the bucket's custom domain `content.tortok.net` behind Cloudflare's
+cache (Decision 0008's R2-origin layer). `scripts/upload-test-clips.mjs` puts
+the test clips there, and `scripts/seed-fixtures.mjs` publishes records whose
+magnets name them; both build torrents with `scripts/lib/test-clips.mjs` and
+take the origin from `CONTENT_ORIGIN_URL`. In local development and the e2e
+stack the origin is the content server (`test-content/seeder.mjs` on
+`http://localhost:8090`), which also seeds `test-content/clips/*.mp4` over
+WebTorrent. The bucket's `r2.dev` URL is not used; the
 reasons for the custom domain are in
 [`cross-deployment-transport.md`](open-problems/cross-deployment-transport.md).
 The origin URL is baked into every magnet and `.torrent` file, so the content
@@ -56,7 +56,7 @@ file's URL.
 A seeded **file** is never renamed with `seed()`'s `name:` option: the default
 fs-chunk-store resolves pieces by torrent name, so a name that differs from the
 file's basename makes every piece read fail with ENOENT. The spike seeder seeds
-files by path alone for this reason, and so does `SeederService`.
+files by path alone for this reason.
 
 ## Trackers and TURN
 
@@ -87,20 +87,18 @@ No device-testing rig exists yet. The plan is three tiers (Decision 0014): tier
 1 self-hosted emulators as the CI gate, tier 2 a single real device for playback
 tuning, and tier 3 real-device P2P on LambdaTest/TestMu (Decision 0015). Tier 1
 is the primary regression gate (Decision 0016). The only device tests today are
-the hand-run Detox suite described in [client](client.md#testing).
+the Detox suite, run in CI on hosted simulators and emulators, described in [client](client.md#testing).
 
 ## Implementation status
 
 - **Built:** WebTorrent client bridge on native (web plays the webseed over
   HTTP; the web bridge is a stub), refcounted torrent manager,
-  Hermes polyfills, client seeding policy with battery/network gating, the
-  backend `SeederService` with R2 webseed, the own tracker, and the coturn TURN
-  server. Two-simulator P2P offload measured at 89–91% in the Phase 2 spike.
-- **Pending:** There is no standalone seeder deployment: the `tortok-seeder` Fly
-  app was destroyed on 2026-11-04 after the webseed-only spike, and the only
-  origin seeder is the backend's in-process `SeederService`. Phase 3 Unit 2.5C
-  removes it ([`phase-3-atproto.md`](../plans/phase-3-atproto.md)); whether
-  tortok runs an always-on peer at all is part of the transport open problem.
+  Hermes polyfills, client seeding policy with battery/network gating, R2
+  webseeds, the own tracker, and the coturn TURN server. Two-simulator P2P offload measured at 89–91% in the Phase 2 spike.
+- **Pending:** No seeder runs in production: the `tortok-seeder` Fly app was
+  destroyed on 2026-11-04 after the webseed-only spike, and Phase 3 Unit 2.5C
+  removed the backend's in-process one. Whether tortok runs an always-on peer
+  at all is part of the transport open problem.
   None of the three device-testing tiers is stood up yet; they begin once
   Phase 3 work clears, tiers 1 and 2 before the tier-3 rig (Decision 0014).
 - **Open:** where bytes come from once several deployments serve the same

@@ -42,11 +42,11 @@ Give tortok two backend environments, staging and production, a single smoke scr
 
 **Status:** Production done 2026-11-04 (content published, CORS set); staging follows WS3.
 
-Phase 3 Unit 2.5 changes what "content per environment" means. Until 2.5C, each environment's feed is rows in its own legacy `videos` table, written by `scripts/seed-prod-test-content.mjs`. From 2.5A, content is `app.tortok.video.post` records in the test account's repo, published once by `scripts/seed-fixtures.mjs`, and every environment's AppView indexes the same records from Jetstream. Staging then needs no content of its own.
+Content is `app.tortok.video.post` records in the test account's repo, published once by `scripts/seed-fixtures.mjs`, and every environment's AppView indexes the same records from Jetstream. Their webseeds are the clips on the production bucket, put there by `scripts/upload-test-clips.mjs`. Staging needs no content of its own.
 
 **Deliverables:**
 
-- Until 2.5C: `scripts/seed-prod-test-content.mjs` run against staging (its own `R2_PREFIX` or bucket). After 2.5C: nothing per environment.
+- Nothing per environment.
 - An R2 CORS rule on the public bucket allowing `GET`/`HEAD` with the `Range` header from the app's web origins, exposing `Content-Range`/`Content-Length`.
 
 **Exit criteria:**
@@ -63,7 +63,7 @@ One script, `scripts/smoke.mjs <base-url> [--expect-sha <sha>]`, that is read-on
 
 - **Version:** `/health` is healthy and, if given, reports the expected SHA.
 - **Contract:** response shapes of `/health`, the feed endpoint and `/turn/credentials`; TURN credentials are present (fails if `TURN_SECRET` is missing). `/.well-known/tortok` is retired in Unit 2.5C (Decision 0017, item 6), so the contract doesn't check it.
-- **Webseed:** for each feed item (capped), load its torrent metadata and fetch at least one piece from its webseed with trackers, DHT and LSD off; the torrent's piece hash verifies the bytes, so no local mirror is needed. Generalises `scripts/webseed-only-test.mjs`.
+- **Webseed:** for each feed item (capped), load its torrent metadata and fetch at least one piece from its webseed with trackers, DHT and LSD off; the torrent's piece hash verifies the bytes, so no local mirror is needed. It generalised `scripts/webseed-only-test.mjs`, since deleted.
 - Non-zero exit and a one-line reason per failure.
 
 **Exit criteria:**
