@@ -52,6 +52,8 @@ export async function query<T = any>(text: string, params?: any[]): Promise<T[]>
   return result.rows;
 }
 
+export type QueryFn = typeof query;
+
 /**
  * Initialize database schema
  */

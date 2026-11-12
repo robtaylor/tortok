@@ -72,6 +72,38 @@ CREATE INDEX IF NOT EXISTS idx_posts_collection_created
 CREATE INDEX IF NOT EXISTS idx_posts_did ON posts (did);
 CREATE INDEX IF NOT EXISTS idx_posts_info_hash ON posts (info_hash);
 
+-- Unit 2.5D: bridged app.bsky.feed.post rows (Decision 0023). The firehose
+-- indexes them unchecked; the engagement poller sets bridge_checked_at each
+-- time it re-reads the post from Bluesky's AppView, and bridge_qualified_at
+-- once the post has passed the NSFW and opt-out checks and an engagement
+-- threshold. The feed serves a bridged row only once bridge_qualified_at is
+-- set. Both stay NULL on app.tortok rows.
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS bridge_checked_at TIMESTAMPTZ;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS bridge_qualified_at TIMESTAMPTZ;
+-- The poller's queue: bridged rows, least recently checked first.
+CREATE INDEX IF NOT EXISTS idx_posts_bridge_checked
+    ON posts (bridge_checked_at NULLS FIRST) WHERE collection = 'app.bsky.feed.post';
+
+-- Every label the AppView sees, whatever happens to its subject (Decision
+-- 0023 item 2): self-labels from records and profiles, and labels from
+-- labelers on getPosts responses. Policy, such as not indexing NSFW bridged
+-- posts, is applied over this table, never by leaving labels out of it.
+-- Columns follow com.atproto.label.defs#label; one row per (subject,
+-- subject_cid, src, val), holding the latest label, so a negation replaces
+-- what it negates. subject_cid is '' for a label on the whole subject, as in
+-- Bluesky's AppView, so it can be part of the key.
+CREATE TABLE IF NOT EXISTS labels (
+    subject TEXT NOT NULL,                  -- the label's uri: an AT-URI or a DID
+    src TEXT NOT NULL,                      -- labeler DID; the author's DID for self-labels
+    val TEXT NOT NULL,
+    neg BOOLEAN NOT NULL DEFAULT FALSE,
+    subject_cid TEXT NOT NULL DEFAULT '',   -- one version of a record, or '' for the whole subject
+    cts TIMESTAMPTZ NOT NULL,               -- when the label was made
+    exp TIMESTAMPTZ,
+    indexed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (subject, subject_cid, src, val)
+);
+
 -- Authors, resolved from their DID document and their PDS's
 -- app.bsky.actor.profile record. handle is NULL when it doesn't verify.
 CREATE TABLE IF NOT EXISTS profiles (

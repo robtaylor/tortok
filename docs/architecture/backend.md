@@ -53,7 +53,8 @@ The backend has no auth. Sign-in is atproto OAuth against the user's own PDS, ru
 
 | Table | Holds |
 |---|---|
-| `posts` | Indexed post records, keyed by AT-URI: record CID, caption, duration, dimensions, hashtags, magnet, infohash, and blob CIDs for the thumbnail and `.torrent`. Columns for bridged Bluesky posts (`video_cid`, `hls_url`) are unused until 2.5D. Written only by ingest. |
+| `posts` | Indexed post records, keyed by AT-URI: record CID, caption, duration, dimensions, hashtags, magnet, infohash, and blob CIDs for the thumbnail and `.torrent`. Columns for bridged Bluesky posts (`video_cid`, `hls_url`, and `bridge_checked_at`/`bridge_qualified_at`, which gate serving) are unused until 2.5D's bridge lands. Written only by ingest. |
+| `labels` | Every atproto label seen, keyed by subject (AT-URI or DID), subject CID (`''` for the whole subject), source and value, with `neg`, `cts` and `exp`. A row changes only for a newer label, so a negation replaces what it negates; a subject's self-labels are replaced as a set, so one the author removes is deleted (`atproto/labels.ts`, Decision 0023 item 2). Policy matches on value alone, which is sound while Bluesky's moderation labeler and self-labels are the only sources; a second labeler needs a trusted-source set beside the value set, since `!hide` and `!takedown` mean something only from a trusted one. Nothing writes the table until 2.5D's bridge lands. |
 | `profiles` | Authors: handle (null if it doesn't verify), display name, avatar CID, PDS endpoint, refresh time. |
 | `ingest_cursor` | The Jetstream resume cursor. Operator-local: a rebuild needs it. |
 | `known_accounts` | DIDs backfilled on boot, with how each became known (`jetstream` or `seed`). Operator-local. |
