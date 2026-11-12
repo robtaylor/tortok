@@ -34,7 +34,10 @@ describe('Profile', () => {
 
     it('refuses an address that is not a URL', async () => {
       await fill('appViewUrlField', 'not an appview');
-      await waitFor(element(by.id('appViewError'))).toBeVisible().withTimeout(5000);
+      // The error renders below the field, which may sit at the screen's
+      // bottom edge, so scroll it into view before checking it's visible.
+      await waitFor(element(by.id('appViewError'))).toExist().withTimeout(5000);
+      await waitFor(element(by.id('appViewError'))).toBeVisible().whileElement(by.id('profileScroll')).scroll(100, 'down');
       await expect(element(by.id('appViewResetButton'))).not.toExist();
     });
 
