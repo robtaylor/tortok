@@ -36,8 +36,6 @@ beforeAll(async () => {
   testDb = await createTestDb();
   process.env.TRACKER_URLS = 'wss://tracker.example.com,wss://tracker2.example.com';
   process.env.PUBLIC_BASE_URL = `${BLOB_BASE}/`;
-  // routes/videos still loads the legacy JWT middleware until 2.5C removes it.
-  process.env.JWT_SECRET ??= 'test-only';
   db = await import('../db');
   await db.initializeDatabase();
   const { AtprotoIngest } = await import('../services/atprotoIngest');

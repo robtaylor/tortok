@@ -14,9 +14,9 @@ export function envOrDevDefault(name: string, devDefault: string): string {
 }
 
 /**
- * tortok's own trackers (`TRACKER_URLS`, comma-separated): baked into the
- * seeder's magnets and listed as extra trackers on every feed item
- * (Decision 0022). Local dev uses the tracker from scripts/dev-up.sh.
+ * tortok's own trackers (`TRACKER_URLS`, comma-separated), listed as extra
+ * trackers on every feed item (Decision 0022). Local dev uses the tracker
+ * from scripts/dev-up.sh.
  */
 export function trackerUrls(): string[] {
   const urls = envOrDevDefault('TRACKER_URLS', 'ws://localhost:8000')

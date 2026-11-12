@@ -34,9 +34,6 @@ RUN addgroup -g 1001 -S nodejs && \
 # Copy built application (with proper ownership)
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 
-# Copy video content for seeding (with proper ownership)
-COPY --chown=nodejs:nodejs content ./content
-
 # What /health reports as the running version; scripts/deploy-backend.sh
 # passes them. Last, so a new SHA doesn't invalidate the layers above.
 ARG GIT_SHA

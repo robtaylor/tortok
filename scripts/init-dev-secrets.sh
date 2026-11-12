@@ -3,7 +3,7 @@
 #
 # What this does:
 #   - Creates backend/.env from backend/.env.example if it doesn't exist
-#   - For JWT_SECRET and TURN_SECRET: if the value is empty, generates
+#   - For TURN_SECRET: if the value is empty, generates
 #     a fresh random secret with `openssl rand -hex N`. If the value is
 #     already set, leaves it alone (rotation is a separate manual op).
 #
@@ -66,5 +66,4 @@ fill_if_empty() {
   echo "init-dev-secrets: $key already set, leaving it alone"
 }
 
-fill_if_empty JWT_SECRET 64
 fill_if_empty TURN_SECRET 32

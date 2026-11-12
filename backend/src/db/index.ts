@@ -1,8 +1,8 @@
-import { Pool, PoolClient } from 'pg';
+import { Pool } from 'pg';
 import fs from 'fs';
 import path from 'path';
 
-// Dev default matches scripts/dev-up.sh + test-content/seed-db.mjs;
+// Dev default matches scripts/dev-up.sh;
 // prod must set DATABASE_URL explicitly (we'd rather fail fast than
 // silently connect to nothing).
 const databaseUrl = process.env.DATABASE_URL ??
@@ -53,13 +53,6 @@ export async function query<T = any>(text: string, params?: any[]): Promise<T[]>
 }
 
 /**
- * Get a client from the pool (for transactions)
- */
-export async function getClient(): Promise<PoolClient> {
-  return pool.connect();
-}
-
-/**
  * Initialize database schema
  */
 export async function initializeDatabase(): Promise<void> {
@@ -86,4 +79,4 @@ export async function closeDatabase(): Promise<void> {
   console.log('Database connection pool closed');
 }
 
-export default { query, getClient, initializeDatabase, closeDatabase };
+export default { query, initializeDatabase, closeDatabase };

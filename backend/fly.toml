@@ -14,9 +14,8 @@ kill_timeout = 10
 
 [env]
   PORT = "8080"
-  # Baked into every magnet the seeder creates; the code has no production
-  # defaults and refuses to boot without these.
-  CONTENT_ORIGIN_URL = "https://content.tortok.net"
+  # Extra trackers on every feed item (Decision 0022); the code has no
+  # production default and refuses to boot without it.
   TRACKER_URLS = "wss://tortok-tracker.fly.dev"
   # atproto ingest backfills these on boot: the dev account that holds the
   # test fixtures (scripts/seed-fixtures.mjs).
@@ -28,10 +27,11 @@ kill_timeout = 10
 [http_service]
   internal_port = 8080
   force_https = true
-  # The origin seeder runs in this process, so the machine must never idle
-  # out (a stopped machine stops seeding). Temporary: once the seeder is
-  # extracted into its own deployable (Decision 0005/0008), the API can go
-  # back to "stop" and scale to zero.
+  # atproto ingest's Jetstream subscriber runs in this process, so the
+  # machine must never idle out: a stopped machine misses events, and a gap
+  # longer than Jetstream's replay window is lost for accounts that aren't
+  # known (known accounts backfill on boot). Revisit if ingest moves to its
+  # own process.
   auto_stop_machines = "off"
   auto_start_machines = true
 
