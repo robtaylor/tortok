@@ -414,7 +414,7 @@ Afterwards the only way content reaches the app is through atproto.
    change.
 10. **Schema.** Append DROPs for `users`, `videos`, `hashtags`,
     `video_hashtags`, `follows` and `likes` to `schema.sql`. Keep `views`.
-11. **Client.** Delete `app/(auth)/register.tsx`; the auth store's `token`,
+11. ✅ **Client.** Delete `app/(auth)/register.tsx`; the auth store's `token`,
     `user` and legacy `signIn`; and `lib/api.ts`'s legacy calls and types.
 12. **Detox.** ✅ Done early, before 2.5A merged (2026-11-10): the suite
     signs in through an e2e-only app-password form against a throwaway

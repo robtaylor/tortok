@@ -19,6 +19,7 @@ deciding whether to upgrade.
 
 ### Added
 
+- CI runs the app's typecheck and unit tests (`npm test` in `tortok/`).
 - The feed shows `app.tortok.video.post` records indexed from the network, not the legacy video table. Authors show as their verified handle, else their display name. Posters and `.torrent` files come from a new blob route, `GET /blob/:did/:cid`, which checks every blob against its CID and serves it as immutable, so Cloudflare can cache it for good (Phase 3 Unit 2.5B).
 - Feed items list extra trackers (and, once mirrors exist, webseeds) that the app adds to each torrent, so new sources need no app release (Decision 0022).
 - The backend indexes `app.tortok.video.post` records from the network: a Jetstream subscriber with a saved cursor, `listRecords` backfill of known accounts, record validation against the Lexicon, and authors resolved from their own DID documents and PDSes. New tables `posts`, `profiles`, `ingest_cursor` and `known_accounts`. The feed doesn't read them yet (Phase 3 Unit 2.5B).
@@ -48,6 +49,7 @@ deciding whether to upgrade.
 
 ### Removed
 
+- The app's legacy email/password sign-up screen and sign-in code, and the Comment and Share buttons, which did nothing. Development installs from before this change keep a dead legacy token in secure storage until reinstalled (Phase 3 Unit 2.5C).
 - The Like button, and like and view counts in the feed: Phase 3 ships no likes.
 - `react-native-reanimated` and `react-native-worklets`, unused template dependencies whose Android release build failed with this Gradle plugin version.
 - Google Cloud Run deployment (`backend/deploy.sh`) and the Cloud SQL socket handling; Fly.io is the only backend deployment.
