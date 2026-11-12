@@ -500,37 +500,70 @@ views are recorded again, which is Phase 4.
 returns nothing. The backend boots without `JWT_SECRET`, and the app
 still works end to end against 2.5B's feed.
 
-#### 2.5D — Bring back the bridge (~1.5 days)
+#### 2.5D — Bring back the bridge (~2 days)
 
 Goal: bridged Bluesky video posts appear in the feed as `posts` rows,
 keeping Decision 0010 as written: they play from Bluesky's HLS URL over
-plain HTTP, with no P2P and no re-hosting (decision 2 below).
+plain HTTP, with no P2P and no re-hosting (decision 2 below). What the
+bridge indexes, and what it drops, is
+[Decision 0023](../architecture/decisions/0023-bridged-bluesky-posts-what-the-v1-bridge-indexes.md),
+from the
+[labels spike](../architecture/decisions/spikes/bluesky-labels-on-bridged-video-posts.md).
 
-14. **Create `backend/src/services/bskyFirehose.ts`**, ported from attempt
-    1: a Jetstream subscriber for `app.bsky.feed.post` with video embeds,
-    the NSFW self-label filter (`porn|sexual|nudity|graphic-media|gore`),
-    the aspect-ratio filter, opt-out filtering and cursor persistence.
-    Matching posts are written to `posts` with `collection =
-    'app.bsky.feed.post'`, `hls_url` set and no magnet.
-15. **Create `backend/src/services/bskyEngagementPoller.ts`**, ported from
-    attempt 1: batches of 25 against `app.bsky.feed.getPosts`, promotion
-    thresholds, and NSFW labeler aggregation per Bluesky's default labeler
-    set. It removes rows that are retro-labelled.
-16. **Client.**
-    - An item with `hls_url` and no magnet plays the HLS URL directly
+15. **Measure first.** Run a Jetstream subscriber for `app.bsky.feed.post`
+    on the production machine (or one sized like it) for an hour and
+    record CPU, memory and bandwidth. The spike measured 110,000–190,000
+    events and 96–162 MB an hour, of which about 2% are video posts. If
+    it doesn't fit beside ingest, stop and size the machine or a separate
+    process before building on it.
+16. **Schema.** A `labels` table (subject URI, labeler DID, value, `neg`,
+    label timestamp; keyed by subject, labeler and value) that every
+    label source writes to (Decision 0023 item 2). Bridged rows go in
+    `posts` with `collection = 'app.bsky.feed.post'`, `video_cid` and
+    `hls_url` set and no magnet. The HLS URL is
+    `https://video.bsky.app/watch/<percent-encoded did>/<video cid>/playlist.m3u8`.
+17. **`backend/src/services/bskyFirehose.ts`**, ported from attempt 1: a
+    Jetstream subscriber for `app.bsky.feed.post` with video embeds
+    (alone or in `recordWithMedia`), the aspect-ratio filter, cursor
+    persistence, and record self-labels written to `labels`. A post
+    whose record carries a label in the configured NSFW set is not
+    indexed. Opt-out and NSFW are checked against the author's profile
+    too, but their profile labels come with the poller (step 18), so a
+    new author's posts stay out of the feed until it has seen them.
+18. **`backend/src/services/bskyEngagementPoller.ts`**, ported from attempt
+    1: batches of 25 against `app.bsky.feed.getPosts`, writing every post
+    and author label to `labels`. It deletes posts that are now labelled
+    NSFW, deleted on Bluesky, or by an opted-out author (`!no-unauthenticated`
+    on the profile, or `#nobridge` in the bio or display name). It then
+    applies the thresholds (50 likes, 10 reposts or 5,000 followers; drop
+    after 7 days unqualified), all configurable.
+19. **Feed.** The feed serves bridged posts only once they've passed the
+    poller's checks and thresholds, interleaved with native posts by
+    `record_created_at`. Authors with a `contentVisibilityDeclaration`
+    asking to be left out of algorithmic feeds are excluded from any
+    ranked feed (none yet; the feed is chronological).
+20. **Client.**
+    - A new HLS `Playback` kind: the item plays its HLS URL directly
       through `expo-video`, bypassing `useP2PUrl`.
-    - A "via Bluesky" badge when the `at_uri` is an `app.bsky.feed.post`.
-    - Tap-through to the post on Bluesky, using the rkey from the at-uri.
-17. **Boot** `bskyFirehose` and `bskyEngagementPoller` from
-    `backend/src/index.ts` alongside `atprotoIngest`. One process for v1.
+    - A "via Bluesky" badge when the item's AT-URI is an `app.bsky.feed.post`.
+    - Tap-through to the post on Bluesky, using the rkey from the AT-URI.
+    - Detox cases for a bridged item, on both platforms.
+21. **Boot** `bskyFirehose` and `bskyEngagementPoller` from
+    `backend/src/index.ts` alongside `atprotoIngest`. One process for v1,
+    unless step 15 says otherwise.
+22. **Tests.** Integration tests for the NSFW drop at index time and on
+    re-label, the opt-out signals (`release-plan.md` makes opt-out
+    tested in CI a Beta criterion), thresholds, and Bluesky-side
+    deletion, against stubbed Jetstream and `getPosts`.
 
 The attempt-1 mirror pipeline doesn't come back: no R2 mirror, no
 ffmpeg remux, no `mirror_state` table, no `bridged/` R2 layout and no
 backend `/torrents` route.
 
-**Done =** the Jetstream subscriber connects, the filters fire and NSFW
-posts are dropped. The feed shows native and bridged posts interleaved
-by `record_created_at`, and the iOS simulator plays both.
+**Done =** the Jetstream subscriber connects, the filters fire, NSFW and
+opted-out posts are dropped, and their labels are in `labels`. The feed
+shows native and bridged posts interleaved by `record_created_at`, and
+the iOS simulator plays both.
 
 #### 2.5E — Final checks (~half day)
 

@@ -2,7 +2,7 @@
 
 **Current architecture:** [Federation](../federation.md)
 
-**Status:** Accepted (partial) (2026-04-17).
+**Status:** Accepted (partial) (2026-04-17). Opt-out (item 5) and labelers (item 6) for v1 revised by [Decision 0023](0023-bridged-bluesky-posts-what-the-v1-bridge-indexes.md) (Proposed, 2026-11-12).
 
 **Context.** The chicken-and-egg problem at launch is severe: a new
 short-form video app shipping with an empty feed dies on day one.
