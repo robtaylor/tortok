@@ -67,13 +67,23 @@ The file begins by dropping the legacy native tables (`users`, `videos`, `hashta
 
 `services/atprotoIngest.ts` indexes `app.tortok.video.post` records into `posts`. It runs in this process, started at boot.
 
-- **Live:** it subscribes to Jetstream (`JETSTREAM_URL`, default `wss://jetstream2.us-east.bsky.network/subscribe`) with `wantedCollections=app.tortok.video.post`, so records from every PDS on the relay arrive as create, update and delete events. Events are handled one at a time, in order. It reconnects with backoff from 1 s to 60 s.
-- **Cursor:** saved to `ingest_cursor` every 5 s and on shutdown. On reconnect it resumes 5 s before the saved cursor; upserts are idempotent, so replayed events change nothing.
+- **Live:** it subscribes to Jetstream (`JETSTREAM_URL`, default `wss://jetstream2.us-east.bsky.network/subscribe`) with `wantedCollections=app.tortok.video.post`, so records from every PDS on the relay arrive as create, update and delete events. The subscription is `services/jetstream.ts`, which the bridge's firehose (below) shares: events are handled one at a time, in order, and it reconnects with backoff from 1 s to 60 s.
+- **Cursor:** saved to `ingest_cursor` (key `jetstream`) every 5 s and on shutdown. On reconnect it resumes 5 s before the saved cursor; upserts are idempotent, so replayed events change nothing. The cursor moves only past events that were handled. A handler that throws (a database failure; bad records are skipped without throwing), or a queue more than 5,000 events deep, makes the subscription drop its queue and reconnect, with backoff, from the last event handled, so an outage loses nothing that Jetstream still holds.
 - **Validation:** every record passes `atproto/videoPost.ts`, a hand-written check against `lexicons/app/tortok/video/post.json`: required fields, size and grapheme limits, blob MIME types, and a magnet whose infohash matches `infoHash`. An invalid record is skipped; an edit that makes a record invalid deletes the indexed version.
 - **Writes:** an upsert keyed by AT-URI replaces a row only when the record CID changes. A delete event deletes the row.
 - **Authors:** `atproto/identity.ts` resolves a DID from its own sources, not from Bluesky's AppView. The DID document (PLC directory, or `did:web`'s well-known file) gives the PDS endpoint and the claimed handle. The handle is kept only if its `_atproto` DNS TXT record or `/.well-known/atproto-did` names the same DID. The PDS's `app.bsky.actor.profile` record gives the display name and avatar. Profiles are refreshed when older than 24 hours, and at once on a Jetstream identity event for a known account.
 - **Known accounts:** a DID becomes known the first time Jetstream shows it posting a valid record, or from `INGEST_SEED_DIDS` (comma-separated). Production seeds the dev account, `tortok-dev.bsky.social`. `PLC_DIRECTORY_URL` (default `https://plc.directory`) is where `did:plc` documents come from; the e2e stack points it at its own PLC.
 - **Backfill:** on boot, each known account's records are re-listed with `com.atproto.repo.listRecords` from its PDS, four accounts at a time. Valid records are upserted, and rows the listing no longer has are deleted, except rows indexed after the listing began.
+
+## Bluesky bridge
+
+`services/bskyFirehose.ts` is the bridge's firehose (Decisions 0010 and 0023). It is built and tested but **not booted** yet: nothing would remove its rows until the engagement poller exists (plan 2.5D steps 18 and 21).
+
+- **Stream:** its own Jetstream subscription for `app.bsky.feed.post` (about 50 events a second), with its own cursor (`ingest_cursor` key `jetstream-bsky-posts`), so the bridge's load and failures stay off native ingest. An hour's measurement on a production-sized machine put it at about 2% of a core (plan 2.5D step 15).
+- **Candidates:** `atproto/bskyPost.ts` takes posts with an `app.bsky.embed.video` embed, alone or in `recordWithMedia`, with an aspect ratio of at least `BRIDGE_ASPECT_MIN` (height/width, default 1: square or portrait) and a base32 video CID. A `createdAt` in the future is clamped to now. Hashtags come from `tags` and facet `#tag` features. Everything else is ignored silently.
+- **Rows:** a candidate goes in `posts` with `collection = 'app.bsky.feed.post'`, its video CID and `hls_url` (`https://video.bsky.app/watch/<percent-encoded did>/<cid>/playlist.m3u8`), and no magnet. An upsert changes a row only when the record CID changes, and then clears `bridge_checked_at` and `bridge_qualified_at`, so an edited post waits for the poller again. Delete events remove the row.
+- **Labels and drops:** every candidate's self-labels replace its previous ones in `labels`. A post self-labelled with a value in `BRIDGE_NSFW_LABELS` is not indexed, and an edit that adds one removes the row. A post whose author has a live label in that set, or `!no-unauthenticated`, in `labels` (`labelledAny`) is not indexed either; author labels come from the poller, so a new author's posts are indexed until it has seen them, but never served before it has checked them.
+- **Logging:** counts of posts indexed, dropped as NSFW, dropped as opted out, and rows deleted, every 15 minutes and on stop.
 
 ## Local development
 
@@ -90,14 +100,14 @@ The file begins by dropping the legacy native tables (`users`, `videos`, `hashta
 - **Public domain:** `appview.tortok.app` is the AppView's address: clients default to it and the feed's blob URLs use it (`PUBLIC_BASE_URL`). It is a proxied CNAME in Cloudflare's `tortok.app` zone to the Fly app, which holds a Let's Encrypt certificate for the name (`fly certs`, validated through an unproxied `_acme-challenge.appview` CNAME; `_fly-ownership.appview` is the ownership TXT). The zone's SSL mode is Full. A Cache Rule makes `/blob/*` on that host cacheable with the origin's `Cache-Control`, so Cloudflare keeps each blob for a year; everything else (the feed, `/health`) passes through uncached.
 - **Deploying:** `npm run deploy:backend` (`scripts/deploy-backend.sh`) deploys only a clean checkout at `origin/main`, passes the commit's SHA and the build time as build args, then runs the smoke check against production expecting that SHA. Deploys are run by hand; nothing deploys on merge, so merging a change to the feed's shape without deploying it makes the scheduled smoke check fail every 15 minutes until production catches up.
 - **Smoke check:** `scripts/smoke.mjs <base-url> [--expect-sha <sha>]` is read-only. It checks `/health` (healthy, Postgres reachable, a SHA), the feed and `/turn/credentials` contract (a TURN server with credentials), and, for up to five feed items, that the `.torrent`'s info hash matches the magnet and that its first and last pieces, fetched from the magnet's webseed with no peers, match the piece hashes. `.github/workflows/smoke.yml` runs it against production every 15 minutes and on demand, then fails if production is missing a backend commit that reached `main` more than a day ago. A failed run emails the repository owner. Its tests (`scripts/smoke.test.mjs`) run in CI against a stub backend serving a real production torrent (`scripts/fixtures/bbb-01.torrent`) and its clip.
-- **Environment:** documented in `backend/.env.example`. Required in production: `DATABASE_URL` and `TRACKER_URLS`. Optional with code defaults: `PORT`, `NODE_ENV`, `INSTANCE_DOMAIN`, `ALLOWED_ORIGINS`, `TURN_SECRET`, `JETSTREAM_URL`, `INGEST_SEED_DIDS`, `PLC_DIRECTORY_URL`, `PUBLIC_BASE_URL`, and `TRACKER_URLS` outside production. `TRACKER_URLS` is read by the feed (`config.ts`). `scripts/init-dev-secrets.sh` (run by `dev-up.sh`) fills in `TURN_SECRET` for local development.
+- **Environment:** documented in `backend/.env.example`. Required in production: `DATABASE_URL` and `TRACKER_URLS`. Optional with code defaults: `PORT`, `NODE_ENV`, `INSTANCE_DOMAIN`, `ALLOWED_ORIGINS`, `TURN_SECRET`, `JETSTREAM_URL`, `INGEST_SEED_DIDS`, `PLC_DIRECTORY_URL`, `PUBLIC_BASE_URL`, `BRIDGE_NSFW_LABELS`, `BRIDGE_ASPECT_MIN`, and `TRACKER_URLS` outside production. `TRACKER_URLS` is read by the feed (`config.ts`). `scripts/init-dev-secrets.sh` (run by `dev-up.sh`) fills in `TURN_SECRET` for local development.
 
 ## Constraints
 
 - **Record limits** are the Lexicon's, enforced by ingest's validator (`atproto/videoPost.ts`).
 - **Request bodies** are capped at 10 MB. Video bytes never pass through the backend; it serves posters, avatars and `.torrent` files only.
 - **Single process:** the API, ingest and the schema bootstrap share one process, so the API machine is kept always-on for ingest.
-- **Tests:** `npm test` runs Jest over `src/__tests__/`. Ingest has integration tests against a real Postgres: each test file creates a throwaway database from `TEST_PG_ADMIN_URL` (default the local server) and applies `schema.sql`, with Jetstream, DID resolution and PDS calls stubbed. The feed routes have the same kind of integration test, with records put in through ingest. The blob route, the CID function (against a real PDS blob), the record validator and the identity resolver have unit tests. CI (`.github/workflows/ci.yml`) runs `tsc` and `npm test` on Node 22 with a Postgres 17 service, on every pull request and every push to `main`.
+- **Tests:** `npm test` runs Jest over `src/__tests__/`. Ingest has integration tests against a real Postgres: each test file creates a throwaway database from `TEST_PG_ADMIN_URL` (default the local server) and applies `schema.sql`, with Jetstream, DID resolution and PDS calls stubbed. The feed routes have the same kind of integration test, with records put in through ingest, and so does the bridge's firehose (`bskyFirehose.test.ts`). The blob route, the CID function (against a real PDS blob), the record validator and the identity resolver have unit tests. CI (`.github/workflows/ci.yml`) runs `tsc` and `npm test` on Node 22 with a Postgres 17 service, on every pull request and every push to `main`.
 
 ## Implementation status
 
@@ -110,7 +120,8 @@ The file begins by dropping the legacy native tables (`users`, `videos`, `hashta
 | Postgres pool and boot-time schema | `backend/src/db/index.ts`, `backend/src/db/schema.sql` |
 | TURN credential issuance | `backend/src/index.ts` |
 | Graceful shutdown (SIGTERM/SIGINT) | `backend/src/index.ts` |
-| atproto ingest: Jetstream, backfill, validation, author resolution | `backend/src/services/atprotoIngest.ts`, `backend/src/atproto/` |
+| atproto ingest: Jetstream, backfill, validation, author resolution | `backend/src/services/atprotoIngest.ts`, `backend/src/services/jetstream.ts`, `backend/src/atproto/` |
+| Bluesky bridge firehose (not booted) | `backend/src/services/bskyFirehose.ts`, `backend/src/atproto/bskyPost.ts`, `backend/src/atproto/labels.ts` |
 | Fly.io deployment, always-on | `backend/Dockerfile`, `backend/fly.toml` |
 
 **Deferred:**
@@ -118,7 +129,7 @@ The file begins by dropping the legacy native tables (`users`, `videos`, `hashta
 | Part | Gap | Tracking |
 |---|---|---|
 | Account lifecycle | Jetstream `account` events (takedown, deactivation) are ignored, and known accounts are never removed. | Phase 4 |
-| Bluesky bridge | No bridge code on the backend; the attempt-1 tables are dropped on boot. | Phase 3 Unit 2.5D; [federation](federation.md) |
+| Bluesky bridge | The firehose exists but isn't booted; the engagement poller, the feed's bridged items and boot are still to come. The attempt-1 tables are dropped on boot. | Phase 3 Unit 2.5D; [federation](federation.md) |
 | Own PDS | No PDS is run; users log in against their existing PDS. | [`open-problems/own-pds.md`](open-problems/own-pds.md) |
 | Social graph | No follows or likes; they will reuse Bluesky's Lexicons. | Later phase |
 | View recording | Nothing records views. | [`open-problems/view-counting.md`](open-problems/view-counting.md), Phase 4 |

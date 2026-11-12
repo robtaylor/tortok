@@ -2,9 +2,9 @@
 // (Decision 0016, commitment 2). Jetstream, DID resolution and PDS calls
 // are stubbed; the SQL is not.
 
-import { EventEmitter } from 'events';
 import type { Identity, Profile } from '../atproto/identity';
-import type { AtprotoIngest as AtprotoIngestT, IngestOptions, WebSocketLike } from '../services/atprotoIngest';
+import type { AtprotoIngest as AtprotoIngestT, IngestOptions } from '../services/atprotoIngest';
+import { fakeSockets } from './helpers/fakeSocket';
 import { createTestDb, TestDb } from './helpers/testDb';
 import { INFO_HASH, validRecord } from './helpers/fixtures';
 
@@ -36,12 +36,6 @@ beforeEach(async () => {
 
 afterEach(() => jest.restoreAllMocks());
 
-class FakeSocket extends EventEmitter implements WebSocketLike {
-  closed = false;
-  constructor(public url: string) { super(); }
-  close() { this.closed = true; }
-}
-
 /** Identity stub: every DID lives on PDS with a fixed handle. */
 const fakeIdentity = {
   profileCalls: 0,
@@ -55,10 +49,10 @@ const fakeIdentity = {
 };
 
 function makeIngest(opts: IngestOptions = {}) {
-  const sockets: FakeSocket[] = [];
+  const { sockets, wsFactory } = fakeSockets();
   const ingest = new AtprotoIngest({
     identity: fakeIdentity as any,
-    wsFactory: (url) => { const s = new FakeSocket(url); sockets.push(s); return s; },
+    wsFactory,
     fetch: (async () => new Response('{}', { status: 404 })) as typeof fetch,
     ...opts,
   });

@@ -20,6 +20,12 @@ export interface Label {
   exp: Date | null;
 }
 
+/**
+ * A profile self-label asking apps not to show the account to logged-out
+ * viewers; the bridge treats it as opting out (Decision 0023 item 4).
+ */
+export const OPT_OUT_LABEL = '!no-unauthenticated';
+
 // The lexicon caps a label value at 128 bytes.
 const MAX_VAL = 128;
 
@@ -70,6 +76,19 @@ export function viewLabels(labels: unknown): Label[] {
 /** True if any label is a live (not negated, not expired) one in `vals`. */
 export function hasLabel(labels: Label[], vals: ReadonlySet<string>, now = new Date()): boolean {
   return labels.some((l) => !l.neg && vals.has(l.val) && (l.exp === null || l.exp > now));
+}
+
+/**
+ * True if `labels` holds a live (not negated, not expired) label in `vals`
+ * on any of `subjects`: the stored counterpart of hasLabel.
+ */
+export async function labelledAny(db: QueryFn, subjects: string[], vals: Iterable<string>): Promise<boolean> {
+  const rows = await db(
+    `SELECT 1 FROM labels
+      WHERE subject = ANY($1) AND val = ANY($2) AND NOT neg AND (exp IS NULL OR exp > NOW())
+      LIMIT 1`,
+    [subjects, [...vals]]);
+  return rows.length > 0;
 }
 
 /**

@@ -19,6 +19,7 @@ deciding whether to upgrade.
 
 ### Added
 
+- The backend has the Bluesky bridge's firehose: it picks portrait and square video posts off Bluesky's Jetstream, stores their self-labels, and skips NSFW posts and opted-out authors. It isn't switched on yet (Phase 3 Unit 2.5D, Decision 0023).
 - A `labels` table stores every atproto label the AppView sees, ready for the Bluesky bridge (Phase 3 Unit 2.5D, Decision 0023). The labels that keep a bridged post out are configurable with `BRIDGE_NSFW_LABELS`.
 - Profile has an AppView setting: the app reads its feed from `https://appview.tortok.app` by default, and you can point it at another tortok AppView. A new address is checked before it's saved (Phase 3 Unit 2.5C, Decision 0017).
 - CI runs the app's typecheck and unit tests (`npm test` in `tortok/`).

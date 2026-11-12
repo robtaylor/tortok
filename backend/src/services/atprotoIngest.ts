@@ -1,10 +1,10 @@
 // Phase 3 Unit 2.5A: index `app.tortok.video.post` records from the network
 // into `posts` (Decision 0017: the AppView's Postgres is a rebuildable index).
 //
-// - Live: Jetstream, filtered server-side to our collection, so records from
-//   every PDS on the relay arrive as create/update/delete events. The cursor
-//   is saved every few seconds and rewound a little on reconnect; upserts are
-//   idempotent, so the replay is harmless.
+// - Live: Jetstream (jetstream.ts), filtered server-side to our collection,
+//   so records from every PDS on the relay arrive as create/update/delete
+//   events. Upserts are idempotent, so the replay after a reconnect is
+//   harmless.
 // - Backfill: `com.atproto.repo.listRecords` for every known account on boot,
 //   then rows the listing no longer contains are deleted.
 // - Authors come from their DID document and PDS (identity.ts), cached in
@@ -13,24 +13,14 @@
 // `ingest_cursor` and `known_accounts` are operator-local: a rebuild from
 // the network needs them (Decision 0017 item 2).
 
-import WebSocket from 'ws';
 import { envList } from '../config';
 import { query as defaultQuery } from '../db';
 import type { QueryFn } from '../db';
 import { IdentityResolver, isDid } from '../atproto/identity';
 import type { FetchFn, Profile } from '../atproto/identity';
 import { InvalidRecordError, parseVideoPost, VIDEO_POST_NSID } from '../atproto/videoPost';
-
-export type { QueryFn };
-
-/** The subset of the `ws` WebSocket API the service uses (tests fake it). */
-export interface WebSocketLike {
-  on(event: 'open', cb: () => void): unknown;
-  on(event: 'message', cb: (data: WebSocket.RawData) => void): unknown;
-  on(event: 'close', cb: (code: number, reason: Buffer) => void): unknown;
-  on(event: 'error', cb: (err: Error) => void): unknown;
-  close(): void;
-}
+import { JetstreamSubscription, parseCommit, RKEY_RE } from './jetstream';
+import type { JetstreamEvent, WebSocketLike } from './jetstream';
 
 export interface IngestOptions {
   db?: QueryFn;
@@ -46,26 +36,8 @@ export interface IngestOptions {
   backfillConcurrency?: number;
 }
 
-interface JetstreamEvent {
-  did?: string;
-  time_us?: number;
-  kind?: string;
-  commit?: {
-    operation?: string;
-    collection?: string;
-    rkey?: string;
-    cid?: string;
-    record?: unknown;
-  };
-}
-
-const DEFAULT_JETSTREAM_URL = 'wss://jetstream2.us-east.bsky.network/subscribe';
+// The ingest_cursor row; 'jetstream' predates the bridge's own subscription.
 const CURSOR_KEY = 'jetstream';
-/** Rewind on reconnect, in Jetstream's microseconds. */
-const CURSOR_REWIND_US = 5_000_000;
-const RECONNECT_INITIAL_MS = 1_000;
-const RECONNECT_MAX_MS = 60_000;
-const RKEY_RE = /^[A-Za-z0-9._:~-]{1,512}$/;
 
 const postUri = (did: string, rkey: string) => `at://${did}/${VIDEO_POST_NSID}/${rkey}`;
 
@@ -96,23 +68,13 @@ export class AtprotoIngest {
   private readonly db: QueryFn;
   private readonly fetch: FetchFn;
   private readonly identity: IdentityResolver;
-  private readonly wsFactory: (url: string) => WebSocketLike;
-  private readonly jetstreamUrl: string;
+  private readonly jetstream: JetstreamSubscription;
   private readonly seedDids: string[];
   private readonly profileMaxAgeMs: number;
-  private readonly cursorFlushMs: number;
   private readonly backfillConcurrency: number;
 
-  private ws: WebSocketLike | null = null;
   /** Set by stop(). backfill() can also run without start(), so it starts false. */
   private stopped = false;
-  private reconnectTimer: NodeJS.Timeout | null = null;
-  private reconnectDelayMs = RECONNECT_INITIAL_MS;
-  private flushTimer: NodeJS.Timeout | null = null;
-  private cursor: number | null = null;
-  private savedCursor: number | null = null;
-  /** Events are handled one at a time, in order, so the cursor only moves forward. */
-  private queue: Promise<void> = Promise.resolve();
   private readonly known = new Set<string>();
   private readonly profileRefreshes = new Map<string, Promise<void>>();
   /** When each profile was last written, so fresh ones skip the database. */
@@ -123,11 +85,13 @@ export class AtprotoIngest {
     this.db = opts.db ?? defaultQuery;
     this.fetch = opts.fetch ?? fetch;
     this.identity = opts.identity ?? new IdentityResolver({ fetch: this.fetch });
-    this.wsFactory = opts.wsFactory ?? ((url) => new WebSocket(url));
-    this.jetstreamUrl = opts.jetstreamUrl ?? DEFAULT_JETSTREAM_URL;
+    this.jetstream = new JetstreamSubscription({
+      tag: 'ingest', collections: [VIDEO_POST_NSID], cursorKey: CURSOR_KEY,
+      onEvent: (e) => this.handleEvent(e), db: this.db, wsFactory: opts.wsFactory,
+      url: opts.jetstreamUrl, cursorFlushMs: opts.cursorFlushMs,
+    });
     this.seedDids = opts.seedDids ?? [];
     this.profileMaxAgeMs = opts.profileMaxAgeMs ?? 24 * 60 * 60 * 1000;
-    this.cursorFlushMs = opts.cursorFlushMs ?? 5_000;
     this.backfillConcurrency = opts.backfillConcurrency ?? 4;
     for (const did of this.seedDids) {
       if (!isDid(did)) throw new Error(`seed DID ${did} is not a did:plc or did:web`);
@@ -137,31 +101,19 @@ export class AtprotoIngest {
   /** Load state, connect to Jetstream, and start backfilling known accounts. */
   async start(): Promise<void> {
     this.stopped = false;
-    const [row] = await this.db<{ cursor: string | null }>(
-      'SELECT cursor FROM ingest_cursor WHERE key = $1', [CURSOR_KEY]);
-    this.cursor = row?.cursor != null ? Number(row.cursor) : null;
-    this.savedCursor = this.cursor;
-
     for (const did of this.seedDids) await this.addKnownAccount(did, 'seed');
     const rows = await this.db<{ did: string }>('SELECT did FROM known_accounts');
     for (const { did } of rows) this.known.add(did);
 
-    this.connect();
-    this.flushTimer = setInterval(() => void this.flushCursor(), this.cursorFlushMs);
+    await this.jetstream.start();
     this.backfillRun = this.backfillAll();
-    console.log(`[ingest] started: ${this.known.size} known accounts, cursor=${this.cursor ?? 'none'}`);
+    console.log(`[ingest] started: ${this.known.size} known accounts`);
   }
 
   /** Disconnect, finish in-flight work and save the cursor. */
   async stop(): Promise<void> {
     this.stopped = true;
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    if (this.flushTimer) clearInterval(this.flushTimer);
-    this.reconnectTimer = this.flushTimer = null;
-    this.ws?.close();
-    this.ws = null;
-    await Promise.allSettled([this.queue, this.backfillRun]);
-    await this.flushCursor();
+    await Promise.allSettled([this.jetstream.stop(), this.backfillRun]);
     console.log('[ingest] stopped');
   }
 
@@ -177,86 +129,23 @@ export class AtprotoIngest {
 
   // ─── Jetstream ────────────────────────────────────────────────────
 
-  private subscribeUrl(): string {
-    const url = new URL(this.jetstreamUrl);
-    url.searchParams.set('wantedCollections', VIDEO_POST_NSID);
-    if (this.cursor !== null) {
-      url.searchParams.set('cursor', String(Math.max(0, this.cursor - CURSOR_REWIND_US)));
-    }
-    return url.toString();
-  }
-
-  private connect(): void {
-    if (this.stopped) return;
-    let ws: WebSocketLike;
-    try {
-      ws = this.wsFactory(this.subscribeUrl());
-    } catch (err) {
-      console.error('[ingest] Jetstream connect failed:', err);
-      this.scheduleReconnect();
-      return;
-    }
-    this.ws = ws;
-    ws.on('open', () => {
-      this.reconnectDelayMs = RECONNECT_INITIAL_MS;
-      console.log('[ingest] Jetstream connected');
-    });
-    ws.on('message', (data) => {
-      let event: JetstreamEvent;
-      try {
-        event = JSON.parse(data.toString());
-      } catch {
-        console.warn('[ingest] dropped a non-JSON Jetstream message');
-        return;
-      }
-      this.enqueue(event);
-    });
-    ws.on('error', (err) => console.error('[ingest] Jetstream error:', err.message));
-    ws.on('close', (code) => {
-      if (this.ws !== ws) return;
-      this.ws = null;
-      if (!this.stopped) console.warn(`[ingest] Jetstream closed (${code})`);
-      this.scheduleReconnect();
-    });
-  }
-
-  private scheduleReconnect(): void {
-    if (this.stopped || this.reconnectTimer) return;
-    const delay = this.reconnectDelayMs;
-    this.reconnectDelayMs = Math.min(delay * 2, RECONNECT_MAX_MS);
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      this.connect();
-    }, delay);
-  }
-
-  private enqueue(event: JetstreamEvent): void {
-    this.queue = this.queue
-      .then(() => this.handleEvent(event))
-      .catch((err) => console.error('[ingest] event failed:', err));
-  }
-
   /** Handle one Jetstream event. Public so tests can drive it directly. */
   async handleEvent(event: JetstreamEvent): Promise<void> {
-    if (event.kind === 'commit' && event.did && event.commit) {
-      await this.handleCommit(event.did, event.commit);
+    if (event.kind === 'commit') {
+      await this.handleCommit(event);
     } else if (event.kind === 'identity' && event.did && this.known.has(event.did)) {
       await this.refreshProfile(event.did, true);
     }
-    if (typeof event.time_us === 'number' && (this.cursor === null || event.time_us > this.cursor)) {
-      this.cursor = event.time_us;
-    }
   }
 
-  private async handleCommit(did: string, commit: NonNullable<JetstreamEvent['commit']>): Promise<void> {
-    const { operation, collection, rkey } = commit;
-    if (collection !== VIDEO_POST_NSID || !rkey || !RKEY_RE.test(rkey) || !isDid(did)) return;
-    if (operation !== 'delete' && operation !== 'create' && operation !== 'update') return;
-    if (operation !== 'delete' && !commit.cid) return;
+  private async handleCommit(event: JetstreamEvent): Promise<void> {
+    const c = parseCommit(event, VIDEO_POST_NSID);
+    if (!c) return;
+    const { did, rkey } = c;
 
     // A delete, or an edit that makes a record invalid, removes the row.
-    if (operation === 'delete' || !(await this.indexRecord(did, rkey, commit.cid!, commit.record))) {
-      await this.db('DELETE FROM posts WHERE at_uri = $1', [postUri(did, rkey)]);
+    if (c.operation === 'delete' || !(await this.indexRecord(did, rkey, c.cid, c.record))) {
+      await this.db('DELETE FROM posts WHERE at_uri = $1', [c.uri]);
       return;
     }
 
@@ -283,20 +172,6 @@ export class AtprotoIngest {
       post.hashtags, post.magnetUri, post.infoHash, post.torrentCid, post.createdAt,
     ]);
     return true;
-  }
-
-  private async flushCursor(): Promise<void> {
-    if (this.cursor === null || this.cursor === this.savedCursor) return;
-    const cursor = this.cursor;
-    try {
-      await this.db(
-        `INSERT INTO ingest_cursor (key, cursor, updated_at) VALUES ($1, $2, NOW())
-         ON CONFLICT (key) DO UPDATE SET cursor = EXCLUDED.cursor, updated_at = NOW()`,
-        [CURSOR_KEY, cursor]);
-      this.savedCursor = cursor;
-    } catch (err) {
-      console.error('[ingest] saving the cursor failed:', err);
-    }
   }
 
   // ─── Accounts and profiles ────────────────────────────────────────
