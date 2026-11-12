@@ -19,6 +19,7 @@ deciding whether to upgrade.
 
 ### Added
 
+- A `labels` table stores every atproto label the AppView sees, ready for the Bluesky bridge (Phase 3 Unit 2.5D, Decision 0023). The labels that keep a bridged post out are configurable with `BRIDGE_NSFW_LABELS`.
 - Profile has an AppView setting: the app reads its feed from `https://appview.tortok.app` by default, and you can point it at another tortok AppView. A new address is checked before it's saved (Phase 3 Unit 2.5C, Decision 0017).
 - CI runs the app's typecheck and unit tests (`npm test` in `tortok/`).
 - The feed shows `app.tortok.video.post` records indexed from the network, not the legacy video table. Authors show as their verified handle, else their display name. Posters and `.torrent` files come from a new blob route, `GET /blob/:did/:cid`, which checks every blob against its CID and serves it as immutable, so Cloudflare can cache it for good (Phase 3 Unit 2.5B).

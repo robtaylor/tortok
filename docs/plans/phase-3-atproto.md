@@ -545,12 +545,18 @@ from the
     the database writes, both small beside parsing every event. Run the
     bridge in the backend process; re-measure if Jetstream's rate
     doubles.
-16. **Schema.** A `labels` table (subject URI, labeler DID, value, `neg`,
+16. ✅ **Schema.** A `labels` table (subject URI, labeler DID, value, `neg`,
     label timestamp; keyed by subject, labeler and value) that every
     label source writes to (Decision 0023 item 2). Bridged rows go in
     `posts` with `collection = 'app.bsky.feed.post'`, `video_cid` and
     `hls_url` set and no magnet. The HLS URL is
     `https://video.bsky.app/watch/<percent-encoded did>/<video cid>/playlist.m3u8`.
+    Landed with two more `posts` columns, `bridge_checked_at` (the
+    poller's queue) and `bridge_qualified_at` (set once a post passes
+    every check; the feed serves only those), and `atproto/labels.ts`,
+    which turns self-labels and AppView labels into rows and upserts
+    them (`replaceSelfLabels` for a record's or profile's self-labels,
+    which the author can remove). The NSFW set is `BRIDGE_NSFW_LABELS`.
 17. **`backend/src/services/bskyFirehose.ts`**, ported from attempt 1: a
     Jetstream subscriber for `app.bsky.feed.post` with video embeds
     (alone or in `recordWithMedia`), the aspect-ratio filter, cursor
@@ -559,13 +565,17 @@ from the
     indexed. Opt-out and NSFW are checked against the author's profile
     too, but their profile labels come with the poller (step 18), so a
     new author's posts stay out of the feed until it has seen them.
+    An update event with a new record CID clears `bridge_qualified_at`,
+    so an edited post waits for the poller again.
 18. **`backend/src/services/bskyEngagementPoller.ts`**, ported from attempt
     1: batches of 25 against `app.bsky.feed.getPosts`, writing every post
     and author label to `labels`. It deletes posts that are now labelled
     NSFW, deleted on Bluesky, or by an opted-out author (`!no-unauthenticated`
     on the profile, or `#nobridge` in the bio or display name). It then
     applies the thresholds (50 likes, 10 reposts or 5,000 followers; drop
-    after 7 days unqualified), all configurable.
+    after 7 days unqualified), all configurable. It writes the labels
+    first and then judges from `labels` for the post and its author, not
+    from the response alone, so labels from any other writer count.
 19. **Feed.** The feed serves bridged posts only once they've passed the
     poller's checks and thresholds, interleaved with native posts by
     `record_created_at`. Authors with a `contentVisibilityDeclaration`

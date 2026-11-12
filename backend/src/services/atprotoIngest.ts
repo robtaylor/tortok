@@ -14,12 +14,14 @@
 // the network needs them (Decision 0017 item 2).
 
 import WebSocket from 'ws';
+import { envList } from '../config';
 import { query as defaultQuery } from '../db';
+import type { QueryFn } from '../db';
 import { IdentityResolver, isDid } from '../atproto/identity';
 import type { FetchFn, Profile } from '../atproto/identity';
 import { InvalidRecordError, parseVideoPost, VIDEO_POST_NSID } from '../atproto/videoPost';
 
-export type QueryFn = typeof defaultQuery;
+export type { QueryFn };
 
 /** The subset of the `ws` WebSocket API the service uses (tests fake it). */
 export interface WebSocketLike {
@@ -406,7 +408,7 @@ export class AtprotoIngest {
 export function ingestFromEnv(): AtprotoIngest {
   return new AtprotoIngest({
     jetstreamUrl: process.env.JETSTREAM_URL || undefined,
-    seedDids: (process.env.INGEST_SEED_DIDS ?? '').split(',').map((d) => d.trim()).filter(Boolean),
+    seedDids: envList('INGEST_SEED_DIDS', ''),
     identity: new IdentityResolver({ plcDirectory: process.env.PLC_DIRECTORY_URL || undefined }),
   });
 }
