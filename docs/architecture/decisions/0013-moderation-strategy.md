@@ -2,7 +2,7 @@
 
 **Current architecture:** [Moderation](../moderation.md)
 
-**Status:** Accepted (partial) (2026-04-29). Resolved the former moderation open problem.
+**Status:** Accepted (partial) (2026-04-29). Resolved the former moderation open problem. For bridged posts in v1, items 1, 4 and 11 revised by [Decision 0023](0023-bridged-bluesky-posts-what-the-v1-bridge-indexes.md) (Proposed, 2026-11-12).
 
 **Context.** Phase 3 opens signup (eventually); content moderation has
 to be in place before that window opens to anyone outside the team.
