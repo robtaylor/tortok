@@ -35,7 +35,7 @@ jobs:
         with:
           node-version: 22
       - name: Smoke
-        run: npm run smoke -- https://tortok-api.fly.dev --sha-file deployed-sha
+        run: npm run smoke -- https://appview.tortok.app --sha-file deployed-sha
       - name: Production is not behind main
         if: ${{ !cancelled() }}
         run: |

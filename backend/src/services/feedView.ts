@@ -60,7 +60,7 @@ export interface FeedItem {
 }
 
 export interface FeedContext {
-  /** Origin the blob route is served from, e.g. https://tortok-api.fly.dev. */
+  /** Origin the blob route is served from, e.g. https://appview.tortok.app. */
   blobBase: string;
   trackers: string[];
 }
