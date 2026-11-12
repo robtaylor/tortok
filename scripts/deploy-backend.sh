@@ -18,7 +18,8 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP=tortok-api
-BASE_URL=https://tortok-api.fly.dev
+# The public domain, through Cloudflare, as the app reaches it.
+BASE_URL=https://appview.tortok.app
 
 cd "$REPO_ROOT"
 if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
