@@ -71,7 +71,8 @@ export async function signIn(network = testNetwork(), password = network.appPass
  * Set a text field, then close the keyboard: it opens on focus and would
  * cover the fields and button below.
  */
-async function fill(id: string, text: string) {
+/** Type into a field and submit it, then give the keyboard time to close. */
+export async function fill(id: string, text: string) {
   await element(by.id(id)).replaceText(text);
   await element(by.id(id)).tapReturnKey();
   await new Promise((r) => setTimeout(r, 400));

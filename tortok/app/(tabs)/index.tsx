@@ -16,6 +16,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { useQuery } from '@tanstack/react-query';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { authorLabel, getFeed, torrentOf, type Video } from '@/lib/api';
+import { useAppViewStore } from '@/stores/appview';
 import { useP2PUrl } from '@/lib/webtorrent/useP2PUrl';
 import { usePrefetch } from '@/lib/webtorrent/usePrefetch';
 import { useSeedPolicy } from '@/lib/webtorrent/useSeedPolicy';
@@ -348,10 +349,12 @@ export default function FeedScreen() {
     ? Math.min(layout?.w ?? fallbackW, Math.round(videoHeight * PHONE_ASPECT))
     : (layout?.w ?? fallbackW);
 
-  // The feed is public: it needs no session.
+  // The feed is public: it needs no session. Keyed by AppView, so choosing
+  // another one in Profile loads that AppView's feed.
+  const appViewUrl = useAppViewStore((s) => s.url);
   const { data, isLoading, error } = useQuery({
-    queryKey: ['feed'],
-    queryFn: () => getFeed(),
+    queryKey: ['feed', appViewUrl],
+    queryFn: () => getFeed(appViewUrl),
   });
 
   const videos = useMemo(() => data?.videos ?? [], [data]);
