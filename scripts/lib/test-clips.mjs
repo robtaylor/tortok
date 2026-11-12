@@ -16,6 +16,7 @@ import createTorrent from 'create-torrent';
 import parseTorrent, { toMagnetURI } from 'parse-torrent';
 
 export const CONTENT_DIR = new URL('../../test-content/', import.meta.url).pathname;
+export const CLIPS_DIR = path.join(CONTENT_DIR, 'clips');
 
 // The same names and production values as backend/fly.toml.
 export const TRACKERS = (process.env.TRACKER_URLS ?? 'wss://tortok-tracker.fly.dev')
@@ -41,7 +42,7 @@ export function requireEnv(name) {
 
 /** Local file paths, R2 key and public URL for a clip. Throws if a local file is missing. */
 export function clipFiles(clip) {
-  const clipPath = path.join(CONTENT_DIR, 'clips', `${clip.name}.mp4`);
+  const clipPath = path.join(CLIPS_DIR, `${clip.name}.mp4`);
   const posterPath = path.join(CONTENT_DIR, 'posters', `${clip.name}.jpg`);
   for (const f of [clipPath, posterPath]) if (!fs.existsSync(f)) throw new Error(`missing input file ${f}`);
   // An empty R2_PREFIX puts the files at the origin's root (the e2e
@@ -52,14 +53,16 @@ export function clipFiles(clip) {
 
 /**
  * Build a clip's single-file torrent: tortok's trackers only, and a BEP-19
- * webseed that is the file's own R2 URL. No `name:` option, so the name stays
- * the file's basename. Returns the .torrent bytes, infohash and magnet.
+ * webseed that is the file's own URL on the origin. No `name:` option, so the
+ * name stays the file's basename. The info dictionary, and so the infohash,
+ * depends only on the file, not on the trackers or webseed. Returns the
+ * .torrent bytes, infohash and magnet.
  */
-export async function buildClipTorrent(clipPath, clipUrl) {
-  if (TRACKERS.length === 0) throw new Error('TRACKER_URLS contains no tracker URLs');
-  const torrentBuf = await promisify(createTorrent)(clipPath, { announceList: [TRACKERS], urlList: [clipUrl] });
+export async function buildClipTorrent(clipPath, clipUrl, trackers = TRACKERS) {
+  if (trackers.length === 0) throw new Error(`${clipPath}: no tracker URLs (check TRACKER_URLS)`);
+  const torrentBuf = await promisify(createTorrent)(clipPath, { announceList: [trackers], urlList: [clipUrl] });
   const parsed = await parseTorrent(torrentBuf);
-  if (!parsed.urlList?.includes(clipUrl) || !TRACKERS.every((t) => parsed.announce?.includes(t))) {
+  if (!parsed.urlList?.includes(clipUrl) || !trackers.every((t) => parsed.announce?.includes(t))) {
     throw new Error(`${clipPath}: torrent is missing its webseed or tracker`);
   }
   return { torrentBuf, infoHash: parsed.infoHash, magnet: toMagnetURI(parsed) };

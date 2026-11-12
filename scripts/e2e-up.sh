@@ -57,8 +57,9 @@ start_svc tracker "$REPO_ROOT/test-content" node tracker.mjs
 start_svc content "$REPO_ROOT/test-content" node seeder.mjs
 wait_for network "test -f '$E2E_NETWORK_FILE'"
 wait_for tracker "curl -sf http://localhost:8000/stats"
-# The seeder rewrites test-content/bbb-0?.magnet.txt once each clip is seeded
-# (identically, since the torrents are deterministic); its log counts them.
+# The seeder's log counts the clips as each one is verified and seeding.
+# Its tracker and origin are the TRACKER_URLS and CONTENT_ORIGIN_URL given
+# to seed-fixtures.mjs below; the two must stay in step.
 wait_for content "grep -q '\[5/5\]' '$E2E_DIR/content.log' && curl -sf -o /dev/null http://localhost:8090/bbb-01.mp4"
 
 net() { jq -r ".$1" "$E2E_NETWORK_FILE"; }

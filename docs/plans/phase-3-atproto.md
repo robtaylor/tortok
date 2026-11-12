@@ -479,12 +479,11 @@ unused once 2.5B and 2.5C land, unless noted):
 - Docs: `CLAUDE.md` and `open-problems/README.md` used to say the Phase 1
   feed shipped with react-native-video; it never did. Both are fixed;
   re-check nothing else repeats it.
-- Left for a follow-up: `test-content/seeder.mjs` still writes
-  `bbb-0?.magnet.txt` and `.torrent` files and serves posters and `.torrent`
-  files that nothing reads now, beside the tracked legacy files
-  `magnet.txt`, `poster.jpg` and `test_video.mp4`. It also builds its torrents
-  with its own `create-torrent` (webtorrent's); having it seed
-  `buildClipTorrent`'s output would leave one torrent builder.
+- `test-content/`: the content server's `bbb-0?.magnet.txt` and `.torrent`
+  files and its poster and `.torrent` routes, which nothing read, and the
+  tracked legacy files `magnet.txt`, `poster.jpg` and `test_video.mp4`. The
+  server now seeds `buildClipTorrent`'s output, so one torrent builder is
+  left.
 - Kept: `test-content/tracker.mjs` (local tracker for dev).
   `scripts/webseed-only-test.mjs` went too: `scripts/smoke.mjs` makes its
   check on every feed item.

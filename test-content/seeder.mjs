@@ -1,70 +1,23 @@
+// The local content server: the webseed origin for the test clips on
+// :8090, and a WebTorrent seeder for them on the local tracker. It seeds the
+// torrents scripts/lib/test-clips.mjs builds, the same ones seed-fixtures.mjs
+// publishes, so the infohashes always match. Posters and .torrent files
+// travel as PDS blobs (Decision 0020); this server doesn't serve them.
+
 import WebTorrent from 'webtorrent';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import http from 'http';
 import fs from 'fs';
+import { CLIPS, CLIPS_DIR, buildClipTorrent, clipFiles } from '../scripts/lib/test-clips.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
+// scripts/e2e-up.sh passes seed-fixtures.mjs these same two values
+// (TRACKER_URLS, CONTENT_ORIGIN_URL); keep them in step, or the published
+// magnets name a tracker this seeder doesn't announce to.
+const LOCAL_TRACKERS = ['ws://localhost:8000'];
 const httpPort = 8090;
-const CLIPS = ['bbb-01', 'bbb-02', 'bbb-03', 'bbb-04', 'bbb-05'];
-
-const client = new WebTorrent();
-// 5 torrents × internal listeners per torrent exceeds Node's default 10.
-client.setMaxListeners(CLIPS.length * 5);
-
-console.log('🌱 Starting WebTorrent Seeder...');
-console.log(`📁 Seeding ${CLIPS.length} clips from clips/\n`);
-
-// Seed all clips in parallel. Track results for the summary.
-let seeded = 0;
-for (const name of CLIPS) {
-  const videoPath = path.join(__dirname, 'clips', `${name}.mp4`);
-
-  client.seed(videoPath, {
-    // Do NOT rename via `name:` — webtorrent's fs-chunk-store resolves by the
-    // torrent's logical name, so renaming it causes ENOENT when peers request
-    // pieces (it tries to open `./<name>` instead of the original file).
-    announce: ['ws://localhost:8000'],
-    // BEP-19 webseed: HTTP fallback when no P2P peers are available.
-    urlList: [`http://localhost:${httpPort}/${name}.mp4`],
-  }, (torrent) => {
-    // Persist magnet + .torrent per clip so clients/scripts can pick them up.
-    fs.writeFileSync(
-      path.join(__dirname, `${name}.magnet.txt`),
-      torrent.magnetURI + '\n',
-    );
-    fs.writeFileSync(
-      path.join(__dirname, `${name}.torrent`),
-      torrent.torrentFile,
-    );
-
-    seeded++;
-    console.log(`✅ [${seeded}/${CLIPS.length}] ${name}`);
-    console.log(`   Hash: ${torrent.infoHash}`);
-    console.log(`   Magnet: ${torrent.magnetURI.slice(0, 80)}…`);
-    console.log(`   Files: ${torrent.files.map((f) => f.name).join(', ')}\n`);
-
-    if (seeded === CLIPS.length) {
-      console.log('🎉 All clips seeding. Waiting for peers…\n');
-    }
-  });
-}
-
-// Aggregate stats every 10s.
-setInterval(() => {
-  const torrents = client.torrents;
-  if (torrents.length === 0) return;
-  const totalPeers = torrents.reduce((s, t) => s + t.numPeers, 0);
-  const totalUp = torrents.reduce((s, t) => s + t.uploaded, 0);
-  console.log(
-    `📈 ${torrents.length} torrents | ${totalPeers} peers | ` +
-    `↑ ${(totalUp / 1024 / 1024).toFixed(2)} MB total`,
-  );
-}, 10_000);
 
 // ---------------------------------------------------------------------------
-// HTTP server — serves clips, posters, and .torrent files
+// HTTP server — the clips' webseed, with Range support
 // ---------------------------------------------------------------------------
 
 const cors = {
@@ -82,49 +35,15 @@ const httpServer = http.createServer((req, res) => {
 
   const url = req.url?.split('?')[0]; // strip query string
 
-  // Serve .torrent files — e.g. /bbb-01.torrent
-  if (url?.endsWith('.torrent')) {
-    const torrentPath = path.join(__dirname, url.slice(1));
-    return serveFile(req, res, torrentPath, 'application/x-bittorrent');
-  }
-
-  // Serve poster images — e.g. /posters/bbb-01.jpg
-  if (url?.startsWith('/posters/') && url.endsWith('.jpg')) {
-    const posterPath = path.join(__dirname, url.slice(1));
-    return serveFile(req, res, posterPath, 'image/jpeg');
-  }
-
-  // Legacy /poster.jpg route (single poster from before multi-clip)
-  if (url === '/poster.jpg') {
-    const posterPath = path.join(__dirname, 'poster.jpg');
-    return serveFile(req, res, posterPath, 'image/jpeg');
-  }
-
   // Serve video clips — e.g. /bbb-01.mp4
   if (url?.endsWith('.mp4')) {
-    const videoPath = path.join(__dirname, 'clips', url.slice(1));
+    const videoPath = path.join(CLIPS_DIR, path.basename(url));
     return serveVideoWithRange(req, res, videoPath);
   }
 
   res.writeHead(404, cors);
   res.end('Not found');
 });
-
-function serveFile(req, res, filePath, contentType) {
-  try {
-    const stat = fs.statSync(filePath);
-    res.writeHead(200, {
-      ...cors,
-      'Content-Type': contentType,
-      'Content-Length': stat.size,
-    });
-    if (req.method === 'HEAD') { res.end(); return; }
-    fs.createReadStream(filePath).pipe(res);
-  } catch {
-    res.writeHead(404, cors);
-    res.end('Not found');
-  }
-}
 
 function serveVideoWithRange(req, res, videoPath) {
   let stat;
@@ -164,12 +83,56 @@ function serveVideoWithRange(req, res, videoPath) {
   }
 }
 
+// The webseed doesn't depend on the torrents, so it starts first.
 httpServer.listen(httpPort, () => {
   console.log(`🌐 HTTP webseed server running at http://localhost:${httpPort}`);
-  console.log(`   Clips:   /bbb-01.mp4 … /bbb-05.mp4`);
-  console.log(`   Posters: /posters/bbb-01.jpg … /posters/bbb-05.jpg`);
-  console.log(`   Torrents: /bbb-01.torrent … /bbb-05.torrent\n`);
+  console.log(`   Clips: /${CLIPS[0].name}.mp4 … /${CLIPS.at(-1).name}.mp4\n`);
 });
+
+// ---------------------------------------------------------------------------
+// WebTorrent seeder
+// ---------------------------------------------------------------------------
+
+const client = new WebTorrent();
+// 5 torrents × internal listeners per torrent exceeds Node's default 10.
+client.setMaxListeners(CLIPS.length * 5);
+
+console.log('🌱 Starting WebTorrent Seeder...');
+console.log(`📁 Seeding ${CLIPS.length} clips from clips/\n`);
+
+// Build each clip's torrent, then add it. WebTorrent verifies the file
+// against the pieces and seeds it; the torrents verify concurrently.
+let seeded = 0;
+for (const clip of CLIPS) {
+  const { clipPath } = clipFiles(clip);
+  const { torrentBuf } = await buildClipTorrent(
+    clipPath, `http://localhost:${httpPort}/${path.basename(clipPath)}`, LOCAL_TRACKERS,
+  );
+  // The torrent names the file by its basename, so `path` is its directory.
+  client.add(torrentBuf, { path: CLIPS_DIR }, (torrent) => {
+    const report = () => {
+      seeded++;
+      console.log(`✅ [${seeded}/${CLIPS.length}] ${clip.name}`);
+      console.log(`   Hash: ${torrent.infoHash}\n`);
+      if (seeded === CLIPS.length) {
+        console.log('🎉 All clips seeding. Waiting for peers…\n');
+      }
+    };
+    if (torrent.done) report(); else torrent.once('done', report);
+  });
+}
+
+// Aggregate stats every 10s.
+setInterval(() => {
+  const torrents = client.torrents;
+  if (torrents.length === 0) return;
+  const totalPeers = torrents.reduce((s, t) => s + t.numPeers, 0);
+  const totalUp = torrents.reduce((s, t) => s + t.uploaded, 0);
+  console.log(
+    `📈 ${torrents.length} torrents | ${totalPeers} peers | ` +
+    `↑ ${(totalUp / 1024 / 1024).toFixed(2)} MB total`,
+  );
+}, 10_000);
 
 // Graceful shutdown on Ctrl+C (SIGINT) and scripts/dev-down.sh (SIGTERM),
 // with a hard deadline so a stuck destroy can't hang the process.
