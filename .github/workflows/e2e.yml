@@ -141,8 +141,7 @@ jobs:
       # drop the entries this run restored from, so PR pushes don't fill the
       # repo's 10 GB cache and evict main's. Only on success, because a failed
       # run saves nothing to replace them; a re-run keeps its own commit's.
-      - &drop-stale-caches
-        name: Drop this ref's superseded build caches
+      - name: Drop this ref's superseded build caches
         if: success()
         env:
           GH_TOKEN: ${{ github.token }}
@@ -162,9 +161,6 @@ jobs:
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    permissions:
-      contents: read
-      actions: write # to delete this ref's superseded cache entries
     services:
       postgres:
         image: postgres:17
@@ -174,9 +170,6 @@ jobs:
         options: >-
           --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      # Only Gradle's home entry is keyed by commit; its other entries
-      # (dependencies, transforms, ...) are keyed by content and stay valid.
-      STALE_CACHE_PREFIX: gradle-home-
       DETOX_AVD: e2e
       E2E_PG_URL: postgresql://postgres:postgres@localhost:5432
     steps:
@@ -200,11 +193,9 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      # Caches Gradle's dependencies and build outputs. PRs write too: their
-      # entries are scoped to the merge ref, which every push to the PR shares.
+      # By default only main writes Gradle's cache; PRs read main's entries.
+      # The prune-gradle-cache job below drops main's superseded entries.
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          cache-read-only: false
       - name: Install
         run: |
           pids=()
@@ -238,7 +229,6 @@ jobs:
       - name: Stop the local stack
         if: always()
         run: scripts/e2e-down.sh
-      - *drop-stale-caches
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -246,3 +236,28 @@ jobs:
           path: |
             e2e-artifacts
             ${{ env.E2E_DIR }}/*.log
+
+  # setup-gradle stores one cache entry per artifact type, keyed by a hash of
+  # its contents. Transforms and dependencies hash differently on most runs,
+  # so each main run adds about 2 GB to the repo's 10 GB cache. setup-gradle
+  # skips saving an entry whose hash matches what it restored, so old entries
+  # can't be deleted during the run; this job runs after the save and keeps
+  # the newest entry of each bundled type, which the newest gradle-home entry
+  # references. The per-file types (wrapper-zips, generated-gradle-jars,
+  # java-toolchains) can have several live entries each; they're left alone.
+  prune-gradle-cache:
+    needs: android
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Drop main's superseded Gradle cache entries
+        run: |
+          gh cache list --ref "$GITHUB_REF" --key gradle- --limit 100 --json id,key,createdAt --jq '
+            [.[] | . + {family: (.key | capture("^(?<f>gradle-(home|dependencies|transforms|instrumented-jars|kotlin-dsl|groovy-dsl)-v[0-9]+)").f)}]
+            | group_by(.family)[] | sort_by(.createdAt) | .[:-1][] | "\(.id) \(.key)"' |
+            while read -r id key; do echo "Deleting $key"; gh cache delete "$id"; done
