@@ -6,7 +6,7 @@
 // from Jetstream, or from backfill on its next boot.
 //
 // Torrents come from scripts/lib/test-clips.mjs, the same code
-// seed-prod-test-content.mjs uses, so the infohashes match the clips already
+// upload-test-clips.mjs uses, so the infohashes match the clips already
 // on R2. The poster and the .torrent file are uploaded to the PDS as the
 // record's thumbnailBlob and torrentBlob (Decision 0020).
 //
@@ -81,7 +81,7 @@ async function prepareClip(clip) {
   const head = await fetch(clipUrl, { method: 'HEAD' });
   const size = Number(head.headers.get('content-length'));
   if (!head.ok || size !== fs.statSync(clipPath).size) {
-    throw new Error(`${clipUrl}: HTTP ${head.status}, ${size} bytes; run seed-prod-test-content.mjs first`);
+    throw new Error(`${clipUrl}: HTTP ${head.status}, ${size} bytes; run upload-test-clips.mjs first`);
   }
 
   const { torrentBuf, infoHash, magnet } = await buildClipTorrent(clipPath, clipUrl);

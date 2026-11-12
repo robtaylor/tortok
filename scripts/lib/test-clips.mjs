@@ -2,17 +2,18 @@
 //
 // The five Big Buck Bunny test clips (CC-BY 3.0, see
 // test-content/clips/CREDITS.md) and the one way their torrents are built.
-// seed-prod-test-content.mjs and seed-fixtures.mjs both use it, so the
-// infohashes in their output always match the clips on R2.
+// upload-test-clips.mjs and seed-fixtures.mjs both use it, so the
+// infohashes in the records always match the clips on R2.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
-// create-torrent and parse-torrent (ESM-only) live in backend/node_modules.
-const backendModules = new URL('../../backend/node_modules/', import.meta.url);
-const createTorrent = (await import(new URL('create-torrent/index.js', backendModules))).default;
-const { default: parseTorrent, toMagnetURI } = await import(new URL('parse-torrent/index.js', backendModules));
+// Pinned exactly in the root package.json: another create-torrent version
+// could build different torrents, and so different infohashes, for the
+// clips already published.
+import createTorrent from 'create-torrent';
+import parseTorrent, { toMagnetURI } from 'parse-torrent';
 
 export const CONTENT_DIR = new URL('../../test-content/', import.meta.url).pathname;
 
@@ -38,20 +39,15 @@ export function requireEnv(name) {
   return v;
 }
 
-/** Local file paths and R2 keys for a clip. Throws if a local file is missing. */
+/** Local file paths, R2 key and public URL for a clip. Throws if a local file is missing. */
 export function clipFiles(clip) {
   const clipPath = path.join(CONTENT_DIR, 'clips', `${clip.name}.mp4`);
   const posterPath = path.join(CONTENT_DIR, 'posters', `${clip.name}.jpg`);
   for (const f of [clipPath, posterPath]) if (!fs.existsSync(f)) throw new Error(`missing input file ${f}`);
   // An empty R2_PREFIX puts the files at the origin's root (the e2e
   // stack's content server serves /<name>.mp4).
-  const key = (rest) => (PREFIX ? `${PREFIX}/${rest}` : rest);
-  const keys = {
-    clip: key(`${clip.name}.mp4`),
-    poster: key(`posters/${clip.name}.jpg`),
-    torrent: key(`${clip.name}.torrent`),
-  };
-  return { clipPath, posterPath, keys, clipUrl: `${PUBLIC_URL}/${keys.clip}` };
+  const clipKey = PREFIX ? `${PREFIX}/${clip.name}.mp4` : `${clip.name}.mp4`;
+  return { clipPath, posterPath, clipKey, clipUrl: `${PUBLIC_URL}/${clipKey}` };
 }
 
 /**

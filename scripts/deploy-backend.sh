@@ -27,7 +27,7 @@ if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
 fi
 # Untracked files in what the Dockerfile copies would ship in an image whose
 # SHA doesn't contain them.
-untracked="$(git status --porcelain --untracked-files=all -- backend/src backend/content)"
+untracked="$(git status --porcelain --untracked-files=all -- backend/src)"
 if [[ -n "$untracked" ]]; then
   echo "deploy-backend: untracked files would be copied into the image:" >&2
   echo "$untracked" >&2

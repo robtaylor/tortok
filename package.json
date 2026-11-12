@@ -3,7 +3,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "deploy:web": "bash scripts/deploy-web.sh",
-    "smoke:r2": "node scripts/r2-smoke-test.mjs",
+    "upload:test-clips": "node scripts/upload-test-clips.mjs",
     "seed:fixtures": "node scripts/seed-fixtures.mjs",
     "deploy:backend": "bash scripts/deploy-backend.sh",
     "smoke": "node scripts/smoke.mjs",
@@ -12,7 +12,9 @@
   "dependencies": {
     "@atproto/api": "^0.13.0",
     "@aws-sdk/client-s3": "^3.700.0",
-    "dotenv": "^16.4.0"
+    "create-torrent": "6.1.0",
+    "dotenv": "^16.4.0",
+    "parse-torrent": "11.0.19"
   },
   "devDependencies": {
     "wrangler": "^4.87.0"

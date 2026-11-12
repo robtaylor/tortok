@@ -77,7 +77,7 @@ echo "  published ($E2E_DIR/fixtures.log)"
 # the test PLC. There's no Jetstream here, and the stack must not reach
 # Bluesky's (the backend's default), so ingest points at a closed local port
 # and retries quietly.
-NODE_ENV=test PORT=8080 DATABASE_URL="$DB_URL" JWT_SECRET=e2e-only \
+NODE_ENV=test PORT=8080 DATABASE_URL="$DB_URL" \
   JETSTREAM_URL=ws://127.0.0.1:9/subscribe INGEST_SEED_DIDS="$(net did)" PLC_DIRECTORY_URL="$(net plcUrl)" \
   start_svc backend "$REPO_ROOT/backend" node -r ts-node/register/transpile-only src/index.ts
 wait_for backend "curl -sf http://localhost:8080/health"

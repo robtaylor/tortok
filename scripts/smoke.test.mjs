@@ -2,8 +2,8 @@
 //   npm run test:scripts
 //
 // The stub serves a real production torrent (fixtures/bbb-01.torrent, as
-// published at content.tortok.net/test-content/ by
-// scripts/seed-prod-test-content.mjs) and the clip it describes
+// built by scripts/lib/test-clips.mjs for content.tortok.net/test-content/)
+// and the clip it describes
 // (test-content/clips/bbb-01.mp4), so the decoder meets create-torrent's
 // actual output. 179 pieces of 16 KiB; the last is short.
 import { test, before, after } from 'node:test';
