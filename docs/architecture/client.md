@@ -176,7 +176,8 @@ built.
 
 ## Testing
 
-`stores/auth.test.ts` holds Jest unit tests for the auth store, run with
+`stores/auth.test.ts` and `stores/appview.test.ts` hold Jest unit tests for
+the auth and AppView stores, run with
 `npm test` from `tortok/`, which runs every `*.test.ts(x)` outside `e2e/`
 (`jest.config.js`). CI runs them with
 the app's typecheck (`.github/workflows/ci.yml`, job `client`).
@@ -210,7 +211,13 @@ relaunch, and sign-out.
   `android` pair) from `tortok/`, after `npx expo prebuild` and with the stack
   up. CI runs both platforms on every pull request that changes code,
   slimming the iOS simulator first with `simslim` to fit the runner's 7 GB
-  (`.github/workflows/e2e.yml`).
+  (`.github/workflows/e2e.yml`). Running the stack locally needs `npm ci` in
+  the repo root, `backend/`, `test-content/` and `test-network/`.
+- **Flakes and logs:** on the hosted iOS simulator a tap sometimes never
+  reaches the app (the app logs no state change), so `tapVideoUntil()` in
+  `e2e/helpers.ts` resends it, and CI logs say `tapping again` when it does.
+  A release build's JS logs are in Detox's `device.log` artifact under
+  `com.facebook.react.log`, kept for failing tests only.
 
 ## Implementation status
 
