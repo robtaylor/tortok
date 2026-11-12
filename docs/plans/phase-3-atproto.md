@@ -7,7 +7,7 @@
 - ✅ **Unit 0** — Decision 0012 (Lexicon namespace governance) merged; canonical NSID is **`app.tortok.*`** (reverse-DNS rooted at `tortok.app`); schema lives at `lexicons/app/tortok/video/post.json`; AppView+PDS cost note added to Deferred Decisions in [`open-problems/README.md`](../architecture/open-problems/README.md).
 - ✅ **Unit 1** — Standalone Node smoke test (`scripts/atproto-smoke-test.mjs`) round-trips an `app.tortok.video.post` record against `bsky.social` using app-password auth.
 - ✅ **Unit 2** — OAuth round-trip verified end to end on the iOS simulator (2026-05-02). Android and web haven't been verified. `tortok.app` is live on Cloudflare Pages, `@atproto/oauth-client-expo` is integrated, the Hermes polyfills are in `tortok/lib/polyfills.ts`, the login screen pre-fills the last handle, and the auth store has 7 unit tests.
-- ➡️ **Unit 2.5** — replanned 2026-05-02 after a failed first attempt, rescoped 2026-11-09. Steps 2.5-0 (cleanup), 2.5A (ingest, deployed 2026-11-11) and 2.5B (the feed reads indexed posts, with a blob route and runtime sources, 2026-11-11) are done. 2.5C (retire legacy) is under way: the backend and client removals and the AppView URL setting (steps 8–11 and 13) landed 2026-11-12; the custom domain (step 14) is live and its config change is in review. Its sub-phases run 2.5-0 → 2.5A ingest → 2.5B feed cutover → 2.5C retire legacy → 2.5D Bluesky bridge → 2.5E final checks. It absorbs Units 4 (mostly), 5 and 6.
+- ➡️ **Unit 2.5** — replanned 2026-05-02 after a failed first attempt, rescoped 2026-11-09. Steps 2.5-0 (cleanup), 2.5A (ingest, deployed 2026-11-11) and 2.5B (the feed reads indexed posts, with a blob route and runtime sources, 2026-11-11) are done. 2.5C (retire legacy) is done and deployed (2026-11-12): production runs no legacy auth, write routes or seeder, its legacy tables are dropped, and the app reaches the AppView at `appview.tortok.app`, a setting users can change. Next is 2.5D (the Bluesky bridge). Its sub-phases run 2.5-0 → 2.5A ingest → 2.5B feed cutover → 2.5C retire legacy → 2.5D Bluesky bridge → 2.5E final checks. It absorbs Units 4 (mostly), 5 and 6.
 - **Unit 3** — after Unit 2.5; the client publishes `app.tortok.video.post` via the user's PDS.
 - **Unit 7** — web cookie auth, not started.
 - ✅ **Moderation parallel track** — Decision 0013 landed 2026-04-29 (atproto labelers + illegal-content floor + UK age-verification gate); `open-problems/moderation.md` deleted.
@@ -397,7 +397,7 @@ them.
 seeded records and plays them through WebTorrent, and sign-out works
 from Profile.
 
-#### 2.5C — Retire the legacy native flow (~1 day)
+#### 2.5C — Retire the legacy native flow (~1 day) ✅ DONE 2026-11-12
 
 Goal: drop the auth and write surface that's been dead since 2.5B.
 Afterwards the only way content reaches the app is through atproto.
@@ -431,7 +431,7 @@ Afterwards the only way content reaches the app is through atproto.
 13. ✅ **AppView URL setting.** An in-app AppView base-URL setting,
     defaulting to tortok's, replaces the build-time `EXPO_PUBLIC_API_URL`
     (decision 4 below).
-14. **AppView custom domain.** Serve the `tortok-api` Fly app as
+14. ✅ **AppView custom domain.** Serve the `tortok-api` Fly app as
     `appview.tortok.app`: a Fly certificate plus a DNS record in the
     Cloudflare `tortok.app` zone, **proxied** through Cloudflare so the
    blob route is cached at the edge. The URL setting's default is that
@@ -665,6 +665,20 @@ for auth tokens is reduced.
 **Moderation decision record.** ✅ Resolved 2026-04-29 by Decision 0013. The default
 labeler subscription set and opt-out detection for bridged content
 remain Beta launch criteria, tracked in [`release-plan.md`](release-plan.md).
+
+**Housekeeping** (from the 2.5C session, none blocking):
+
+- Find out why the Gradle cache's transforms entry changes on every `main`
+  run of `e2e.yml`: enable `GRADLE_BUILD_ACTION_CACHE_DEBUG_ENABLED` for two
+  runs and diff the file lists. If it holds project-local artifacts from
+  `expo prebuild`, excluding `caches/transforms-4` may be cheaper; measure.
+  Separately, try Gradle's build cache (`org.gradle.caching=true`) and
+  measure it alone.
+- Offer the `bittorrent-tracker` fix in `tortok/patches/` upstream. It's a
+  pull request to someone else's repository, so ask the user first.
+- The Cloudflare token that edits `tortok.app`'s DNS, certificates and cache
+  rules has some permissions covering every zone in the account. Narrowing
+  them to `tortok.app` is the user's call.
 
 ## Critical-path order
 
