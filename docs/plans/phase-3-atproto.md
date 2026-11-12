@@ -184,9 +184,9 @@ unverified.
 
 ### Unit 2.5 — Atproto-native cutover + Bluesky bridge *(~5–7 days; replanned 2026-05-02, rescoped 2026-11-09)*
 
-Six months passed between the replan and its execution. The user
-confirmed the rescoped version on 2026-11-09; their answers to the four
-open questions are under [Decisions on the open questions](#decisions-on-the-open-questions-user-2026-11-09)
+Six months passed between the replan and its execution. The rescoped
+version was confirmed on 2026-11-09; the answers to the four
+open questions are under [Decisions on the open questions](#decisions-on-the-open-questions-2026-11-09)
 at the end of this unit, and the steps below already reflect them.
 
 **State on 2026-11-09.**
@@ -412,11 +412,11 @@ Afterwards the only way content reaches the app is through atproto.
    fixture. Update `p2p-torrent.md` and `backend.md` in the same
    change. `fly.toml` stays at `auto_stop_machines = "off"`, not `"stop"`
    as decision 1 below said: ingest runs in this process, and a stopped
-   machine misses Jetstream events (user, 2026-11-12). Revisit if ingest
+   machine misses Jetstream events (decided 2026-11-12). Revisit if ingest
    moves to its own process.
 10. ✅ **Schema.** Replace the legacy CREATEs in `schema.sql` with DROPs for
     `users`, `videos`, `hashtags`, `video_hashtags`, `follows`, `likes` and
-    `views`. `views` goes too, though this step first kept it (user,
+    `views`. `views` goes too, though this step first kept it (decided
     2026-11-12): its UUID `video_id` referenced `videos`, nothing wrote it,
     and Phase 4 designs view storage afresh.
 11. ✅ **Client.** Delete `app/(auth)/register.tsx`; the auth store's `token`,
@@ -440,7 +440,7 @@ Afterwards the only way content reaches the app is through atproto.
     `tortok.app`, not `tortok.net`, because the AppView is part of the
     app and `tortok.net` is kept for content. It also gives the later
     service DID a stable host (`did:web:appview.tortok.app`). Decided
-    with the user on 2026-11-10, along with keeping ingest in the
+    on 2026-11-10, along with keeping ingest in the
     `tortok-api` process until it needs to scale on its own.
 
 **Removal checklist** (checked against the code 2026-11-09; each item is
@@ -578,7 +578,7 @@ the iOS simulator plays both.
     written in full after the cutover (the area-doc backfill deferred
     them to here). `federation.md` records that bridged posts live in
     `posts` beside native ones, discriminated by collection NSID.
-20. **The `unit-2.5-attempt-1` tag** stays or goes; the user decides.
+20. **The `unit-2.5-attempt-1` tag** stays or goes; not yet decided.
 21. **Phase status.** Update the `CLAUDE.md` phases table and this plan's
     status for Units 4–6 absorbed.
 
@@ -619,7 +619,7 @@ All preserved on the `unit-2.5-attempt-1` tag:
   engagement poller hits the public AppView without auth, which is
   rate-limited too; use attempt 1's backoff.
 
-#### Decisions on the open questions (user, 2026-11-09)
+#### Decisions on the open questions (2026-11-09)
 
 1. **Seeder: remove it.** 2.5C deletes `SeederService`, its
    `backend/content/` fixture and the `/seeder/stats` route, and sets the
@@ -702,7 +702,7 @@ for auth tokens is reduced.
 labeler subscription set and opt-out detection for bridged content
 remain Beta launch criteria, tracked in [`release-plan.md`](release-plan.md).
 
-**Housekeeping** (from the 2.5C session, none blocking):
+**Housekeeping** (found during 2.5C, none blocking):
 
 - Find out why the Gradle cache's transforms entry changes on every `main`
   run of `e2e.yml`: enable `GRADLE_BUILD_ACTION_CACHE_DEBUG_ENABLED` for two
@@ -711,10 +711,11 @@ remain Beta launch criteria, tracked in [`release-plan.md`](release-plan.md).
   Separately, try Gradle's build cache (`org.gradle.caching=true`) and
   measure it alone.
 - Offer the `bittorrent-tracker` fix in `tortok/patches/` upstream. It's a
-  pull request to someone else's repository, so ask the user first.
+  pull request to someone else's repository, so it needs a maintainer's
+  go-ahead first.
 - The Cloudflare token that edits `tortok.app`'s DNS, certificates and cache
   rules has some permissions covering every zone in the account. Narrowing
-  them to `tortok.app` is the user's call.
+  them to `tortok.app` is the Cloudflare account owner's decision.
 
 ## Critical-path order
 
