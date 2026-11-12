@@ -2,22 +2,10 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-nati
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useAuthStore } from '@/stores/auth';
 
-function StatView({ count, label }: { count: number; label: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statCount}>{count}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
 export default function ProfileScreen() {
-  const { user, did, lastHandle, signOut } = useAuthStore();
-
-  // Signed in with atproto: show the handle and DID. The legacy `user`
-  // (counts, bio) exists only for accounts signed in to the old backend;
-  // nothing fills an atproto profile yet (Phase 3 Unit 2.5B and later).
-  const handle = lastHandle ?? user?.username ?? null;
+  // The handle and DID the user signed in with. Nothing fetches their
+  // atproto profile (display name, avatar, bio) yet.
+  const { did, lastHandle: handle, signOut } = useAuthStore();
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -34,21 +22,10 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      <Text style={styles.displayName} testID="displayName">
-        {user?.displayName ?? handle ?? 'Signed in'}
+      <Text style={styles.handle} testID="username">
+        {handle ? `@${handle}` : 'Signed in'}
       </Text>
-      {handle ? <Text style={styles.username} testID="username">@{handle}</Text> : null}
       {did ? <Text style={styles.did} testID="did" selectable>{did}</Text> : null}
-
-      {user?.bio ? <Text style={styles.bio} testID="bio">{user.bio}</Text> : null}
-
-      {user ? (
-        <View style={styles.statsRow}>
-          <StatView count={user.followerCount} label="Followers" />
-          <StatView count={user.followingCount} label="Following" />
-          <StatView count={user.videoCount} label="Videos" />
-        </View>
-      ) : null}
     </ScrollView>
   );
 }
@@ -88,48 +65,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  displayName: {
+  handle: {
     color: '#fff',
     fontSize: 20,
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 4,
   },
-  username: {
-    color: '#888',
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
   did: {
     color: '#555',
     fontSize: 12,
     textAlign: 'center',
     marginBottom: 24,
-  },
-  bio: {
-    color: '#fff',
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 24,
-    paddingHorizontal: 24,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 24,
-  },
-  stat: {
-    alignItems: 'center',
-  },
-  statCount: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  statLabel: {
-    color: '#888',
-    fontSize: 13,
-    marginTop: 2,
   },
 });

@@ -1,8 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-// Styles shared between the login and register screens. Screen-specific
-// styles (title, layout wrappers, navigation links) stay in their own
-// files; only the byte-identical rules live here.
+// Styles for the login screen's form: container, inputs, button and error.
 export const authStyles = StyleSheet.create({
   container: {
     flex: 1,

@@ -57,8 +57,6 @@ beforeEach(() => {
   secureStoreMock.__store.clear();
   // Reset zustand state.
   useAuthStore.setState({
-    token: null,
-    user: null,
     did: null,
     lastHandle: null,
     isLoading: true,
@@ -83,18 +81,14 @@ describe('signOut', () => {
   it('clears DID from storage, resets state, and revokes server-side', async () => {
     // Seed the store as if previously signed in.
     secureStoreMock.__store.set(DID_KEY, TEST_DID);
-    useAuthStore.setState({ did: TEST_DID, token: 'legacy-jwt', user: null });
+    useAuthStore.setState({ did: TEST_DID });
     oauth.signOut.mockResolvedValue(undefined);
 
     await useAuthStore.getState().signOut();
 
     expect(oauth.signOut).toHaveBeenCalledWith(TEST_DID);
     expect(secureStoreMock.__store.has(DID_KEY)).toBe(false);
-    expect(useAuthStore.getState()).toMatchObject({
-      did: null,
-      token: null,
-      user: null,
-    });
+    expect(useAuthStore.getState().did).toBeNull();
   });
 
   it('still clears local state when server revoke fails', async () => {
@@ -146,8 +140,6 @@ describe('hydrate', () => {
     await useAuthStore.getState().hydrate();
 
     expect(useAuthStore.getState()).toMatchObject({
-      token: null,
-      user: null,
       did: null,
       lastHandle: null,
       isLoading: false,

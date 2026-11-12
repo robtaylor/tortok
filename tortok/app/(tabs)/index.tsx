@@ -322,16 +322,6 @@ const VideoItem = memo(function VideoItem({
           <Text style={styles.hashtags}>{hashtagLine}</Text>
         )}
       </View>
-
-      <View style={styles.actionsOverlay}>
-        <TouchableOpacity style={styles.actionButton}>
-          <FontAwesome name="comment-o" size={30} color="#fff" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionButton}>
-          <FontAwesome name="share" size={28} color="#fff" />
-        </TouchableOpacity>
-      </View>
     </View>
   );
 });
@@ -589,15 +579,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowRadius: 4,
-  },
-  actionsOverlay: {
-    position: 'absolute',
-    right: 12,
-    bottom: 40,
-    alignItems: 'center',
-    gap: 20,
-  },
-  actionButton: {
-    alignItems: 'center',
   },
 });
