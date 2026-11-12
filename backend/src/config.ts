@@ -41,3 +41,14 @@ export function bridgeNsfwLabels(): ReadonlySet<string> {
   if (vals.length === 0) throw new Error('BRIDGE_NSFW_LABELS is set but contains no label values');
   return new Set(vals);
 }
+
+/**
+ * The narrowest bridged video the feed takes, as height/width
+ * (`BRIDGE_ASPECT_MIN`; default 1, square or portrait; Decision 0010).
+ */
+export function bridgeAspectMin(): number {
+  const raw = process.env.BRIDGE_ASPECT_MIN ?? '1';
+  const v = Number(raw);
+  if (!(v > 0)) throw new Error(`BRIDGE_ASPECT_MIN must be a positive number, not ${raw}`);
+  return v;
+}

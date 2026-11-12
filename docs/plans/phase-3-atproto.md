@@ -557,7 +557,7 @@ from the
     which turns self-labels and AppView labels into rows and upserts
     them (`replaceSelfLabels` for a record's or profile's self-labels,
     which the author can remove). The NSFW set is `BRIDGE_NSFW_LABELS`.
-17. **`backend/src/services/bskyFirehose.ts`**, ported from attempt 1: a
+17. ✅ **`backend/src/services/bskyFirehose.ts`**, ported from attempt 1: a
     Jetstream subscriber for `app.bsky.feed.post` with video embeds
     (alone or in `recordWithMedia`), the aspect-ratio filter, cursor
     persistence, and record self-labels written to `labels`. A post
@@ -567,6 +567,10 @@ from the
     new author's posts stay out of the feed until it has seen them.
     An update event with a new record CID clears `bridge_qualified_at`,
     so an edited post waits for the poller again.
+    Landed on its own Jetstream socket and cursor; the socket, backoff,
+    ordered queue and cursor are now `services/jetstream.ts`, shared with
+    native ingest. Not booted until step 21. A minute against live
+    Jetstream indexed 10 posts, each with a working HLS URL.
 18. **`backend/src/services/bskyEngagementPoller.ts`**, ported from attempt
     1: batches of 25 against `app.bsky.feed.getPosts`, writing every post
     and author label to `labels`. It deletes posts that are now labelled
@@ -576,6 +580,10 @@ from the
     after 7 days unqualified), all configurable. It writes the labels
     first and then judges from `labels` for the post and its author, not
     from the response alone, so labels from any other writer count.
+    `#nobridge` isn't a label, so the firehose can't see it; decide here
+    whether the poller keeps a record of opted-out authors the firehose
+    checks too, or whether their posts just wait unserved for the poller
+    to delete them.
 19. **Feed.** The feed serves bridged posts only once they've passed the
     poller's checks and thresholds, interleaved with native posts by
     `record_created_at`. Authors with a `contentVisibilityDeclaration`
