@@ -95,6 +95,27 @@ export async function waitForActiveVideo(state: string, timeout = 30000) {
 }
 
 /**
+ * Tap the active video where a person would (its upper middle) until it
+ * reports `state`. The caption and action overlays cover part of the video,
+ * and iOS won't let Detox tap a partly covered element, so this taps a screen
+ * point. On the hosted iOS simulator such a tap sometimes never reaches the
+ * app (no state change at all is logged); it's resent, up to three times. A
+ * tap that arrives but does the wrong thing still fails.
+ */
+export async function tapVideoUntil(state: string, attempts = 3) {
+  for (let i = 1; ; i++) {
+    await device.tap({ x: 200, y: 250 });
+    try {
+      await waitForActiveVideo(state, 10000);
+      return;
+    } catch (err) {
+      if (i >= attempts) throw err;
+      console.warn(`tap ${i} didn't reach '${state}'; tapping again`);
+    }
+  }
+}
+
+/**
  * Tap a tab. On iOS synchronization is on for the tap only, so Detox waits
  * for a screen transition still animating (such as sign-in into the tabs)
  * instead of tapping the view sliding over it. On Android synchronization
