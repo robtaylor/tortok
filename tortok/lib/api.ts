@@ -1,37 +1,3 @@
-import Constants from 'expo-constants';
-
-// Resolution order:
-//   1. Explicit EXPO_PUBLIC_API_URL — wins always (CI, staging, custom
-//      LAN backend).
-//   2. In dev, derive from the host Metro is reachable on. Constants.
-//      expoConfig.hostUri tells us where Metro is — that's the dev
-//      machine from the perspective of an iOS sim, Android emu, or
-//      physical device on the LAN. Drop the Metro port (8081), use the
-//      backend port (8080).
-//   3. Last-resort dev fallback: localhost.
-//   4. Prod: the deployed API. Env var is baked at build time; we
-//      don't want a missing var to brick the app.
-//
-// We do NOT silently fall back to the prod URL in dev — that pattern
-// caused "why does this mutate prod?" debugging sessions previously.
-function getApiUrl(): string {
-  const env = process.env.EXPO_PUBLIC_API_URL;
-  if (env) return env;
-
-  if (__DEV__) {
-    const hostUri = Constants.expoConfig?.hostUri;
-    if (hostUri) {
-      const host = hostUri.split(':')[0];
-      return `http://${host}:8080`;
-    }
-    return 'http://localhost:8080';
-  }
-
-  return 'https://tortok-api.fly.dev';
-}
-
-const API_URL = getApiUrl();
-
 export class APIError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -49,11 +15,15 @@ export class NetworkError extends Error {
   }
 }
 
-/** GET from the AppView. Its API is read-only: writes go to the user's PDS. */
-async function request<T>(path: string): Promise<T> {
+/**
+ * GET from an AppView: callers pass the one the user chose
+ * (stores/appview.ts), so a query's cache key and its request name the same
+ * AppView. Its API is read-only: writes go to the user's PDS.
+ */
+async function request<T>(base: string, path: string): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`);
+    res = await fetch(`${base}${path}`);
   } catch (e) {
     throw new NetworkError(e instanceof Error ? e.message : 'Network request failed');
   }
@@ -114,11 +84,11 @@ export type FeedResponse = {
   hasMore: boolean;
 };
 
-export function getFeed(cursor?: string) {
+export function getFeed(appView: string, cursor?: string) {
   const params = new URLSearchParams();
   params.set('limit', '10');
   if (cursor) params.set('offset', cursor);
-  return request<FeedResponse>(`/videos/feed?${params}`);
+  return request<FeedResponse>(appView, `/videos/feed?${params}`);
 }
 
 /** The post's torrent, or null if it doesn't play over WebTorrent. */

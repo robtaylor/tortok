@@ -1,6 +1,7 @@
 import { StyleSheet } from 'react-native';
 
-// Styles for the login screen's form: container, inputs, button and error.
+// Form styles shared by the login screen and Profile's AppView setting:
+// container, inputs, button and error.
 export const authStyles = StyleSheet.create({
   container: {
     flex: 1,

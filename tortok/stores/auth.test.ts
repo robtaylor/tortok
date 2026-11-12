@@ -2,9 +2,7 @@
 // atproto OAuth integration: signInWithDid, signOut (with revoke),
 // hydrate (with restore).
 //
-// Run via:
-//   npx jest --config stores/jest.config.js
-// from the `tortok/` dir.
+// Run with `npm test` from `tortok/`.
 
 import { useAuthStore } from './auth';
 
