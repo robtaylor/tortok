@@ -1,6 +1,6 @@
-# Handoff — Phase 3 Unit 2.5: 2.5A and 2.5B shipped, 2.5C next
+# Handoff — Phase 3 Unit 2.5: 2.5C nearly done, 2.5D next
 
-**Created:** 2026-11-12
+**Created:** 2026-11-12 (rewritten at the end of the 2.5C session)
 **Working tree:** clean
 **Branch:** main
 
@@ -14,81 +14,98 @@ See docs/handoff-discipline.md for the migration table.
 
 ## Goal & next-up
 
-**Goal of this session:** ground the code in tests (CI, Detox on both
-platforms, production smoke checks), then land Phase 3 Units 2.5A (ingest)
-and 2.5B (feed cutover) in production.
+**Goal of this session:** finish Unit 2.5C (retire the legacy native flow)
+per [`phase-3-atproto.md` § 2.5C](../plans/phase-3-atproto.md#25c--retire-the-legacy-native-flow-1-day).
 
-**Next session should pick up:** Unit 2.5C, retire the legacy native flow,
-as listed in [`phase-3-atproto.md` § 2.5C](../plans/phase-3-atproto.md#25c--retire-the-legacy-native-flow-1-day).
-Its removal list was corrected this session: `TRACKER_URLS` stays (the
-feed's `sources` use it); `CONTENT_ORIGIN_URL` goes with the seeder.
+**Next session should pick up:**
+
+1. If #30 and #32 aren't merged yet, they are waiting on the user's review
+   (#30 drops production tables on deploy). Once both are merged, deploy:
+   `npm run deploy:backend` from a clean `origin/main`. It smoke-checks
+   `https://appview.tortok.app` afterwards. Then 2.5C is done: mark it ✅ in
+   the plan and fold this handoff (see "Fold at resolution").
+2. Then Unit 2.5D, the Bluesky bridge.
 
 **Verification command:**
 
 ```sh
-curl -s https://tortok-api.fly.dev/health | jq -r .sha     # expect a15da53… (or a later main)
-npm run smoke -- https://tortok-api.fly.dev                 # expect: smoke: all checks passed
-(cd backend && npx jest --ci)                               # expect 66 passed (needs local Postgres)
-npm run test:scripts                                        # expect 14 passed
-uv run docs/scripts/doctool.py lint                         # expect 0 errors
+gh pr list --state open                                     # #30, #32 until merged
+curl -s https://appview.tortok.app/health | jq -r .sha      # the deployed main
+npm run smoke -- https://appview.tortok.app                 # expect: smoke: all checks passed
+(cd backend && npx jest --ci)                               # 67 passed once #30 is in (needs local Postgres)
+(cd tortok && npm test -- --ci)                             # 25 passed
+npm run test:scripts                                        # 14 passed
+uv run docs/scripts/doctool.py lint                         # 0 errors
 ```
 
 ## Done this session
 
 | PR | What |
 |---|---|
-| #19, #20, #21 | Backend CI on Node 22; the test-PDS spike (resolved yes) |
-| #22 | Detox on iOS and Android in CI against a local stack with its own PDS (Decision 0021); simslim, ccache as Xcode's compiler launcher, PR build caches with one entry per ref |
-| #17 | 2.5A ingest; deployed |
-| #24 | Smoke check (`scripts/smoke.mjs`), every 15 min in CI, plus a staleness check; deployed SHA in `/health`; blue-green deploys; `npm run deploy:backend` |
-| #25 | Dependencies' native compiler warnings silenced at prebuild |
-| #23, #26 | Open problem `signed-out-feed.md`; Decision 0022 (AppView-supplied runtime sources) |
-| #27 | 2.5B: feed reads `posts`, blob route `GET /blob/:did/:cid` with CID check and cache, `sources` in WebTorrent, no Like; e2e stack publishes fixtures to its PDS and ingest indexes them. Deployed as `a15da53` |
+| #29 | Only `main` writes Gradle's cache; a `prune-gradle-cache` job keeps the newest entry of each type. Usage went from 10.6 GB to about 6.4 GB |
+| #31 | 2.5C step 11: the app's legacy sign-in, sign-up and dead Comment/Share buttons are gone; `npm test` and a CI `client` job run the unit tests |
+| #33 | 2.5C step 13: Profile's AppView setting (MMKV, feed probe before saving); release builds default to `https://appview.tortok.app` |
+| #30 (open) | 2.5C steps 8–10: the backend has no auth, write routes or seeder; legacy tables, `views` included, are dropped on boot, guarded by shape; `upload-test-clips.mjs` keeps the R2 upload |
+| #32 (open, stacked on #30) | 2.5C step 14 config: `PUBLIC_BASE_URL`, the scheduled smoke check and `deploy-backend.sh` move to `appview.tortok.app` |
+
+Done outside git: the Fly certificate for `appview.tortok.app`; the Cloudflare
+records (proxied `appview` CNAME, `_acme-challenge.appview` CNAME,
+`_fly-ownership.appview` TXT); a Cache Rule caching `/blob/*` on that host.
+#32 records them in `backend.md`. Also deleted: the CI cache entries of the
+merged PRs #25 and #27.
+
+User decisions this session, all recorded in the plan: `views` is dropped
+too; `fly.toml` stays always-on, because ingest runs in the process.
 
 ## Open follow-ups (priority-ordered)
 
-### 1. Unit 2.5C (about a day)
+### 1. Deploy and close 2.5C
 
-Per the plan. Also delete with it, now that nothing uses them:
-`test-content/seed-db.mjs` (e2e stopped calling it in #27) and
-`scripts/webseed-only-test.mjs` (the plan kept it "until WS2's smoke script
-generalises"; `scripts/smoke.mjs` now does). Serving the API as
-`appview.tortok.app` behind Cloudflare means changing `PUBLIC_BASE_URL` in
-`backend/fly.toml`, and lets Cloudflare cache the blob route.
+See next-up. After the deploy, check `/health` reports the new SHA and the feed's
+`posterURL`s start with `https://appview.tortok.app/blob/`.
 
-### 2. Watch CI caches (a few minutes, after some pushes)
+### 2. `test-content/` leftovers (small)
 
-`gh api repos/robtaylor/tortok/actions/cache/usage` was 5.5 of 10 GB. If
-Gradle's `dependencies`/`transforms` entries get new hashes on every push
-(about 2 GB each time), make the e2e cleanup step drop entries the newest
-`gradle-home` doesn't reference, or go back to main-only Gradle writes.
+Listed in the plan's 2.5C removal checklist: `seeder.mjs` still writes
+`bbb-0?.magnet.txt`/`.torrent` files and serves posters and `.torrent` files
+nothing reads, beside tracked legacy files (`magnet.txt`, `poster.jpg`,
+`test_video.mp4`). Deleting tracked files needs the user's go-ahead. Having
+`seeder.mjs` seed `buildClipTorrent`'s output would leave one torrent
+builder.
 
 ### 3. Small items
 
+- Find out why Gradle's transforms entry changes on every run
+  (`GRADLE_BUILD_ACTION_CACHE_DEBUG_ENABLED` for two `main` runs, diff the file
+  lists). If it's project-local artifacts from `expo prebuild`,
+  `gradle-home-cache-excludes: caches/transforms-4` might be cheaper; measure.
+- Try Gradle's build cache (`org.gradle.caching=true`); measure it alone.
 - Upstream the `bittorrent-tracker` `window.location?.protocol` fix
-  (`tortok/patches/`).
-- Try Gradle's build cache (`org.gradle.caching=true`); every Android task
-  still executes. Measure it as its own change.
-- `tortok/stores/auth.test.ts` exists but nothing runs it.
+  (`tortok/patches/`). That's a PR to someone else's repository: ask first.
+- `CLOUDFLARE_ZONE_TOKEN` can now edit cache rules. Some of the token rows
+  the user showed covered every zone in the account; narrowing them to
+  `tortok.app` is the user's call.
+
+## Fold at resolution
+
+When 2.5C closes, these go to their homes, then this file is deleted:
+
+- `client.md` § Testing: Detox on the hosted iOS simulator sometimes loses a
+  tap (the app logs no state change); `tapVideoUntil()` resends it, and CI
+  logs say `tapping again`. Release-build JS logs are in Detox's
+  `device.log` artifact under `com.facebook.react.log`, for failing tests
+  only. Running the stack locally needs `npm ci` in the repo root,
+  `backend/`, `test-content/` and `test-network/`.
+- `backend.md` § Deployment: merging a feed-shape change without deploying
+  makes the scheduled smoke check fail every 15 minutes.
+- The plan's 2.5C heading gets ✅, and the status line moves to 2.5D.
 
 ## Critical context
 
-- **Deploying:** `npm run deploy:backend` from a clean checkout at
-  `origin/main` only; it smoke-checks production afterwards. Rollback:
-  `fly releases -a tortok-api --image`, then `fly deploy --image <image>`
-  from `backend/`. Merging a feed-shape change without deploying makes the
-  scheduled smoke fail every 15 min.
-- **Detox on the hosted iOS simulator** sometimes loses a tap: the app logs
-  no state change at all. `tapVideoUntil()` in `tortok/e2e/helpers.ts`
-  resends it; grep CI logs for `tapping again` to see how often.
-- **Release-build JS logs** are in Detox's `device.log` artifact under
-  `com.facebook.react.log` (only for failing tests).
-- **Running the e2e stack locally** needs `npm ci` in the repo root,
-  `backend/`, `test-content/` and `test-network/`; then
-  `scripts/e2e-up.sh` and `scripts/e2e-down.sh`.
-- **Shell gotchas from this session:** the Bash tool runs zsh, which doesn't
-  word-split `$ids` in `for id in $ids`; use `while read`. `gh run list
-  --commit` wants the full SHA.
-- **History rewrites on PR branches** were refused by auto mode's classifier
-  once. `~/.claude/settings.json` now has an `autoMode.allow` rule for them
-  (and denies force-pushes to main); it hasn't been exercised yet.
+- **Deploying:** `npm run deploy:backend` only from a clean checkout at
+  `origin/main`. Rollback is in `scripts/deploy-backend.sh`'s header.
+- **Cloudflare cache rules API:** `PUT …/rulesets/phases/http_request_cache_settings/entrypoint`
+  replaces the zone's whole cache ruleset. Read it first; today it holds only
+  the `/blob/` rule.
+- **Shell:** zsh treats `path` as `PATH` and `?` in an unquoted URL as a
+  glob. Quote URLs, and don't name variables `path`.
