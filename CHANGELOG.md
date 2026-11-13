@@ -68,6 +68,7 @@ deciding whether to upgrade.
 
 ### Fixed
 
+- Pressing return in Profile's AppView field saves the address now in the field. Straight after a paste it could check the previous text instead and show that text's error.
 - The feed loads after signing in with Bluesky. It used to wait for a legacy login token that atproto sign-in never creates, so the Home tab stayed empty. The Profile tab shows the signed-in handle and the sign-out button instead of rendering blank.
 - On Android, a fast swipe moves one video, as on iOS; it used to fly past several.
 - Release builds no longer crash when a video's magnet lists a `ws://` tracker (a `bittorrent-tracker` bug, patched in `tortok/patches/`).
