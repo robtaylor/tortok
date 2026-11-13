@@ -47,8 +47,35 @@ export function bridgeNsfwLabels(): ReadonlySet<string> {
  * (`BRIDGE_ASPECT_MIN`; default 1, square or portrait; Decision 0010).
  */
 export function bridgeAspectMin(): number {
-  const raw = process.env.BRIDGE_ASPECT_MIN ?? '1';
+  return envNumber('BRIDGE_ASPECT_MIN', 1);
+}
+
+/** A positive number setting, or `fallback` when unset. */
+export function envNumber(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
   const v = Number(raw);
-  if (!(v > 0)) throw new Error(`BRIDGE_ASPECT_MIN must be a positive number, not ${raw}`);
+  if (!(v > 0)) throw new Error(`${name} must be a positive number, not ${raw}`);
   return v;
+}
+
+/**
+ * When a bridged post reaches the feed (Decision 0023 item 5): at least
+ * `minLikes` likes or `minReposts` reposts, or an author with `minFollowers`
+ * followers, within `qualifyDays` of being posted; otherwise it is dropped.
+ */
+export interface BridgeThresholds {
+  minLikes: number;
+  minReposts: number;
+  minFollowers: number;
+  qualifyDays: number;
+}
+
+export function bridgeThresholds(): BridgeThresholds {
+  return {
+    minLikes: envNumber('BRIDGE_MIN_LIKES', 50),
+    minReposts: envNumber('BRIDGE_MIN_REPOSTS', 10),
+    minFollowers: envNumber('BRIDGE_MIN_FOLLOWERS', 5000),
+    qualifyDays: envNumber('BRIDGE_QUALIFY_DAYS', 7),
+  };
 }

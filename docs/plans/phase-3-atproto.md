@@ -571,7 +571,7 @@ from the
     ordered queue and cursor are now `services/jetstream.ts`, shared with
     native ingest. Not booted until step 21. A minute against live
     Jetstream indexed 10 posts, each with a working HLS URL.
-18. **`backend/src/services/bskyEngagementPoller.ts`**, ported from attempt
+18. ✅ **`backend/src/services/bskyEngagementPoller.ts`**, ported from attempt
     1: batches of 25 against `app.bsky.feed.getPosts`, writing every post
     and author label to `labels`. It deletes posts that are now labelled
     NSFW, deleted on Bluesky, or by an opted-out author (`!no-unauthenticated`
@@ -580,11 +580,20 @@ from the
     after 7 days unqualified), all configurable. It writes the labels
     first and then judges from `labels` for the post and its author, not
     from the response alone, so labels from any other writer count.
-    `#nobridge` isn't a label, so the firehose can't see it; decide here
-    whether the poller keeps a record of opted-out authors the firehose
-    checks too, or whether their posts just wait unserved for the poller
-    to delete them.
-19. **Feed.** The feed serves bridged posts only once they've passed the
+    Landed with a decaying schedule (`bridge_next_check_at`: half the
+    post's age, 15 minutes to 24 hours, ending for qualified posts at
+    `BRIDGE_RECHECK_DAYS`) instead of attempt 1's fixed 30 minutes, which
+    at about 1,800 candidates an hour would have been several `getPosts`
+    calls a second. Authors go in a new `bridge_authors` table (from
+    `getProfiles`, refreshed daily) rather than `profiles`, so the bridge
+    can't overwrite a native author's PDS-verified row; its `nobridge`
+    records `#nobridge`, and the firehose and poller share one exclusion
+    rule (`services/bridgePolicy.ts`). 90 s live: 37 posts indexed, 4
+    qualified, 6 dropped, 5 of 34 authors with `!no-unauthenticated`.
+19. **Feed.** Bridged authors come from `bridge_authors`, not `profiles`
+    (step 18): the item's author is the `profiles` row if ingest has one
+    for the DID, else the `bridge_authors` row, with its CDN avatar URL.
+    The feed serves bridged posts only once they've passed the
     poller's checks and thresholds, interleaved with native posts by
     `record_created_at`. Authors with a `contentVisibilityDeclaration`
     asking to be left out of algorithmic feeds are excluded from any
