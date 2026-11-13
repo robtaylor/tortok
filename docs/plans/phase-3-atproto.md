@@ -675,10 +675,11 @@ the iOS simulator plays both.
     `seed-fixtures.mjs`, let the bridge run for about 10 minutes, and
     scroll the iOS simulator feed through native and bridged rows without
     errors.
-19. **Write the area docs.** `auth-signup.md` and `federation.md` are
+19. ✅ **Write the area docs.** `auth-signup.md` and `federation.md` are
     written in full after the cutover (the area-doc backfill deferred
     them to here). `federation.md` records that bridged posts live in
     `posts` beside native ones, discriminated by collection NSID.
+    Written 2026-11-13, each claim checked against the code.
 20. **The `unit-2.5-attempt-1` tag** stays or goes; not yet decided.
 21. **Phase status.** Update the `CLAUDE.md` phases table and this plan's
     status for Units 4–6 absorbed.
