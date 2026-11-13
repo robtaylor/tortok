@@ -69,6 +69,7 @@ deciding whether to upgrade.
 
 ### Fixed
 
+- The scheduled production smoke check passes again: Cloudflare's Bot Fight Mode, which answered GitHub's runners with a challenge, is off for `tortok.app`. It had failed every scheduled run since the check moved to `appview.tortok.app` on 2026-11-12.
 - The Bluesky bridge removes every bridged post by an author who opts out (`!no-unauthenticated` or `#nobridge`), or whose account is labelled NSFW, as soon as it notices. Before, each post waited for its own next check, up to a day, and a post more than 30 days old stayed in the feed for good (Phase 3 Unit 2.5D, Decision 0023).
 - Pressing return in Profile's AppView field saves the address now in the field. Straight after a paste it could check the previous text instead and show that text's error.
 - The feed loads after signing in with Bluesky. It used to wait for a legacy login token that atproto sign-in never creates, so the Home tab stayed empty. The Profile tab shows the signed-in handle and the sign-out button instead of rendering blank.
