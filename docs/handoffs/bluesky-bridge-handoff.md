@@ -1,8 +1,8 @@
-# Handoff — Bluesky bridge (Unit 2.5 done; author re-reading is open)
+# Handoff — Bluesky bridge (Unit 2.5 done; Decision 0024 built, to deploy)
 
 **Created:** 2026-11-13
 **Working tree:** clean (untracked `.DS_Store`, `.idea/`, `backend/.expo/` are not ours to touch)
-**Branch:** `main`; Decision 0024 is on `docs/decision-bridge-keeps-what-it-rereads` until its PR merges
+**Branch:** `main`, once the Decision 0024 build (`feat/bridge-keeps-what-it-rereads`) has merged
 
 <!--
 Reminder: a handoff is ephemeral. At resolution, every load-bearing piece
@@ -22,8 +22,9 @@ check, which had failed since 2026-11-12, passes again.
 
 **Next session should pick up:**
 
-1. **Get Decision 0024 accepted, then build it** (follow-up 1).
-2. **Unit 3**. The plan lists what to settle before the first real
+1. **Deploy the Decision 0024 build** (follow-up 1).
+2. **Decide what the feed serves while the poller is off** (follow-up 2).
+3. **Unit 3**. The plan lists what to settle before the first real
    record.
 
 **Verification command:**
@@ -35,7 +36,7 @@ fly logs -a tortok-api --no-tail | grep -E '\[(bridge|poller)\]' | tail -3
 # Expect: [poller] checked=… lines every 15 s or so
 gh run list --workflow smoke.yml --limit 3
 # Expect: success
-(cd backend && npx jest) # Expect: 143 passed
+(cd backend && npx jest) # Expect: 155 passed
 ```
 
 ## Done this session
@@ -46,28 +47,36 @@ gh run list --workflow smoke.yml --limit 3
 | (PR #51) | `federation.md` and `auth-signup.md` written in full [2.5E step 19] | each claim checked against the code |
 | (PR #51) | the end-to-end run [2.5E step 18] | recorded under step 18 in the plan; no code change |
 | (PR #51) | Unit 2.5 closed [2.5E steps 20 and 21] | the `unit-2.5-attempt-1` tag stays; Decision 0023 is Accepted (partial); phase status in `CLAUDE.md` and the plan |
+| (PR #52, then the build) | Decision 0024: the bridge keeps only posts it still re-reads | a bridged post is deleted at 30 days, ages count from indexing, an excluded author is re-read at their next post |
 | (no commit) | Bot Fight Mode switched off for `tortok.app` | it challenged GitHub's runners, so every scheduled smoke run failed; a manual run passed afterwards. `backend.md` Constraints says why it stays off |
 
 ## Open follow-ups (priority-ordered)
 
-### 1. Decision 0024: the bridge keeps only posts it still re-reads (review, then ~half day)
+### 1. Deploy the Decision 0024 build (small)
 
-The note under step 22 in the plan lists three gaps in how the bridge
-repeats its checks: opting out is one-way, an opt-out goes unseen once all
-of an author's posts are past the recheck age, and a backdated post is
-never re-read. [Decision 0024](../architecture/decisions/0024-the-bridge-keeps-only-the-posts-it-still-re-reads.md)
-proposes a fix for each. It is Proposed and nothing is built. Opt-out is a
-Beta criterion, so settle it before Beta.
+[Decision 0024](../architecture/decisions/0024-the-bridge-keeps-only-the-posts-it-still-re-reads.md)
+is accepted and built: a bridged post is deleted at its first check after
+30 days, a post's age counts from `indexed_at`, and the firehose indexes a
+post by an excluded author the poller hasn't read for a day, so its first
+check reads them again. Production runs the old behaviour until
+`npm run deploy:backend` is run on `main`. At boot the new schema gives a
+check date to any bridged row without one; production had none on
+2026-11-13. Nothing in production is 30 days old before 2026-12-13, so the
+deploy deletes nothing by age.
 
-Once it is accepted: delete at the recheck age instead of clearing
-`bridge_next_check_at` (`bskyEngagementPoller.ts`), take a post's age from
-`indexed_at`, let the firehose index a post by an excluded author whose
-`bridge_authors.refreshed_at` is over a day old, and add the four test
-cases the record lists to `bskyBridge.test.ts`. On deploy, give every
-bridged row with no check date one. Then update `backend.md`, the plan's
-note, and the Status of Decisions 0023 and 0024.
+### 2. Bridged posts stay served while the poller is off (a decision)
 
-### 2. Watch the bridge in production (ongoing, small)
+The feed serves a bridged row on `bridge_qualified_at` alone. With
+`BRIDGE_ENABLED=false`, or while the poller is failing, rows already
+qualified stay in the feed and nothing re-reads them, so an opt-out or
+label added then isn't honoured until the poller runs again. Decision
+0024's "an opt-out holds for as long as a post is served" assumes a live
+poller. Found in review of the Decision 0024 build; it predates it.
+Options: the feed leaves bridged rows out when the bridge is off; the
+feed serves only rows checked lately (`bridge_checked_at`); or accept it,
+as `backend.md` now records. Not decided.
+
+### 3. Watch the bridge in production (ongoing, small)
 
 About an hour after switch-on (2026-11-13): 795 bridged rows, 73 of them
 served, about 170 qualifying an hour, which is inside Decision 0023's
@@ -107,12 +116,12 @@ cleanly for a while.
 
 ## Migration note
 
-- Follow-up 1 → Decision 0024 holds the reasoning. When it is built,
-  `backend.md`'s poller section and Deferred row, `federation.md`'s
-  Deferred row, the plan's open note, and the Status of Decisions 0023 and
-  0024 change.
-- Follow-up 2 → already in `backend.md` and the CHANGELOG; drop it.
+- Follow-up 1 → nothing to migrate; it ends with the deploy. Decision
+  0024, `backend.md` and the plan's note already say what was built.
+- Follow-up 2 → a decision record if the feed's rule changes; `backend.md`'s
+  Bluesky bridge section says what happens today.
+- Follow-up 3 → already in `backend.md` and the CHANGELOG; drop it.
 - Critical context: the two iOS notes go when prebuild is run; the test
   notes are already in code comments.
 - Then `git rm docs/handoffs/bluesky-bridge-handoff.md`, once follow-up 1
-  is settled.
+  is done.

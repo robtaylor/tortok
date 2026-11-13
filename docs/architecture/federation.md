@@ -48,12 +48,14 @@ A client picks its AppView by URL. A release build defaults to tortok's, `https:
 
 ## Bluesky bridge
 
-The bridge is inbound only ([Decision 0010](decisions/0010-bluesky-video-bridge.md)). It indexes Bluesky's square and portrait video posts, `app.bsky.feed.post` records with a video embed, from a second Jetstream subscription. What it keeps and drops is [Decision 0023](decisions/0023-bridged-bluesky-posts-what-the-v1-bridge-indexes.md), and how it does so is in [backend](backend.md#bluesky-bridge).
+The bridge is inbound only ([Decision 0010](decisions/0010-bluesky-video-bridge.md)). It indexes Bluesky's square and portrait video posts, `app.bsky.feed.post` records with a video embed, from a second Jetstream subscription. What it keeps and drops is [Decision 0023](decisions/0023-bridged-bluesky-posts-what-the-v1-bridge-indexes.md), how long it keeps a post is [Decision 0024](decisions/0024-the-bridge-keeps-only-the-posts-it-still-re-reads.md), and how it does both is in [backend](backend.md#bluesky-bridge).
 
 Bridged posts live in `posts` beside native ones. The collection NSID in the row, and in the AT-URI the feed serves as `id`, tells them apart: `app.bsky.feed.post` or `app.tortok.video.post`. There is no separate table and no source column.
 
 - A bridged post reaches the feed only after the engagement poller has checked it against Bluesky's AppView and it has met a threshold of likes, reposts or author followers.
 - A post labelled NSFW, or by an author who opted out with the `!no-unauthenticated` profile label or `#nobridge`, is not indexed, and is deleted if the label or opt-out comes later.
+- A bridged post is kept for 30 days, re-checked at least daily, and then deleted. A label or opt-out added at any time in between takes it out within a day or two.
+- An author who opts back in is bridged again from their next video post. Their earlier posts don't come back.
 - Every label the bridge sees is stored in `labels`, whatever happens to the post.
 - The video plays from Bluesky's HLS playlist on `video.bsky.app`. tortok doesn't copy or re-host it, and it gets no P2P.
 - The app marks a bridged post with a "via Bluesky" badge that opens the post on bsky.app (`tortok/app/(tabs)/index.tsx`).
@@ -106,7 +108,6 @@ tortok runs no relay, no PLC directory and no PDS. It depends on these, each beh
 | AppView by service DID | The app takes an AppView URL. Naming one by its service DID and proxying through the PDS (Decision 0017 item 4) isn't built. | [Phase 3 plan](../plans/phase-3-atproto.md), decision 4 of Unit 2.5 |
 | AppView discovery and self-hosting | No declaration records (Decision 0017 item 6) and no self-hosting guide (item 5). | Phase 4 or later |
 | Labeler subscriptions | The bridge reads labels from `getPosts` and self-labels only. No labeler is subscribed to, and tortok runs none (Decisions 0013 and 0023). | [moderation](moderation.md) |
-| Bridge: re-reading authors | An excluded author is never re-read, so opting back in has no effect. | [Decision 0024](decisions/0024-the-bridge-keeps-only-the-posts-it-still-re-reads.md) (Proposed) |
 | Account events | Jetstream `account` events (takedown, deactivation) are ignored. | Phase 4 |
 | `did:web` setup guide | Decision 0019 item 4 says tortok documents the DNS setup. No such guide exists. | None yet |
 | Own PDS | tortok runs no PDS. | [`open-problems/own-pds.md`](open-problems/own-pds.md) |
@@ -121,4 +122,4 @@ tortok runs no relay, no PLC directory and no PDS. It depends on these, each beh
 - [Decision 0019 — v1 uses each user's existing PDS through atproto OAuth](decisions/0019-v1-uses-existing-pds-via-oauth.md)
 - [Decision 0020 — Video posts carry their torrent metadata as a PDS blob](decisions/0020-torrent-metadata-as-pds-blob.md)
 - [Decision 0023 — What the v1 bridge indexes](decisions/0023-bridged-bluesky-posts-what-the-v1-bridge-indexes.md), based on the [labels spike](decisions/spikes/bluesky-labels-on-bridged-video-posts.md)
-- [Decision 0024 — The bridge keeps only the posts it still re-reads](decisions/0024-the-bridge-keeps-only-the-posts-it-still-re-reads.md) (Proposed, not built)
+- [Decision 0024 — The bridge keeps only the posts it still re-reads](decisions/0024-the-bridge-keeps-only-the-posts-it-still-re-reads.md)

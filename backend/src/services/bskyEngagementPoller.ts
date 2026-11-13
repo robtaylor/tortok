@@ -1,5 +1,5 @@
 // Phase 3 Unit 2.5D: the bridge's engagement poller (Decision 0023 items 1,
-// 3, 4 and 5). Re-reads bridged posts from Bluesky's public AppView in
+// 3, 4 and 5; Decision 0024). Re-reads bridged posts from Bluesky's public AppView in
 // batches of 25 (app.bsky.feed.getPosts) and their authors
 // (app.bsky.actor.getProfiles), and on each check:
 //
@@ -9,14 +9,16 @@
 //    down, or hidden from logged-out viewers) or labelled NSFW, and every
 //    bridged row by an excluded author (bridgePolicy.ts), due or not;
 // 3. otherwise qualifies it for the feed once it meets an engagement
-//    threshold, or deletes it if it hasn't within `qualifyDays`.
+//    threshold, or deletes it if it hasn't within `qualifyDays`;
+// 4. deletes a qualified post once it is `recheckDays` old.
 //
 // Checks follow a decaying schedule, half the post's age clamped to 15
-// minutes..24 hours, so a post gets about 14 checks over its first week
-// rather than one every few minutes. Qualified posts stay on the daily
-// schedule, so later labels and deletions still reach them, until they are
-// `recheckDays` old; after that a row goes only on a Jetstream delete, or
-// when its author is found excluded.
+// minutes..24 hours, so a post gets about 19 checks over its first week, 12
+// of them in its first day, rather than one every few minutes. Qualified posts stay on the daily
+// schedule, so later labels, deletions and opt-outs still reach them, for as
+// long as they are kept: no bridged row is ever without a check due
+// (Decision 0024 item 1). A post's age is the time since the firehose indexed
+// it, never the record's own createdAt, which its author chose (item 2).
 
 import { bridgeNsfwLabels, bridgeThresholds, envNumber } from '../config';
 import type { BridgeThresholds } from '../config';
@@ -26,7 +28,9 @@ import type { FetchFn } from '../atproto/identity';
 import { BSKY_POST_NSID } from '../atproto/bskyPost';
 import { accountSubjects, replaceSelfLabels, upsertLabels, viewLabels } from '../atproto/labels';
 import { isObject } from '../atproto/videoPost';
-import { authorExcluded, deleteBridged, deleteBridgedBy, postExcluded, saysNoBridge } from './bridgePolicy';
+import {
+  authorExcluded, authorReadIsFresh, deleteBridged, deleteBridgedBy, postExcluded, saysNoBridge,
+} from './bridgePolicy';
 
 const DEFAULT_APPVIEW = 'https://public.api.bsky.app';
 /** getPosts and getProfiles both take at most 25. */
@@ -44,8 +48,8 @@ export function nextCheckDelayMs(ageMs: number): number {
 const str = (v: unknown) => (typeof v === 'string' && v.length > 0 ? v : null);
 
 export class AppViewError extends Error {
-  constructor(readonly method: string, readonly status: number) {
-    super(`${method} returned ${status}`);
+  constructor(readonly method: string, readonly status: number, problem = `returned ${status}`) {
+    super(`${method} ${problem}`);
     this.name = 'AppViewError';
   }
 }
@@ -59,7 +63,7 @@ export interface PollerOptions {
   nsfwLabels?: ReadonlySet<string>;
   /** Pause between batches when the queue isn't full. */
   tickMs?: number;
-  /** Age after which a qualified post is no longer re-checked. */
+  /** How long a qualified post is kept, and re-checked at least daily; then it is deleted. */
   recheckDays?: number;
   now?: () => Date;
 }
@@ -67,7 +71,7 @@ export interface PollerOptions {
 interface DueRow {
   at_uri: string;
   did: string;
-  record_created_at: Date;
+  indexed_at: Date;
   bridge_qualified_at: Date | null;
 }
 
@@ -101,6 +105,11 @@ export class BskyEngagementPoller {
     this.nsfwLabels = opts.nsfwLabels ?? bridgeNsfwLabels();
     this.tickMs = opts.tickMs ?? 15_000;
     this.recheckMs = (opts.recheckDays ?? envNumber('BRIDGE_RECHECK_DAYS', 30)) * DAY_MS;
+    if (this.recheckMs < this.t.qualifyDays * DAY_MS) {
+      throw new Error(
+        `BRIDGE_RECHECK_DAYS (${this.recheckMs / DAY_MS}) is less than BRIDGE_QUALIFY_DAYS (${this.t.qualifyDays}): `
+        + 'a post would be deleted as too old in the check that qualifies it');
+    }
     this.now = opts.now ?? (() => new Date());
   }
 
@@ -147,7 +156,7 @@ export class BskyEngagementPoller {
     const now = this.now();
     // The collection is a literal so the planner matches the partial index.
     const rows = await this.db<DueRow>(
-      `SELECT at_uri, did, record_created_at, bridge_qualified_at FROM posts
+      `SELECT at_uri, did, indexed_at, bridge_qualified_at FROM posts
         WHERE collection = '${BSKY_POST_NSID}' AND bridge_next_check_at <= $1
         ORDER BY bridge_next_check_at
         LIMIT ${BATCH}`,
@@ -171,25 +180,25 @@ export class BskyEngagementPoller {
     for (const did of dids) if (await authorExcluded(this.db, did, this.nsfwLabels)) excluded.add(did);
     // An excluded author's bridged posts all go (Decision 0023 item 4), not
     // only the ones due now: the rest would stay in the feed until their own
-    // checks, and for good once past recheckMs.
+    // checks.
     result.dropped += await deleteBridgedBy(this.db, [...excluded]);
 
     for (const row of rows) {
       if (excluded.has(row.did)) continue;
       const post = posts.get(row.at_uri);
-      const age = now.getTime() - row.record_created_at.getTime();
+      const age = now.getTime() - row.indexed_at.getTime();
       let qualifiedAt = row.bridge_qualified_at;
       if (post && !qualifiedAt && this.meetsThreshold(post, followers.get(row.did) ?? 0)) qualifiedAt = now;
       const keep = post !== undefined
-        && !(await postExcluded(this.db, row.at_uri, this.nsfwLabels))
-        && (qualifiedAt !== null || age <= this.t.qualifyDays * DAY_MS);
+        && age <= (qualifiedAt !== null ? this.recheckMs : this.t.qualifyDays * DAY_MS)
+        && !(await postExcluded(this.db, row.at_uri, this.nsfwLabels));
       if (!keep) {
         await deleteBridged(this.db, row.at_uri);
         result.dropped++;
         continue;
       }
       if (qualifiedAt === now) result.qualified++;
-      const next = qualifiedAt && age > this.recheckMs ? null : new Date(now.getTime() + nextCheckDelayMs(age));
+      const next = new Date(now.getTime() + nextCheckDelayMs(age));
       await this.db(
         `UPDATE posts SET bridge_checked_at = $2, bridge_next_check_at = $3, bridge_qualified_at = $4
           WHERE at_uri = $1`,
@@ -206,15 +215,16 @@ export class BskyEngagementPoller {
   }
 
   /**
-   * Refresh `bridge_authors` and author labels for authors not refreshed in
-   * the last day, and return every author's follower count. An author the
-   * AppView doesn't return keeps their old row.
+   * Refresh `bridge_authors` and author labels for authors whose last read
+   * no longer stands (authorReadIsFresh), and return every author's follower
+   * count. An author the AppView leaves out of its list keeps what's stored
+   * and still counts as read, so they aren't asked for again until it lapses.
    */
   private async refreshAuthors(dids: string[], now: Date): Promise<Map<string, number>> {
     const known = await this.db<{ did: string; followers_count: number | null; refreshed_at: Date }>(
       'SELECT did, followers_count, refreshed_at FROM bridge_authors WHERE did = ANY($1)', [dids]);
     const followers = new Map(known.map((a) => [a.did, a.followers_count ?? 0]));
-    const fresh = new Set(known.filter((a) => now.getTime() - a.refreshed_at.getTime() < DAY_MS).map((a) => a.did));
+    const fresh = new Set(known.filter((a) => authorReadIsFresh(a.refreshed_at, now)).map((a) => a.did));
     const stale = new Set(dids.filter((d) => !fresh.has(d)));
     if (stale.size === 0) return followers;
 
@@ -240,11 +250,23 @@ export class BskyEngagementPoller {
         [did, handle === 'handle.invalid' ? null : handle, str(p.displayName), str(p.avatar), count,
           saysNoBridge(str(p.description), str(p.displayName)), now]);
       followers.set(did, count ?? 0);
+      stale.delete(did);
+    }
+    if (stale.size > 0) {
+      await this.db(
+        `INSERT INTO bridge_authors (did, refreshed_at) SELECT unnest($1::text[]), $2
+         ON CONFLICT (did) DO UPDATE SET refreshed_at = EXCLUDED.refreshed_at`,
+        [[...stale], now]);
     }
     return followers;
   }
 
-  /** GET an AppView list method with a repeated parameter; returns the objects in `key`. */
+  /**
+   * GET an AppView list method with a repeated parameter; returns the objects
+   * in `key`. Throws if the reply has no such list: an empty answer is acted
+   * on (posts deleted as gone, authors marked read), so a reply that can't be
+   * read must not pass for one.
+   */
   private async xrpcList(method: string, param: string, values: string[], key: string): Promise<Record<string, unknown>[]> {
     const url = new URL(`/xrpc/${method}`, this.appviewUrl);
     for (const v of values) url.searchParams.append(param, v);
@@ -252,7 +274,8 @@ export class BskyEngagementPoller {
     if (!res.ok) throw new AppViewError(method, res.status);
     const body: unknown = await res.json();
     const list = isObject(body) ? body[key] : undefined;
-    return Array.isArray(list) ? list.filter(isObject) : [];
+    if (!Array.isArray(list)) throw new AppViewError(method, res.status, `returned no ${key} list`);
+    return list.filter(isObject);
   }
 }
 

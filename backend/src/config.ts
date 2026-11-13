@@ -71,7 +71,7 @@ export function envNumber(name: string, fallback: number): number {
 /**
  * When a bridged post reaches the feed (Decision 0023 item 5): at least
  * `minLikes` likes or `minReposts` reposts, or an author with `minFollowers`
- * followers, within `qualifyDays` of being posted; otherwise it is dropped.
+ * followers, within `qualifyDays` of being indexed; otherwise it is dropped.
  */
 export interface BridgeThresholds {
   minLikes: number;

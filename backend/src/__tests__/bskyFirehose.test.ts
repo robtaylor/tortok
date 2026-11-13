@@ -1,11 +1,12 @@
-// The Bluesky bridge's firehose (plan 2.5D step 17, Decision 0023): which
-// app.bsky.feed.post records it indexes, the NSFW and opt-out drops, labels
-// written whatever happens, edits and deletes. Against a real Postgres
+// The Bluesky bridge's firehose (plan 2.5D step 17, Decisions 0023 and 0024):
+// which app.bsky.feed.post records it indexes, the NSFW and opt-out drops and
+// how long an opt-out stands, labels written whatever happens, edits and
+// deletes, and the clock a row's age starts from. Against a real Postgres
 // (Decision 0016); Jetstream is stubbed.
 
 import { createTestDb, TestDb } from './helpers/testDb';
 import { BSKY_POST_NSID as NSID, hlsUrl, parseBskyVideoPost } from '../atproto/bskyPost';
-import type { BskyFirehose as BskyFirehoseT } from '../services/bskyFirehose';
+import type { BskyFirehose as BskyFirehoseT, BskyFirehoseOptions } from '../services/bskyFirehose';
 import { commitEvent, fakeSockets } from './helpers/fakeSocket';
 import { bskyPostUri, selfLabelsField, VIDEO_CID, videoRecord } from './helpers/fixtures';
 
@@ -59,9 +60,9 @@ describe('BskyFirehose', () => {
   let db: typeof import('../db');
   let BskyFirehose: typeof BskyFirehoseT;
 
-  const make = () => {
+  const make = (opts: BskyFirehoseOptions = {}) => {
     const { sockets, wsFactory } = fakeSockets();
-    return { bridge: new BskyFirehose({ wsFactory }), sockets };
+    return { bridge: new BskyFirehose({ wsFactory, ...opts }), sockets };
   };
 
   const event = (operation: string, record?: unknown, rkey = '3kvid', cid?: string) =>
@@ -85,7 +86,7 @@ describe('BskyFirehose', () => {
   });
 
   beforeEach(async () => {
-    await db.query('TRUNCATE posts, labels, ingest_cursor');
+    await db.query('TRUNCATE posts, labels, bridge_authors, ingest_cursor');
     for (const level of ['log', 'warn', 'error'] as const) jest.spyOn(console, level).mockImplementation(() => {});
   });
 
@@ -133,11 +134,18 @@ describe('BskyFirehose', () => {
     expect(await labelVals()).toEqual([]);
   });
 
+  /** Record that the poller read ALICE's profile, just now unless `ago` says otherwise. */
+  const authorRead = (ago = '0 hours', nobridge = false) => db.query(
+    `INSERT INTO bridge_authors (did, nobridge, refreshed_at) VALUES ($1, $2, NOW() - $3::interval)`, [ALICE, nobridge, ago]);
+
+  /** Put a self-label on ALICE's account, or negate it. */
+  const authorLabel = (val: string, neg = false) => db.query(
+    `INSERT INTO labels (subject, src, val, neg, cts) VALUES ($1, $1, $2, $3, NOW())
+     ON CONFLICT (subject, subject_cid, src, val) DO UPDATE SET neg = EXCLUDED.neg`, [ALICE, val, neg]);
+
   test('authors labelled NSFW or opted out are not indexed; a negated label does not count', async () => {
     const { bridge } = make();
-    const authorLabel = (val: string, neg = false) => db.query(
-      `INSERT INTO labels (subject, src, val, neg, cts) VALUES ($1, $1, $2, $3, NOW())
-       ON CONFLICT (subject, subject_cid, src, val) DO UPDATE SET neg = EXCLUDED.neg`, [ALICE, val, neg]);
+    await authorRead();
 
     await authorLabel('!no-unauthenticated');
     await bridge.handleEvent(event('create', videoRecord()));
@@ -155,36 +163,52 @@ describe('BskyFirehose', () => {
 
   test("a post by an author excluded since their last check removes every bridged row of theirs", async () => {
     const { bridge } = make();
+    await authorRead();
     await bridge.handleEvent(event('create', videoRecord(), 'one'));
     await bridge.handleEvent(event('create', videoRecord(), 'two'));
     await bridge.handleEvent({ ...event('create', videoRecord(), 'bobs'), did: BOB });
-    await db.query(
-      `INSERT INTO labels (subject, src, val, neg, cts) VALUES ($1, $1, '!no-unauthenticated', false, NOW())`, [ALICE]);
+    await authorLabel('!no-unauthenticated');
     await bridge.handleEvent(event('create', videoRecord(), 'three'));
     expect((await posts()).map((p: any) => p.did)).toEqual([BOB]);
   });
 
   test('authors the poller recorded as saying #nobridge are not indexed', async () => {
     const { bridge } = make();
-    await db.query(`INSERT INTO bridge_authors (did, nobridge) VALUES ($1, true)`, [ALICE]);
+    await authorRead('0 hours', true);
     await bridge.handleEvent(event('create', videoRecord()));
     expect(await posts()).toEqual([]);
-    await db.query('TRUNCATE bridge_authors');
   });
 
-  test('an edit resets the poller state; a replay of the same version does not', async () => {
+  test('an excluded author not read for a day is indexed again, unserved, for the poller to re-read (Decision 0024 item 3)', async () => {
     const { bridge } = make();
+    await authorRead('25 hours', true);
     await bridge.handleEvent(event('create', videoRecord()));
-    expect((await posts())[0].bridge_next_check_at).not.toBeNull(); // due on insert
-    const later = new Date(Date.now() + 86_400_000);
-    await db.query('UPDATE posts SET bridge_qualified_at = NOW(), bridge_next_check_at = $1', [later]);
+    expect(await posts()).toMatchObject([{ at_uri: uri(), bridge_checked_at: null, bridge_qualified_at: null }]);
+    expect(bridge.stats).toMatchObject({ indexed: 1, 'author-excluded': 0 });
+
+    // The same for one the poller has never read, whose label came from elsewhere.
+    await db.query('TRUNCATE posts, bridge_authors');
+    await authorLabel('!no-unauthenticated');
     await bridge.handleEvent(event('create', videoRecord()));
-    expect((await posts())[0]).toMatchObject({ bridge_next_check_at: later });
-    expect((await posts())[0].bridge_qualified_at).not.toBeNull();
+    expect(await posts()).toHaveLength(1);
+  });
+
+  test("a row is indexed and due at the bridge's clock; an edit restarts it, a replay of the same version does not", async () => {
+    let at = new Date('2026-11-13T12:00:00Z');
+    const { bridge } = make({ now: () => at });
+    await bridge.handleEvent(event('create', videoRecord()));
+    expect((await posts())[0]).toMatchObject({ indexed_at: at, bridge_next_check_at: at });
+
+    // The poller has since qualified it and set its next check.
+    const first = at;
+    const next = new Date('2026-11-14T12:00:00Z');
+    await db.query('UPDATE posts SET bridge_qualified_at = $1, bridge_next_check_at = $2', [first, next]);
+    at = new Date('2026-11-20T12:00:00Z');
+    await bridge.handleEvent(event('create', videoRecord()));
+    expect((await posts())[0]).toMatchObject({ indexed_at: first, bridge_qualified_at: first, bridge_next_check_at: next });
+
     await bridge.handleEvent(event('update', videoRecord({ text: 'edited' }), '3kvid', 'bafyrecord2'));
-    const [edited] = await posts();
-    expect(edited).toMatchObject({ text: 'edited', bridge_qualified_at: null });
-    expect(edited.bridge_next_check_at.getTime()).toBeLessThanOrEqual(Date.now());
+    expect((await posts())[0]).toMatchObject({ text: 'edited', indexed_at: at, bridge_qualified_at: null, bridge_next_check_at: at });
   });
 
   test('an edit that makes the post landscape removes it', async () => {

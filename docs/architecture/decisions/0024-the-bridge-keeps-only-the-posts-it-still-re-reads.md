@@ -1,6 +1,6 @@
 # Decision 0024 — The bridge keeps only the posts it still re-reads
 
-**Status:** Proposed. Would revise how the opt-out check repeats in item 4 of [Decision 0023](0023-bridged-bluesky-posts-what-the-v1-bridge-indexes.md), and settle what the ages in its item 5 count from. Adds a limit on how long a bridged post is kept. 0023 stays Accepted (partial) for everything else.
+**Status:** Accepted (2026-11-13). Revises how the opt-out check repeats in item 4 of [Decision 0023](0023-bridged-bluesky-posts-what-the-v1-bridge-indexes.md), and settles what the ages in its item 5 count from. Adds a limit on how long a bridged post is kept. 0023 stays in force for everything else.
 
 **Current architecture:** [Federation](../federation.md#bluesky-bridge); the poller's mechanics are in [backend](../backend.md#engagement-poller).
 
