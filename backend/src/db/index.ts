@@ -5,10 +5,15 @@ import path from 'path';
 // Dev default matches scripts/dev-up.sh;
 // prod must set DATABASE_URL explicitly (we'd rather fail fast than
 // silently connect to nothing).
+// Under Jest, never the dev default: a test that loads this module before
+// createTestDb() sets DATABASE_URL would otherwise read and write the dev
+// database. That address can't resolve, so such a test fails loudly.
 const databaseUrl = process.env.DATABASE_URL ??
-  (process.env.NODE_ENV !== 'production'
-    ? 'postgresql://localhost:5432/tortok'
-    : '');
+  (process.env.JEST_WORKER_ID !== undefined
+    ? 'postgresql://database-url-not-set-in-test.invalid/none'
+    : process.env.NODE_ENV !== 'production'
+      ? 'postgresql://localhost:5432/tortok'
+      : '');
 if (!databaseUrl) {
   throw new Error(
     'DATABASE_URL is not set. In production this is required; in development ' +
