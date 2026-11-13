@@ -157,7 +157,7 @@ describe('BskyFirehose', () => {
     await authorLabel('!no-unauthenticated');
     await bridge.handleEvent(event('create', videoRecord()));
     expect(await posts()).toEqual([]);
-    expect(bridge.stats['opted-out']).toBe(1);
+    expect(bridge.stats['author-excluded']).toBe(1);
 
     await authorLabel('!no-unauthenticated', true);
     await bridge.handleEvent(event('create', videoRecord()));
@@ -168,14 +168,27 @@ describe('BskyFirehose', () => {
     expect(await posts()).toEqual([]);
   });
 
+  test('authors the poller recorded as saying #nobridge are not indexed', async () => {
+    const { bridge } = make();
+    await db.query(`INSERT INTO bridge_authors (did, nobridge) VALUES ($1, true)`, [ALICE]);
+    await bridge.handleEvent(event('create', videoRecord()));
+    expect(await posts()).toEqual([]);
+    await db.query('TRUNCATE bridge_authors');
+  });
+
   test('an edit resets the poller state; a replay of the same version does not', async () => {
     const { bridge } = make();
     await bridge.handleEvent(event('create', videoRecord()));
-    await db.query('UPDATE posts SET bridge_checked_at = NOW(), bridge_qualified_at = NOW()');
+    expect((await posts())[0].bridge_next_check_at).not.toBeNull(); // due on insert
+    const later = new Date(Date.now() + 86_400_000);
+    await db.query('UPDATE posts SET bridge_qualified_at = NOW(), bridge_next_check_at = $1', [later]);
     await bridge.handleEvent(event('create', videoRecord()));
+    expect((await posts())[0]).toMatchObject({ bridge_next_check_at: later });
     expect((await posts())[0].bridge_qualified_at).not.toBeNull();
     await bridge.handleEvent(event('update', videoRecord({ text: 'edited' }), '3kvid', 'bafyrecord2'));
-    expect((await posts())[0]).toMatchObject({ text: 'edited', bridge_checked_at: null, bridge_qualified_at: null });
+    const [edited] = await posts();
+    expect(edited).toMatchObject({ text: 'edited', bridge_qualified_at: null });
+    expect(edited.bridge_next_check_at.getTime()).toBeLessThanOrEqual(Date.now());
   });
 
   test('an edit that makes the post landscape removes it', async () => {

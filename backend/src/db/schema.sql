@@ -73,16 +73,37 @@ CREATE INDEX IF NOT EXISTS idx_posts_did ON posts (did);
 CREATE INDEX IF NOT EXISTS idx_posts_info_hash ON posts (info_hash);
 
 -- Unit 2.5D: bridged app.bsky.feed.post rows (Decision 0023). The firehose
--- indexes them unchecked; the engagement poller sets bridge_checked_at each
--- time it re-reads the post from Bluesky's AppView, and bridge_qualified_at
--- once the post has passed the NSFW and opt-out checks and an engagement
--- threshold. The feed serves a bridged row only once bridge_qualified_at is
--- set. Both stay NULL on app.tortok rows.
+-- indexes them unchecked and due (bridge_next_check_at = now). The
+-- engagement poller sets bridge_checked_at each time it re-reads the post
+-- from Bluesky's AppView, bridge_next_check_at for when it should next (NULL:
+-- no more checks), and bridge_qualified_at once the post has passed the
+-- NSFW and opt-out checks and an engagement threshold. The feed serves a
+-- bridged row only once bridge_qualified_at is set. All stay NULL on
+-- app.tortok rows.
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS bridge_checked_at TIMESTAMPTZ;
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS bridge_qualified_at TIMESTAMPTZ;
--- The poller's queue: bridged rows, least recently checked first.
-CREATE INDEX IF NOT EXISTS idx_posts_bridge_checked
-    ON posts (bridge_checked_at NULLS FIRST) WHERE collection = 'app.bsky.feed.post';
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS bridge_next_check_at TIMESTAMPTZ;
+-- The poller's queue: bridged rows by when they're due. Replaces the first
+-- version's index on bridge_checked_at.
+DROP INDEX IF EXISTS idx_posts_bridge_checked;
+CREATE INDEX IF NOT EXISTS idx_posts_bridge_due
+    ON posts (bridge_next_check_at) WHERE collection = 'app.bsky.feed.post';
+
+-- Authors of bridged posts, as Bluesky's AppView describes them
+-- (app.bsky.actor.getProfiles), refreshed by the engagement poller. Kept
+-- apart from `profiles`, which ingest resolves from the author's own DID
+-- document and PDS, so the bridge never overwrites a native author's row.
+-- nobridge is Decision 0023 item 4's text signal, #nobridge in the bio or
+-- display name; its label signal, !no-unauthenticated, is in `labels`.
+CREATE TABLE IF NOT EXISTS bridge_authors (
+    did TEXT PRIMARY KEY,
+    handle TEXT,                            -- NULL when the AppView reports handle.invalid
+    display_name TEXT,
+    avatar_url TEXT,                        -- Bluesky's CDN
+    followers_count INTEGER,
+    nobridge BOOLEAN NOT NULL DEFAULT FALSE,
+    refreshed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 -- Every label the AppView sees, whatever happens to its subject (Decision
 -- 0023 item 2): self-labels from records and profiles, and labels from

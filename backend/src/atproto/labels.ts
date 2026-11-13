@@ -26,6 +26,15 @@ export interface Label {
  */
 export const OPT_OUT_LABEL = '!no-unauthenticated';
 
+/**
+ * The subjects an account's labels can have: its DID (labeler labels on the
+ * account) and its profile record (where profile self-labels live).
+ */
+export const accountSubjects = (did: string): string[] => [did, `at://${did}/app.bsky.actor.profile/self`];
+
+/** The DID a label subject (a DID or an AT-URI) belongs to. */
+const subjectDid = (subject: string) => (subject.startsWith('at://') ? subject.slice(5).split('/')[0] : subject);
+
 // The lexicon caps a label value at 128 bytes.
 const MAX_VAL = 128;
 
@@ -56,7 +65,10 @@ export function selfLabels(subject: string, authorDid: string, record: unknown, 
 
 /**
  * Labels as an AppView or labeler returns them (getPosts `labels` arrays).
- * Entries missing a source, subject, value or timestamp are skipped.
+ * Entries missing a source, subject, value or timestamp are skipped. A
+ * self-label (its source is the subject's own DID) loses its record CID:
+ * self-labels belong to whatever the record currently is, as the firehose
+ * stores them, so each is one row and replaceSelfLabels can remove it.
  */
 export function viewLabels(labels: unknown): Label[] {
   if (!Array.isArray(labels)) return [];
@@ -65,9 +77,10 @@ export function viewLabels(labels: unknown): Label[] {
     if (!isObject(l) || typeof l.src !== 'string' || typeof l.uri !== 'string' || !validVal(l.val)) continue;
     const cts = date(l.cts);
     if (!cts) continue;
+    const self = l.src === subjectDid(l.uri);
     out.push({
       subject: l.uri, src: l.src, val: l.val, neg: l.neg === true,
-      subjectCid: typeof l.cid === 'string' ? l.cid : null, cts, exp: date(l.exp),
+      subjectCid: !self && typeof l.cid === 'string' ? l.cid : null, cts, exp: date(l.exp),
     });
   }
   return out;

@@ -40,10 +40,10 @@ test('drops legacy tables and keeps a new table that reuses a legacy name', asyn
   `);
 
   await db.initializeDatabase();
-  expect(await tables()).toEqual(['ingest_cursor', 'known_accounts', 'labels', 'likes', 'posts', 'profiles']);
+  expect(await tables()).toEqual(['bridge_authors', 'ingest_cursor', 'known_accounts', 'labels', 'likes', 'posts', 'profiles']);
   expect(await db.query('SELECT * FROM likes')).toHaveLength(1);
 
   // A second boot changes nothing.
   await db.initializeDatabase();
-  expect(await tables()).toEqual(['ingest_cursor', 'known_accounts', 'labels', 'likes', 'posts', 'profiles']);
+  expect(await tables()).toEqual(['bridge_authors', 'ingest_cursor', 'known_accounts', 'labels', 'likes', 'posts', 'profiles']);
 });
