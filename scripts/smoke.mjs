@@ -11,14 +11,19 @@
 //            with main.
 //   contract /videos/feed returns items whose torrent playback has a magnet,
 //            a .torrent URL and sources listing at least one tracker
-//            (Decision 0022); /turn/credentials includes a TURN server with
-//            credentials.
-//   webseed  for each feed item (up to --max-items, default 5): the poster
+//            (Decision 0022), or, for bridged Bluesky posts, an HLS playback
+//            with an http(s) URL (Decision 0010); /turn/credentials includes a
+//            TURN server with credentials.
+//   webseed  for each torrent item (up to --max-items, default 5): the poster
 //            loads as an image; the .torrent (from the blob route) matches
 //            the magnet's info hash; and its first and last pieces, fetched
 //            with no peers at all from every webseed (the magnet's ws= and
 //            sources.webseeds), match the torrent's piece hashes. So a clip
 //            that can't start without a peer fails here.
+//   hls      for each HLS item (up to --max-items): its poster loads as an
+//            image and its playlist is an HLS playlist. Bluesky serves these,
+//            so one item failing is a warning; every checked item failing
+//            (a broken URL scheme, or Bluesky refusing us) fails the run.
 //
 // Prints one line per check and exits non-zero if any failed. No dependencies,
 // so CI can run it without an install.
@@ -131,8 +136,15 @@ async function checkFeed({ base }) {
   if (items.length === 0) throw new SmokeError('/videos/feed: empty');
   for (const v of items) {
     const p = v.playback;
-    if (!v.id || p?.kind !== 'torrent' || typeof p.magnetLink !== 'string') {
-      throw new SmokeError(`/videos/feed: item ${v.id ?? '?'} lacks an id or a torrent playback with a magnet`);
+    if (!v.id) throw new SmokeError('/videos/feed: an item has no id');
+    if (p?.kind === 'hls') {
+      if (typeof p.url !== 'string' || !/^https?:\/\//.test(p.url)) {
+        throw new SmokeError(`/videos/feed: item ${v.id} has an HLS playback without an http(s) URL`);
+      }
+      continue;
+    }
+    if (p?.kind !== 'torrent' || typeof p.magnetLink !== 'string') {
+      throw new SmokeError(`/videos/feed: item ${v.id} has neither an HLS playback nor a torrent playback with a magnet`);
     }
     if (typeof p.torrentFileUrl !== 'string') {
       throw new SmokeError(`/videos/feed: item ${v.id} has no .torrent, so it can't start without a peer`);
@@ -156,6 +168,25 @@ async function checkTurn({ base }) {
   return urls(turn).join(', ');
 }
 
+async function checkPoster(item) {
+  if (!item.posterURL) return;
+  const poster = await get(item.posterURL);
+  const type = poster.headers.get('content-type') ?? '';
+  await poster.arrayBuffer();
+  if (poster.status !== 200 || !type.startsWith('image/')) {
+    throw new SmokeError(`poster: HTTP ${poster.status}, ${type || 'no content type'}`);
+  }
+}
+
+async function checkHls(item) {
+  await checkPoster(item);
+  const res = await get(item.playback.url);
+  if (!res.ok) throw new SmokeError(`playlist: HTTP ${res.status}`);
+  const body = await res.text();
+  if (!body.startsWith('#EXTM3U')) throw new SmokeError('playlist is not an HLS playlist (no #EXTM3U)');
+  return `playlist ok (${body.split('\n').filter((l) => l && !l.startsWith('#')).length} entries)`;
+}
+
 async function checkWebseed(item) {
   const { magnetLink, torrentFileUrl, sources } = item.playback;
   const magnet = new URLSearchParams(magnetLink.replace(/^magnet:\?/, ''));
@@ -164,14 +195,7 @@ async function checkWebseed(item) {
   const webseeds = [...new Set([...magnet.getAll('ws'), ...sources.webseeds])];
   if (webseeds.length === 0) throw new SmokeError('no webseed, in the magnet (ws=) or sources');
 
-  if (item.posterURL) {
-    const poster = await get(item.posterURL);
-    const type = poster.headers.get('content-type') ?? '';
-    await poster.arrayBuffer();
-    if (poster.status !== 200 || !type.startsWith('image/')) {
-      throw new SmokeError(`poster: HTTP ${poster.status}, ${type || 'no content type'}`);
-    }
-  }
+  await checkPoster(item);
 
   const res = await get(torrentFileUrl);
   if (res.status !== 200) throw new SmokeError(`.torrent: HTTP ${res.status}`);
@@ -218,14 +242,17 @@ async function checkWebseed(item) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   let failed = 0;
-  const run = async (name, fn) => {
+  // A soft check prints WARN instead of failing the run; returns whether it passed.
+  const run = async (name, fn, { soft = false } = {}) => {
     try {
       const detail = await fn();
       console.log(`ok    ${name}${detail ? ` — ${detail}` : ''}`);
+      return true;
     } catch (err) {
-      failed++;
+      if (!soft) failed++;
       const msg = err instanceof SmokeError ? err.message : `unexpected error: ${err.stack ?? err}`;
-      console.log(`FAIL  ${name} — ${msg}`);
+      console.log(`${soft ? 'WARN' : 'FAIL'}  ${name} — ${msg}`);
+      return false;
     }
   };
 
@@ -237,10 +264,21 @@ async function main() {
     return `${items.length} item(s)`;
   });
   await run('contract: turn', () => checkTurn(opts));
-  for (const item of items.slice(0, opts.maxItems)) {
-    await run(`webseed: ${item.id}`, () => checkWebseed(item));
+  // Torrent items are ours, so each must pass. HLS items are Bluesky's: one
+  // failing is a warning, all of them failing is a failure.
+  for (const [kind, check, soft] of [['torrent', checkWebseed, false], ['hls', checkHls, true]]) {
+    const list = items.filter((v) => v.playback.kind === kind);
+    const checked = list.slice(0, opts.maxItems);
+    let passed = 0;
+    for (const item of checked) {
+      if (await run(`${kind === 'torrent' ? 'webseed' : kind}: ${item.id}`, () => check(item), { soft })) passed++;
+    }
+    if (soft && checked.length > 0 && passed === 0) {
+      failed++;
+      console.log(`FAIL  ${kind}: none of the ${checked.length} checked item(s) passed`);
+    }
+    if (list.length > opts.maxItems) console.log(`(checked ${opts.maxItems} of ${list.length} ${kind} items)`);
   }
-  if (items.length > opts.maxItems) console.log(`(checked ${opts.maxItems} of ${items.length} feed items)`);
   console.log(failed ? `smoke: ${failed} check(s) failed` : 'smoke: all checks passed');
   process.exitCode = failed ? 1 : 0;
 }

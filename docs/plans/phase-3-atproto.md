@@ -590,7 +590,7 @@ from the
     records `#nobridge`, and the firehose and poller share one exclusion
     rule (`services/bridgePolicy.ts`). 90 s live: 37 posts indexed, 4
     qualified, 6 dropped, 5 of 34 authors with `!no-unauthenticated`.
-19. **Feed.** Bridged authors come from `bridge_authors`, not `profiles`
+19. ✅ **Feed.** Bridged authors come from `bridge_authors`, not `profiles`
     (step 18): the item's author is the `profiles` row if ingest has one
     for the DID, else the `bridge_authors` row, with its CDN avatar URL.
     The feed serves bridged posts only once they've passed the
@@ -598,6 +598,11 @@ from the
     `record_created_at`. Authors with a `contentVisibilityDeclaration`
     asking to be left out of algorithmic feeds are excluded from any
     ranked feed (none yet; the feed is chronological).
+    Landed with `playback: { kind: 'hls', url }` and Bluesky's thumbnail as
+    the poster, both built from the video CID, and `idx_posts_feed`, a
+    partial index of servable rows in feed order, so a page never reads
+    the unqualified bridged rows (0.13 ms over 305,000 of them). The smoke
+    check checks HLS items too: one failing warns, all failing fails.
 20. **Client.**
     - A new HLS `Playback` kind: the item plays its HLS URL directly
       through `expo-video`, bypassing `useP2PUrl`.

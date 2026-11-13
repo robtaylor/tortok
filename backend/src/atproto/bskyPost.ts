@@ -31,8 +31,12 @@ const MAX_TEXT = 3000;
 const MAX_TAGS = 20;
 const MAX_TAG = 64;
 
-export const hlsUrl = (did: string, videoCid: string) =>
-  `https://video.bsky.app/watch/${encodeURIComponent(did)}/${videoCid}/playlist.m3u8`;
+// Bluesky's video service, as its AppView's app.bsky.embed.video#view names
+// it: the playlist and thumbnail for a video blob.
+const videoBase = (did: string, videoCid: string) =>
+  `https://video.bsky.app/watch/${encodeURIComponent(did)}/${videoCid}`;
+export const hlsUrl = (did: string, videoCid: string) => `${videoBase(did, videoCid)}/playlist.m3u8`;
+export const thumbnailUrl = (did: string, videoCid: string) => `${videoBase(did, videoCid)}/thumbnail.jpg`;
 
 const positiveInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v > 0;
 

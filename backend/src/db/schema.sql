@@ -88,6 +88,14 @@ ALTER TABLE posts ADD COLUMN IF NOT EXISTS bridge_next_check_at TIMESTAMPTZ;
 DROP INDEX IF EXISTS idx_posts_bridge_checked;
 CREATE INDEX IF NOT EXISTS idx_posts_bridge_due
     ON posts (bridge_next_check_at) WHERE collection = 'app.bsky.feed.post';
+-- The feed: servable rows only (native posts with a magnet, qualified bridged
+-- posts), in feed order, so a page reads its own rows and not the hundreds of
+-- thousands of unqualified bridged ones. Its predicate is feedView.ts's
+-- WHERE clause, word for word.
+CREATE INDEX IF NOT EXISTS idx_posts_feed
+    ON posts (record_created_at DESC, at_uri)
+    WHERE ((collection = 'app.tortok.video.post' AND magnet_link IS NOT NULL)
+       OR (collection = 'app.bsky.feed.post' AND bridge_qualified_at IS NOT NULL AND video_cid IS NOT NULL));
 
 -- Authors of bridged posts, as Bluesky's AppView describes them
 -- (app.bsky.actor.getProfiles), refreshed by the engagement poller. Kept
