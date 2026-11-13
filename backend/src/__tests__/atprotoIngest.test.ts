@@ -4,7 +4,7 @@
 
 import type { Identity, Profile } from '../atproto/identity';
 import type { AtprotoIngest as AtprotoIngestT, IngestOptions } from '../services/atprotoIngest';
-import { fakeSockets } from './helpers/fakeSocket';
+import { commitEvent, fakeSockets } from './helpers/fakeSocket';
 import { createTestDb, TestDb } from './helpers/testDb';
 import { INFO_HASH, validRecord } from './helpers/fixtures';
 
@@ -59,9 +59,8 @@ function makeIngest(opts: IngestOptions = {}) {
   return { ingest, sockets };
 }
 
-function commit(did: string, rkey: string, operation: string, record?: unknown, cid = 'bafyrecord1', time_us = 1_000) {
-  return { did, time_us, kind: 'commit', commit: { operation, collection: NSID, rkey, cid, record } };
-}
+const commit = (did: string, rkey: string, operation: string, record?: unknown, cid?: string, time_us?: number) =>
+  commitEvent(NSID, did, rkey, operation, record, cid, time_us);
 
 const posts = () => db.query('SELECT * FROM posts ORDER BY at_uri');
 
@@ -143,7 +142,7 @@ describe('AtprotoIngest: cursor', () => {
     await first.ingest.start();
     expect(first.sockets[0].url).toBe(
       'wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=app.tortok.video.post');
-    first.sockets[0].emit('message', Buffer.from(JSON.stringify(commit(ALICE, 'r1', 'create', validRecord(), 'c', 20_000_000))));
+    first.sockets[0].deliver(commit(ALICE, 'r1', 'create', validRecord(), 'c', 20_000_000));
     await first.ingest.stop();
     expect(first.sockets[0].closed).toBe(true);
     expect(await db.query('SELECT cursor FROM ingest_cursor')).toEqual([{ cursor: '20000000' }]);

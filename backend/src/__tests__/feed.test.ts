@@ -2,11 +2,10 @@
 // 0016, commitment 2): records go in through the ingest service, as in
 // production, and come out of GET /videos/feed and GET /videos/:id.
 
-import http from 'http';
-import express from 'express';
-import type { AddressInfo } from 'net';
 import type { Identity, Profile } from '../atproto/identity';
 import { createTestDb, TestDb } from './helpers/testDb';
+import { commitEvent } from './helpers/fakeSocket';
+import { feedRkeys, startFeedServer, TestServer } from './helpers/testServer';
 import { validRecord, VIDEO_CID, videoRecord } from './helpers/fixtures';
 import { VIDEO_POST_NSID } from '../atproto/videoPost';
 import { BSKY_POST_NSID } from '../atproto/bskyPost';
@@ -21,8 +20,7 @@ let testDb: TestDb;
 let db: typeof import('../db');
 let ingest: import('../services/atprotoIngest').AtprotoIngest;
 let firehose: import('../services/bskyFirehose').BskyFirehose;
-let server: http.Server;
-let base: string;
+let server: TestServer;
 
 const identity = {
   async resolve(did: string): Promise<Identity> {
@@ -48,10 +46,7 @@ beforeAll(async () => {
   });
   const { BskyFirehose } = await import('../services/bskyFirehose');
   firehose = new BskyFirehose({ wsFactory: () => { throw new Error('no Jetstream in tests'); } });
-  const app = express();
-  app.use('/videos', (await import('../routes/videos')).default);
-  server = app.listen(0);
-  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  server = await startFeedServer();
 });
 
 afterAll(async () => {
@@ -69,20 +64,14 @@ beforeEach(async () => {
 afterEach(() => jest.restoreAllMocks());
 
 async function index(did: string, rkey: string, record: Record<string, unknown>) {
-  await ingest.handleEvent({ did, time_us: 1, kind: 'commit', commit: { operation: 'create', collection: NSID, rkey, cid: `bafyrec${rkey}`, record } });
+  await ingest.handleEvent(commitEvent(NSID, did, rkey, 'create', record, `bafyrec${rkey}`));
   await ingest.whenProfilesSettled();
 }
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const getJson = async (path: string): Promise<{ status: number; body: any }> => {
-  const res = await fetch(`${base}${path}`);
-  return { status: res.status, body: await res.json() };
-};
 
 describe('GET /videos/feed', () => {
   it('serves an indexed post in the feed shape', async () => {
     await index(ALICE, '3kabc', validRecord());
-    const { status, body } = await getJson('/videos/feed');
+    const { status, body } = await server.getJson('/videos/feed');
     expect(status).toBe(200);
     expect(body).toEqual({
       videos: [{
@@ -117,7 +106,7 @@ describe('GET /videos/feed', () => {
     const record = validRecord();
     delete record.torrentBlob;
     await index(BOB, '3kbob', record);
-    const { body } = await getJson('/videos/feed');
+    const { body } = await server.getJson('/videos/feed');
     expect(body.videos[0].author).toEqual({ did: BOB, handle: null, displayName: null, avatarURL: null });
     expect(body.videos[0].playback.torrentFileUrl).toBeNull();
   });
@@ -126,16 +115,16 @@ describe('GET /videos/feed', () => {
     for (const [rkey, day] of [['a', '10'], ['b', '12'], ['c', '11']]) {
       await index(ALICE, rkey, validRecord({ createdAt: `2026-11-${day}T00:00:00.000Z` }));
     }
-    const first = await getJson('/videos/feed?limit=2');
-    expect(first.body.videos.map((v: { id: string }) => v.id.split('/').pop())).toEqual(['b', 'c']);
+    const first = await server.getJson('/videos/feed?limit=2');
+    expect(feedRkeys(first.body)).toEqual(['b', 'c']);
     expect(first.body).toMatchObject({ nextCursor: '2', hasMore: true });
-    const second = await getJson('/videos/feed?limit=2&offset=2');
-    expect(second.body.videos.map((v: { id: string }) => v.id.split('/').pop())).toEqual(['a']);
+    const second = await server.getJson('/videos/feed?limit=2&offset=2');
+    expect(feedRkeys(second.body)).toEqual(['a']);
     expect(second.body).toMatchObject({ nextCursor: null, hasMore: false });
   });
 
   it('serves nothing when nothing is indexed', async () => {
-    expect((await getJson('/videos/feed')).body).toEqual({ videos: [], nextCursor: null, hasMore: false });
+    expect((await server.getJson('/videos/feed')).body).toEqual({ videos: [], nextCursor: null, hasMore: false });
   });
 });
 
@@ -144,7 +133,7 @@ describe('GET /videos/feed', () => {
 const BSKY = BSKY_POST_NSID;
 async function bridged(did: string, rkey: string, createdAt: string, qualified = true) {
   const record = videoRecord({ text: 'from bluesky', createdAt }, { width: 1080, height: 1920 });
-  await firehose.handleEvent({ did, time_us: 1, kind: 'commit', commit: { operation: 'create', collection: BSKY, rkey, cid: 'bafyrec', record } });
+  await firehose.handleEvent(commitEvent(BSKY, did, rkey, 'create', record, 'bafyrec'));
   if (qualified) await db.query('UPDATE posts SET bridge_qualified_at = NOW() WHERE at_uri = $1', [`at://${did}/${BSKY}/${rkey}`]);
 }
 
@@ -160,8 +149,8 @@ describe('GET /videos/feed: bridged Bluesky posts', () => {
       `INSERT INTO bridge_authors (did, handle, display_name, avatar_url, followers_count)
        VALUES ($1, 'carol.bsky.social', 'Carol', 'https://cdn.bsky.app/img/avatar/plain/carol', 9000)`, [CAROL]);
 
-    const { body } = await getJson('/videos/feed');
-    expect(body.videos.map((v: { id: string }) => v.id.split('/').pop())).toEqual(['newer', 'native', 'older']);
+    const { body } = await server.getJson('/videos/feed');
+    expect(feedRkeys(body)).toEqual(['newer', 'native', 'older']);
     const item = body.videos[0];
     expect(item).toEqual({
       id: `at://${CAROL}/${BSKY}/newer`,
@@ -178,9 +167,9 @@ describe('GET /videos/feed: bridged Bluesky posts', () => {
     });
     expect(body.videos[1].playback.kind).toBe('torrent');
 
-    const one = await getJson(`/videos/${encodeURIComponent(`at://${CAROL}/${BSKY}/older`)}`);
+    const one = await server.getJson(`/videos/${encodeURIComponent(`at://${CAROL}/${BSKY}/older`)}`);
     expect(one.body).toMatchObject({ playback: { kind: 'hls' } });
-    const hidden = await getJson(`/videos/${encodeURIComponent(`at://${CAROL}/${BSKY}/unqualified`)}`);
+    const hidden = await server.getJson(`/videos/${encodeURIComponent(`at://${CAROL}/${BSKY}/unqualified`)}`);
     expect(hidden.status).toBe(404);
   });
 
@@ -211,7 +200,7 @@ describe('GET /videos/feed: bridged Bluesky posts', () => {
     await bridged(CAROL, 'anon', '2026-11-02T00:00:00.000Z');
     await db.query(`INSERT INTO bridge_authors (did, handle) VALUES ($1, 'alice.bsky.social')`, [ALICE]);
 
-    const { body } = await getJson('/videos/feed');
+    const { body } = await server.getJson('/videos/feed');
     const byRkey = Object.fromEntries(body.videos.map((v: { id: string }) => [v.id.split('/').pop(), v]));
     expect(byRkey.bsky.author).toEqual({
       did: ALICE, handle: 'alice.example.com', displayName: 'Alice', avatarURL: `${BLOB_BASE}/blob/${ALICE}/bafkavatar`,
@@ -224,13 +213,13 @@ describe('GET /videos/:id', () => {
   it('serves one post by its URL-encoded AT-URI', async () => {
     await index(ALICE, '3kabc', validRecord());
     const uri = `at://${ALICE}/${NSID}/3kabc`;
-    const { status, body } = await getJson(`/videos/${encodeURIComponent(uri)}`);
+    const { status, body } = await server.getJson(`/videos/${encodeURIComponent(uri)}`);
     expect(status).toBe(200);
     expect(body).toMatchObject({ id: uri, caption: 'Big Buck Bunny' });
   });
 
   it('404s for an unknown post', async () => {
-    const { status } = await getJson(`/videos/${encodeURIComponent(`at://${ALICE}/${NSID}/nope`)}`);
+    const { status } = await server.getJson(`/videos/${encodeURIComponent(`at://${ALICE}/${NSID}/nope`)}`);
     expect(status).toBe(404);
   });
 });

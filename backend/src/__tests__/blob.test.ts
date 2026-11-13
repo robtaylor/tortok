@@ -3,12 +3,10 @@
 // uploaded to tortok-dev's PDS (checked 2026-11-11).
 
 import fs from 'fs';
-import http from 'http';
 import path from 'path';
-import express from 'express';
-import type { AddressInfo } from 'net';
 import { blobCid, isCid } from '../atproto/cid';
 import { createBlobRouter, IMMUTABLE } from '../routes/blob';
+import { startServer, TestServer } from './helpers/testServer';
 
 const POSTER = fs.readFileSync(path.join(__dirname, '../../../test-content/posters/bbb-05.jpg'));
 const POSTER_CID = 'bafkreiesysokdzugsbalswd53dymlq5hjaddr265np7fnahj44beei3q7i';
@@ -28,14 +26,13 @@ describe('blobCid', () => {
 });
 
 describe('GET /blob/:did/:cid', () => {
-  let server: http.Server;
+  let server: TestServer;
   let base: string;
   let upstream: { status: number; body: Uint8Array; type: string };
   const requested: string[] = [];
 
   beforeAll(() => {
-    const app = express();
-    app.use('/blob', createBlobRouter({
+    server = startServer('/blob', createBlobRouter({
       pdsFor: async (did) => (did === ALICE ? PDS : null),
       fetch: (async (url: string) => {
         requested.push(String(url));
@@ -44,8 +41,7 @@ describe('GET /blob/:did/:cid', () => {
       maxBytes: 100_000,
       cacheBytes: 0, // each test sees the PDS
     }));
-    server = app.listen(0);
-    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    base = server.base;
   });
   afterAll(() => server.close());
   beforeEach(() => {
@@ -110,13 +106,12 @@ describe('GET /blob/:did/:cid', () => {
 });
 
 describe('GET /blob/:did/:cid with its cache', () => {
-  let server: http.Server;
+  let server: TestServer;
   let base: string;
   let calls = 0;
 
   beforeAll(() => {
-    const app = express();
-    app.use('/blob', createBlobRouter({
+    server = startServer('/blob', createBlobRouter({
       pdsFor: async () => PDS,
       fetch: (async () => {
         calls++;
@@ -124,8 +119,7 @@ describe('GET /blob/:did/:cid with its cache', () => {
         return new Response(POSTER, { headers: { 'content-type': 'image/jpeg' } });
       }) as typeof fetch,
     }));
-    server = app.listen(0);
-    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    base = server.base;
   });
   afterAll(() => server.close());
 

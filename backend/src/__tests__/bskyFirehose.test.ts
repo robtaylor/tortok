@@ -4,16 +4,16 @@
 // (Decision 0016); Jetstream is stubbed.
 
 import { createTestDb, TestDb } from './helpers/testDb';
-import { hlsUrl, parseBskyVideoPost } from '../atproto/bskyPost';
+import { BSKY_POST_NSID as NSID, hlsUrl, parseBskyVideoPost } from '../atproto/bskyPost';
 import type { BskyFirehose as BskyFirehoseT } from '../services/bskyFirehose';
-import { fakeSockets } from './helpers/fakeSocket';
-import { VIDEO_CID, videoRecord } from './helpers/fixtures';
+import { commitEvent, fakeSockets } from './helpers/fakeSocket';
+import { bskyPostUri, selfLabelsField, VIDEO_CID, videoRecord } from './helpers/fixtures';
 
 const NOW = new Date('2026-11-12T12:00:00Z');
 
-const NSID = 'app.bsky.feed.post';
 const ALICE = 'did:plc:aaaaaaaaaaaaaaaaaaaaaaaa';
-const selfLabelled = (...vals: string[]) => videoRecord({ labels: { $type: 'com.atproto.label.defs#selfLabels', values: vals.map((val) => ({ val })) } });
+const BOB = 'did:plc:bbbbbbbbbbbbbbbbbbbbbbbb';
+const selfLabelled = (...vals: string[]) => videoRecord({ labels: selfLabelsField(...vals) });
 
 describe('parseBskyVideoPost', () => {
   test('reads a portrait video post', () => {
@@ -64,10 +64,10 @@ describe('BskyFirehose', () => {
     return { bridge: new BskyFirehose({ wsFactory }), sockets };
   };
 
-  const event = (operation: string, record?: unknown, rkey = '3kvid', cid = 'bafyrecord1') =>
-    ({ did: ALICE, time_us: 1_000, kind: 'commit', commit: { operation, collection: NSID, rkey, cid, record } });
+  const event = (operation: string, record?: unknown, rkey = '3kvid', cid?: string) =>
+    commitEvent(NSID, ALICE, rkey, operation, record, cid);
 
-  const uri = (rkey = '3kvid') => `at://${ALICE}/${NSID}/${rkey}`;
+  const uri = (rkey = '3kvid') => bskyPostUri(ALICE, rkey);
   const posts = () => db.query('SELECT * FROM posts ORDER BY at_uri');
   const labelVals = (subject = uri()) =>
     db.query<{ val: string }>('SELECT val FROM labels WHERE subject = $1 ORDER BY val', [subject]).then((r) => r.map((x) => x.val));
@@ -153,6 +153,17 @@ describe('BskyFirehose', () => {
     expect(await posts()).toEqual([]);
   });
 
+  test("a post by an author excluded since their last check removes every bridged row of theirs", async () => {
+    const { bridge } = make();
+    await bridge.handleEvent(event('create', videoRecord(), 'one'));
+    await bridge.handleEvent(event('create', videoRecord(), 'two'));
+    await bridge.handleEvent({ ...event('create', videoRecord(), 'bobs'), did: BOB });
+    await db.query(
+      `INSERT INTO labels (subject, src, val, neg, cts) VALUES ($1, $1, '!no-unauthenticated', false, NOW())`, [ALICE]);
+    await bridge.handleEvent(event('create', videoRecord(), 'three'));
+    expect((await posts()).map((p: any) => p.did)).toEqual([BOB]);
+  });
+
   test('authors the poller recorded as saying #nobridge are not indexed', async () => {
     const { bridge } = make();
     await db.query(`INSERT INTO bridge_authors (did, nobridge) VALUES ($1, true)`, [ALICE]);
@@ -198,7 +209,7 @@ describe('BskyFirehose', () => {
     await first.bridge.start();
     expect(first.sockets[0].url).toBe(
       'wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=app.bsky.feed.post');
-    first.sockets[0].emit('message', Buffer.from(JSON.stringify({ ...event('create', videoRecord()), time_us: 20_000_000 })));
+    first.sockets[0].deliver({ ...event('create', videoRecord()), time_us: 20_000_000 });
     await first.bridge.stop();
     expect(await db.query('SELECT key, cursor FROM ingest_cursor ORDER BY key')).toEqual([
       { key: 'jetstream', cursor: '99000000' },

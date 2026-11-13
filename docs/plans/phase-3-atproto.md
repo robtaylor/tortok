@@ -2,12 +2,12 @@
 
 **Status:** Active — the current phase (Decision 0006 Phase 3).
 
-## Status (2026-11-12)
+## Status (2026-11-13)
 
 - ✅ **Unit 0** — Decision 0012 (Lexicon namespace governance) merged; canonical NSID is **`app.tortok.*`** (reverse-DNS rooted at `tortok.app`); schema lives at `lexicons/app/tortok/video/post.json`; AppView+PDS cost note added to Deferred Decisions in [`open-problems/README.md`](../architecture/open-problems/README.md).
 - ✅ **Unit 1** — Standalone Node smoke test (`scripts/atproto-smoke-test.mjs`) round-trips an `app.tortok.video.post` record against `bsky.social` using app-password auth.
 - ✅ **Unit 2** — OAuth round-trip verified end to end on the iOS simulator (2026-05-02). Android and web haven't been verified. `tortok.app` is live on Cloudflare Pages, `@atproto/oauth-client-expo` is integrated, the Hermes polyfills are in `tortok/lib/polyfills.ts`, the login screen pre-fills the last handle, and the auth store has 7 unit tests.
-- ➡️ **Unit 2.5** — replanned 2026-05-02 after a failed first attempt, rescoped 2026-11-09. Steps 2.5-0 (cleanup), 2.5A (ingest, deployed 2026-11-11) and 2.5B (the feed reads indexed posts, with a blob route and runtime sources, 2026-11-11) are done. 2.5C (retire legacy) is done and deployed (2026-11-12): production runs no legacy auth, write routes or seeder, its legacy tables are dropped, and the app reaches the AppView at `appview.tortok.app`, a setting users can change. Next is 2.5D (the Bluesky bridge). Its sub-phases run 2.5-0 → 2.5A ingest → 2.5B feed cutover → 2.5C retire legacy → 2.5D Bluesky bridge → 2.5E final checks. It absorbs Units 4 (mostly), 5 and 6.
+- ➡️ **Unit 2.5** — replanned 2026-05-02 after a failed first attempt, rescoped 2026-11-09. Steps 2.5-0 (cleanup), 2.5A (ingest, deployed 2026-11-11) and 2.5B (the feed reads indexed posts, with a blob route and runtime sources, 2026-11-11) are done. 2.5C (retire legacy) is done and deployed (2026-11-12): production runs no legacy auth, write routes or seeder, its legacy tables are dropped, and the app reaches the AppView at `appview.tortok.app`, a setting users can change. 2.5D (the Bluesky bridge) is done: built, tested, and on in production since 2026-11-13. Next is 2.5E (final checks). Its sub-phases run 2.5-0 → 2.5A ingest → 2.5B feed cutover → 2.5C retire legacy → 2.5D Bluesky bridge → 2.5E final checks. It absorbs Units 4 (mostly), 5 and 6.
 - **Unit 3** — after Unit 2.5; the client publishes `app.tortok.video.post` via the user's PDS.
 - **Unit 7** — web cookie auth, not started.
 - ✅ **Moderation parallel track** — Decision 0013 landed 2026-04-29 (atproto labelers + illegal-content floor + UK age-verification gate); `open-problems/moderation.md` deleted.
@@ -500,7 +500,7 @@ views are recorded again, which is Phase 4.
 returns nothing. The backend boots without `JWT_SECRET`, and the app
 still works end to end against 2.5B's feed.
 
-#### 2.5D — Bring back the bridge (~2 days)
+#### 2.5D — Bring back the bridge (~2 days) ✅ DONE 2026-11-13
 
 Goal: bridged Bluesky video posts appear in the feed as `posts` rows,
 keeping Decision 0010 as written: they play from Bluesky's HLS URL over
@@ -626,10 +626,39 @@ from the
     unless step 15 says otherwise. Landed behind `BRIDGE_ENABLED` (default
     off), which is also the bridge's off switch; production turns it on
     with that one setting.
-22. **Tests.** Integration tests for the NSFW drop at index time and on
+22. ✅ **Tests.** Integration tests for the NSFW drop at index time and on
     re-label, the opt-out signals (`release-plan.md` makes opt-out
     tested in CI a Beta criterion), thresholds, and Bluesky-side
     deletion, against stubbed Jetstream and `getPosts`.
+    Landed as `backend/src/__tests__/bskyBridge.test.ts`. The firehose
+    and poller tests already covered each rule on its own service, so
+    this one runs them together: commits arrive as Jetstream messages,
+    the poller reads a stubbed AppView, and each case checks what
+    `GET /videos/feed` serves. Writing it found a gap. The poller
+    deleted an excluded author's posts only as each came due, so the
+    rest stayed in the feed until their own checks, and for good once
+    past the recheck age. It now deletes every bridged post of theirs
+    at once (Decision 0023 item 4), and so does the firehose when an
+    excluded author posts again.
+
+    **Open: when an author is re-read.** The poller reads an author's
+    profile only when one of their posts is due. Three things follow,
+    and none is decided:
+
+    - Exclusion is one-way. The firehose indexes nothing by an excluded
+      author, so nothing re-reads them, and one who removes `#nobridge`
+      or `!no-unauthenticated` stays out. So does one whose
+      account-level NSFW label is later withdrawn.
+    - An author whose bridged posts are all past the recheck age isn't
+      re-read. An opt-out they add then goes unseen, and their posts
+      stay in the feed, until they post another video.
+    - The recheck age counts from the record's own `createdAt`. A
+      backdated post that qualifies on its first check is never
+      re-read, so a later label can't reach it.
+
+    Refreshing `bridge_authors` rows on their own schedule would settle
+    the first two. Counting the recheck age from when the bridge first
+    saw the post would settle the third.
 
 The attempt-1 mirror pipeline doesn't come back: no R2 mirror, no
 ffmpeg remux, no `mirror_state` table, no `bridged/` R2 layout and no

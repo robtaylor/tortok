@@ -1,6 +1,8 @@
 // A valid app.tortok.video.post record, in the JSON form Jetstream and
 // listRecords deliver, for tests to vary.
 
+import { BSKY_POST_NSID } from '../../atproto/bskyPost';
+
 export const INFO_HASH = 'a'.repeat(40);
 
 export function validRecord(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -37,3 +39,10 @@ export function videoRecord(over: Record<string, unknown> = {}, aspectRatio: unk
     ...over,
   };
 }
+
+/** A record's `labels` field carrying these self-labels. */
+export const selfLabelsField = (...vals: string[]) =>
+  ({ $type: 'com.atproto.label.defs#selfLabels', values: vals.map((val) => ({ val })) });
+
+/** The AT-URI of an app.bsky.feed.post. */
+export const bskyPostUri = (did: string, rkey: string) => `at://${did}/${BSKY_POST_NSID}/${rkey}`;

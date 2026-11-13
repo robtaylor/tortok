@@ -7,19 +7,16 @@ import { createTestDb, TestDb } from './helpers/testDb';
 // Type-only and db-free imports here: anything that loads ../db must wait
 // for createTestDb() (below), or its pool connects to the dev database.
 import type { BskyEngagementPoller as PollerT, PollerOptions } from '../services/bskyEngagementPoller';
-import { accountSubjects } from '../atproto/labels';
+import { BSKY_POST_NSID as NSID } from '../atproto/bskyPost';
+import { VIDEO_POST_NSID } from '../atproto/videoPost';
+import { AppViewStub, fakeAppView, lbl, MOD, postView, profileUri, profileView } from './helpers/fakeAppView';
+import { bskyPostUri as uri } from './helpers/fixtures';
 
-const profileUri = (did: string) => accountSubjects(did)[1];
-
-const NSID = 'app.bsky.feed.post';
-const MOD = 'did:plc:ar7c4by46qjdydhdevvrndac';
 const ALICE = 'did:plc:aaaaaaaaaaaaaaaaaaaaaaaa';
 const BOB = 'did:plc:bbbbbbbbbbbbbbbbbbbbbbbb';
 const NOW = new Date('2026-11-12T12:00:00Z');
 const HOUR = 3_600_000;
 const MIN = 60_000;
-
-const uri = (did: string, rkey: string) => `at://${did}/${NSID}/${rkey}`;
 
 let testDb: TestDb;
 let db: typeof import('../db');
@@ -55,35 +52,8 @@ async function bridged(did: string, rkey: string, ageMs = HOUR, dueAt = new Date
     [uri(did, rkey), did, NSID, rkey, new Date(NOW.getTime() - ageMs), dueAt]);
 }
 
-interface Stub {
-  posts: Record<string, unknown>[];
-  profiles: Record<string, unknown>[];
-  status?: number;
-}
-
-/** An AppView stub; records the methods it was called with. */
-function appview(stub: Stub) {
-  const calls: { method: string; params: string[] }[] = [];
-  const fetchFn = (async (input: string | URL | Request) => {
-    const url = new URL(String(input));
-    const method = url.pathname.replace('/xrpc/', '');
-    const params = [...url.searchParams.values()];
-    calls.push({ method, params });
-    if (stub.status) return new Response('{}', { status: stub.status });
-    if (method === 'app.bsky.feed.getPosts') {
-      return Response.json({ posts: stub.posts.filter((p) => params.includes(p.uri as string)) });
-    }
-    return Response.json({ profiles: stub.profiles.filter((p) => params.includes(p.did as string)) });
-  }) as typeof globalThis.fetch;
-  return { fetch: fetchFn, calls };
-}
-
-const postView = (u: string, over: Record<string, unknown> = {}) => ({ uri: u, likeCount: 0, repostCount: 0, labels: [], author: { labels: [] }, ...over });
-const profileView = (did: string, over: Record<string, unknown> = {}) => ({ did, handle: 'alice.bsky.social', displayName: 'Alice', followersCount: 10, labels: [], ...over });
-const lbl = (u: string, val: string, src = MOD, extra: object = {}) => ({ src, uri: u, val, cts: '2026-11-12T11:00:00Z', ...extra });
-
-function makePoller(stub: Stub, opts: PollerOptions = {}) {
-  const { fetch, calls } = appview(stub);
+function makePoller(stub: AppViewStub, opts: PollerOptions = {}) {
+  const { fetch, calls } = fakeAppView(stub);
   const poller = new Poller({
     fetch, now: () => NOW,
     thresholds: { minLikes: 50, minReposts: 10, minFollowers: 5000, qualifyDays: 7 },
@@ -180,6 +150,27 @@ test('opted-out authors are recorded and their posts dropped: !no-unauthenticate
     .toEqual([{ subject: profileUri(ALICE), src: ALICE, subject_cid: '' }]);
 });
 
+test("an excluded author's bridged posts all go, due or not; their tortok posts and other authors' stay", async () => {
+  const inAnHour = new Date(NOW.getTime() + HOUR);
+  await bridged(ALICE, 'due');
+  await bridged(ALICE, 'later', HOUR, inAnHour);
+  // Qualified and past the recheck horizon: never due again.
+  await bridged(ALICE, 'settled', 40 * 24 * HOUR);
+  await db.query(`UPDATE posts SET bridge_qualified_at = $1, bridge_next_check_at = NULL WHERE rkey = 'settled'`, [NOW]);
+  await bridged(BOB, 'b', HOUR, inAnHour);
+  const native = `at://${ALICE}/${VIDEO_POST_NSID}/native`;
+  await db.query(
+    `INSERT INTO posts (at_uri, did, collection, rkey, cid, record_created_at)
+     VALUES ($1, $2, $3, 'native', 'bafynative', $4)`, [native, ALICE, VIDEO_POST_NSID, NOW]);
+  const { poller } = makePoller({
+    posts: [postView(uri(ALICE, 'due'), { likeCount: 500 })],
+    profiles: [profileView(ALICE, { description: '#nobridge' })],
+  });
+  expect(await poller.runOnce()).toEqual({ checked: 1, qualified: 0, dropped: 3 });
+  expect((await db.query('SELECT at_uri FROM posts ORDER BY at_uri')).map((r: any) => r.at_uri))
+    .toEqual([native, uri(BOB, 'b')]);
+});
+
 test('an opt-out on getPosts counts before the next profile refresh', async () => {
   await bridged(ALICE, 'a');
   const { poller } = makePoller({
@@ -193,7 +184,7 @@ test('an opt-out on getPosts counts before the next profile refresh', async () =
 
 test('authors are refreshed at most daily, and a removed profile self-label is deleted', async () => {
   await bridged(ALICE, 'a');
-  const stub: Stub = {
+  const stub: AppViewStub = {
     posts: [postView(uri(ALICE, 'a'))],
     profiles: [profileView(ALICE, { labels: [lbl(profileUri(ALICE), 'spoiler', ALICE)] })],
   };
