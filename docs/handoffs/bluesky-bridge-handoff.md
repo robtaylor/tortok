@@ -1,8 +1,8 @@
-# Handoff — Bluesky bridge (2.5D done and on in production; deploy PR #50, fix the smoke check, finish 2.5E)
+# Handoff — Bluesky bridge (Unit 2.5 done; the smoke check and author re-reading are open)
 
 **Created:** 2026-11-13
 **Working tree:** clean (untracked `.DS_Store`, `.idea/`, `backend/.expo/` are not ours to touch)
-**Branch:** `main`
+**Branch:** `docs/area-backfill-federation-auth` (PR #51) until it merges, then `main`
 
 <!--
 Reminder: a handoff is ephemeral. At resolution, every load-bearing piece
@@ -16,25 +16,26 @@ See docs/handoff-discipline.md for the migration table.
 
 **Goal of this session:** check the bridge in production after its
 switch-on, do step 22 of [plan 2.5D](../plans/phase-3-atproto.md), the
-integration tests, and start 2.5E. Step 22 is merged (PR #50) and also
-fixed a gap in opt-out. 2.5E steps 18 (the end-to-end run) and 19 (the
-two area docs) are done.
+integration tests, and finish 2.5E. All done: Unit 2.5 is closed, and
+PR #50 (step 22, with a fix to opt-out) is deployed.
 
 **Next session should pick up:**
 
-1. **Deploy PR #50** (follow-up 1).
-2. **Get the scheduled smoke check passing again** (follow-up 2).
-3. **Decide when the bridge re-reads an author** (follow-up 3).
-4. **The rest of 2.5E** (follow-up 5).
+1. **Get the scheduled smoke check passing again** (follow-up 1). It needs
+   a choice about Cloudflare's Bot Fight Mode.
+2. **Decide when the bridge re-reads an author** (follow-up 2).
+3. **Unit 3**, once PR #51 has merged. The plan lists what to settle
+   before the first real record.
 
 **Verification command:**
 
 ```sh
-git log --oneline -4   # PR #50's two commits on top of 98d32d1, then the area docs
 curl -s https://appview.tortok.app/health | grep -o '"sha":"[0-9a-f]*"'
-# Expect: the PR #50 commit's sha once deployed; 94e6d8a (PR #49) until then
+# Expect: aee7ae2… (PR #50), or a later backend commit
 fly logs -a tortok-api --no-tail | grep -E '\[(bridge|poller)\]' | tail -3
 # Expect: [poller] checked=… lines every 15 s or so
+gh run list --workflow smoke.yml --limit 3
+# Expect: failure, until follow-up 1 is done
 (cd backend && npx jest) # Expect: 143 passed
 ```
 
@@ -42,44 +43,52 @@ fly logs -a tortok-api --no-tail | grep -E '\[(bridge|poller)\]' | tail -3
 
 | Commit | Subject | Notes |
 |---|---|---|
-| `250e025` (PR #50) | the Bluesky bridge end to end; an excluded author loses every post [step 22] | `bskyBridge.test.ts`; the poller and firehose now delete every bridged row of an excluded author |
+| `250e025` (PR #50) | the Bluesky bridge end to end; an excluded author loses every post [step 22] | `bskyBridge.test.ts`; the poller and firehose now delete every bridged row of an excluded author. Deployed 2026-11-13 |
 | (PR #51) | `federation.md` and `auth-signup.md` written in full [2.5E step 19] | each claim checked against the code |
 | (PR #51) | the end-to-end run [2.5E step 18] | recorded under step 18 in the plan; no code change |
+| (PR #51) | Unit 2.5 closed [2.5E steps 20 and 21] | the `unit-2.5-attempt-1` tag stays; Decision 0023 is Accepted (partial); phase status in `CLAUDE.md` and the plan |
 
 ## Open follow-ups (priority-ordered)
 
-### 1. Deploy PR #50 (small)
-
-PR #50 merged on 2026-11-13. Production runs the old behaviour until
-`npm run deploy:backend` is run on `main`. Nothing needs cleaning up first:
-a read of production that day found no bridged row by an author already
-known to be excluded.
-
-### 2. The scheduled smoke check has failed since 2026-11-12 (small, needs Cloudflare)
+### 1. The scheduled smoke check has failed since 2026-11-12 (a choice, then small)
 
 Every run of `.github/workflows/smoke.yml` since 2026-11-12 18:33 UTC has
-failed: 86 in a row by 16:06 UTC the next day. That was the first run after
-2.5C step 14 pointed it at `https://appview.tortok.app`. From GitHub's
-runners every request gets `HTTP 403, not JSON`. The same URLs answer 200
-from a laptop and from the Fly machine, both through Cloudflare, so
-Cloudflare is refusing GitHub's runners in particular. Production is fine;
-the monitor is blind, and each run emails the repository owner. Cloudflare's
-Security Events for the zone will name the rule. Two ways out: let the
-runners through at Cloudflare, or point the workflow back at
-`https://tortok-api.fly.dev`, which checks the origin but not the public
-hostname. Once it runs again it will also fail if PR #50 has sat undeployed
-for a day.
+failed with `HTTP 403, not JSON`. The cause is Cloudflare's Bot Fight Mode
+on the `tortok.app` zone, which challenges every request from GitHub's
+hosted runners; [`backend.md`](../architecture/backend.md#deployment-and-configuration)
+has the detail. Production is fine and the check run by each deploy
+passes. The monitor is blind, and each run emails the repository owner.
 
-### 3. Decide when the bridge re-reads an author (a decision, then ~half day)
+The zone is on the Free plan, where Bot Fight Mode can't be skipped for
+one path or one client. The ways out, none chosen yet:
+
+- Turn Bot Fight Mode off for the zone (Security → Settings → Bot
+  traffic). The AppView is an API for apps and other servers, which can't
+  answer a challenge, so the mode fits it badly. It does stop some probes:
+  one for `/.env` came from the same network on 2026-11-13, and the origin
+  would have answered it 404.
+- Add an IP Access rule allowing Microsoft's network (AS8075). That lets
+  the runners through, and everything else hosted there, past the WAF's
+  rules as well.
+- Move the zone to a paid plan, whose Super Bot Fight Mode takes skip
+  rules.
+- Point the workflow back at `https://tortok-api.fly.dev`. That checks the
+  origin but not the public hostname.
+
+Changing the zone's security settings is the Cloudflare account owner's
+to do. After the change, run the workflow by hand (`gh workflow run
+smoke.yml`) and correct the two sentences in `backend.md`.
+
+### 2. Decide when the bridge re-reads an author (a decision, then ~half day)
 
 The note under step 22 in the plan lists three consequences of reading an
 author's profile only when one of their posts is due: opting out is
 one-way, an opt-out goes unseen once all of an author's posts are past the
 recheck age, and a backdated post is never re-read. It also names a fix
 for each. Not decided. Opt-out is a Beta criterion, so settle it before
-Beta.
+Beta. Decision 0023 is Accepted (partial) because of this gap.
 
-### 4. Watch the bridge in production (ongoing, small)
+### 3. Watch the bridge in production (ongoing, small)
 
 About an hour after switch-on (2026-11-13): 795 bridged rows, 73 of them
 served, about 170 qualifying an hour, which is inside Decision 0023's
@@ -88,14 +97,6 @@ first page is all bridged posts, because the feed is chronological and the
 five native test clips are older. Off switch: `BRIDGE_ENABLED = "false"` in
 `backend/fly.toml`, then deploy. Drop this item once the bridge has run
 cleanly for a while.
-
-### 5. The rest of 2.5E (~half hour, after two decisions)
-
-Steps 18 and 19 are done. Left in plan 2.5E: step 20, whether the
-`unit-2.5-attempt-1` tag stays; and step 21, the phase status in
-`CLAUDE.md` and the plan. Decision 0023's Status is still Proposed although
-it is built and running; set it then. This handoff is deleted in that
-commit.
 
 ## Critical context
 
@@ -117,23 +118,27 @@ commit.
 - **Submit handlers read the event's text**, not component state
   (`e.nativeEvent.text`): Detox's `replaceText` + `tapReturnKey` beats the
   re-render. `tortok/e2e/helpers.ts` `fill` says so.
+- **The API tokens in `.env` can't read Cloudflare's Security Events** or
+  its bot settings. Read them in the dashboard: Security → Analytics →
+  Events.
 
 ## References
 
-- [`phase-3-atproto.md`](../plans/phase-3-atproto.md) — plan 2.5D (step 22 and its open note) and 2.5E
-- [`backend.md`](../architecture/backend.md) — the bridge as built, its tests, reading the production database
-- [`client.md`](../architecture/client.md) — HLS playback, the badge, watch history
+- [`phase-3-atproto.md`](../plans/phase-3-atproto.md) — Unit 2.5 (the open note under step 22) and Unit 3
+- [`backend.md`](../architecture/backend.md) — the bridge as built, its tests, the public domain and the smoke check
+- [`federation.md`](../architecture/federation.md), [`auth-signup.md`](../architecture/auth-signup.md) — written in full this session
 - [Decision 0023](../architecture/decisions/0023-bridged-bluesky-posts-what-the-v1-bridge-indexes.md), [Decision 0010](../architecture/decisions/0010-bluesky-video-bridge.md)
 
 ## Migration note
 
-- Follow-up 1 → nothing to migrate; it ends with the deploy.
-- Follow-up 2 → `backend.md` Deployment and configuration, if the smoke
-  check's target or its way through Cloudflare changes.
-- Follow-up 3 → a decision record revising Decision 0023 item 4 if the
+- Follow-up 1 → `backend.md` Deployment and configuration: the public
+  domain and smoke check bullets say what Bot Fight Mode does today.
+- Follow-up 2 → a decision record revising Decision 0023 item 4 if the
   behaviour changes, then the plan's open note and `backend.md`'s Deferred
-  row are updated or removed.
-- Follow-up 4 → already in `backend.md` and the CHANGELOG; drop it.
-- Critical context: the iOS Pods note goes when prebuild is run; the others
-  are already in code comments.
-- Then `git rm docs/handoffs/bluesky-bridge-handoff.md` in the 2.5E commit.
+  row are updated or removed, and Decision 0023's Status.
+- Follow-up 3 → already in `backend.md` and the CHANGELOG; drop it.
+- Critical context: the two iOS notes go when prebuild is run; the test
+  notes are already in code comments; the Cloudflare one has no other home
+  and can go with follow-up 1.
+- Then `git rm docs/handoffs/bluesky-bridge-handoff.md`, once follow-ups 1
+  and 2 are settled.

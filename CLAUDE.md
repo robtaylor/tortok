@@ -104,7 +104,10 @@ here. Override and follow the project convention.
 From Decision 0006. Phases 0a, 0b, 1, 2, and 5 are **complete** (Phase 5
 was executed early since the project was never released — Swift codebase
 deleted 2026-04-14). Phase 2 closed out 2026-04-29 with a two-sim P2P
-test measuring 89–91% offload. We are in **Phase 3**.
+test measuring 89–91% offload. We are in **Phase 3**. Its Unit 2.5
+finished on 2026-11-13: the AppView indexes records from Jetstream, the
+feed reads that index, the legacy backend is retired and the Bluesky
+bridge is on in production. Unit 3, publishing from the app, is next.
 
 | Phase | Name | What it delivers | Blocks |
 |-------|------|------------------|--------|
@@ -112,8 +115,8 @@ test measuring 89–91% offload. We are in **Phase 3**.
 | **0b** | Extract seeder infra | Own trackers (L3) and R2 content origin (L1) delivered. The standalone seeder (L2) was deployed and then destroyed on 2026-11-04 after the webseed-only spike; no self-hosting guide (L4) exists | — |
 | **1** | Expo skeleton | Expo app logs in against existing backend, vertical feed with `expo-video`, feature parity with Swift prototype minus P2P | — |
 | **2** | Cross-platform P2P | WebTorrent integrated in Expo client, tested on iOS / Android / web simulators, P2P offload measured, Hermes WebRTC validated | Client seeding policy resolved in Decision 0009; execution risks #1 and #3 (see the [Phase-2 spike](docs/architecture/decisions/spikes/phase-2-p2p-offload.md)) |
-| **3** | atproto integration | atproto OAuth login against user's existing PDS (typically bsky.social), `app.tortok.video.post` Lexicon live, client publishes via `@atproto/api`, legacy email/password backend retired | ~~moderation.md~~ resolved in Decision 0013 (launch criteria gate signup-beyond-team); cross-deployment-transport.md (runtime video sources must ship before Unit 3 publishes real records); own-pds.md (parked, not blocking) |
-| **4** | AppView cutover | AppView at scale: ingest hardening, view counting, feed ranking. The ingest itself (relay/Jetstream, Decision 0017) and the feed's move off the legacy backend land early, in Phase 3 Unit 2.5 | view-counting.md (if ranking on views) |
+| **3** | atproto integration | atproto OAuth login against user's existing PDS (typically bsky.social), `app.tortok.video.post` Lexicon live, client publishes via `@atproto/api` (Unit 3, not built yet), legacy email/password backend retired (done 2026-11-12) | ~~moderation.md~~ resolved in Decision 0013 (launch criteria gate signup-beyond-team); cross-deployment-transport.md (runtime video sources shipped in Unit 2.5B; piece size and content key layout must be settled before Unit 3 publishes real records); own-pds.md (parked, not blocking) |
+| **4** | AppView cutover | AppView at scale: ingest hardening, view counting, feed ranking. The ingest itself (relay/Jetstream, Decision 0017) and the feed's move off the legacy backend landed early, in Phase 3 Unit 2.5 (2026-11-13) | view-counting.md (if ranking on views) |
 | **5** | Retire Swift | Swift codebase deleted (done early 2026-04-14) | — |
 
 The Phase-0 punch list that drove phase 0a is archived at
