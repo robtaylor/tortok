@@ -6,8 +6,8 @@
 // 1. stores every post and author label in `labels`, and the author in
 //    `bridge_authors`;
 // 2. deletes the row if the post is gone from the AppView (deleted, taken
-//    down, or hidden from logged-out viewers), labelled NSFW, or by an
-//    excluded author (bridgePolicy.ts);
+//    down, or hidden from logged-out viewers) or labelled NSFW, and every
+//    bridged row by an excluded author (bridgePolicy.ts), due or not;
 // 3. otherwise qualifies it for the feed once it meets an engagement
 //    threshold, or deletes it if it hasn't within `qualifyDays`.
 //
@@ -15,7 +15,8 @@
 // minutes..24 hours, so a post gets about 14 checks over its first week
 // rather than one every few minutes. Qualified posts stay on the daily
 // schedule, so later labels and deletions still reach them, until they are
-// `recheckDays` old; after that only Jetstream deletes remove them.
+// `recheckDays` old; after that a row goes only on a Jetstream delete, or
+// when its author is found excluded.
 
 import { bridgeNsfwLabels, bridgeThresholds, envNumber } from '../config';
 import type { BridgeThresholds } from '../config';
@@ -25,7 +26,7 @@ import type { FetchFn } from '../atproto/identity';
 import { BSKY_POST_NSID } from '../atproto/bskyPost';
 import { accountSubjects, replaceSelfLabels, upsertLabels, viewLabels } from '../atproto/labels';
 import { isObject } from '../atproto/videoPost';
-import { authorExcluded, deleteBridged, postExcluded, saysNoBridge } from './bridgePolicy';
+import { authorExcluded, deleteBridged, deleteBridgedBy, postExcluded, saysNoBridge } from './bridgePolicy';
 
 const DEFAULT_APPVIEW = 'https://public.api.bsky.app';
 /** getPosts and getProfiles both take at most 25. */
@@ -71,8 +72,10 @@ interface DueRow {
 }
 
 export interface BatchResult {
+  /** Due posts read from the AppView. */
   checked: number;
   qualified: number;
+  /** Rows deleted: checked posts, and every other bridged post by an author found excluded. */
   dropped: number;
 }
 
@@ -166,14 +169,18 @@ export class BskyEngagementPoller {
       [...viewLabels(p.labels), ...viewLabels(isObject(p.author) ? p.author.labels : undefined)]));
     const excluded = new Set<string>();
     for (const did of dids) if (await authorExcluded(this.db, did, this.nsfwLabels)) excluded.add(did);
+    // An excluded author's bridged posts all go (Decision 0023 item 4), not
+    // only the ones due now: the rest would stay in the feed until their own
+    // checks, and for good once past recheckMs.
+    result.dropped += await deleteBridgedBy(this.db, [...excluded]);
 
     for (const row of rows) {
+      if (excluded.has(row.did)) continue;
       const post = posts.get(row.at_uri);
       const age = now.getTime() - row.record_created_at.getTime();
       let qualifiedAt = row.bridge_qualified_at;
       if (post && !qualifiedAt && this.meetsThreshold(post, followers.get(row.did) ?? 0)) qualifiedAt = now;
       const keep = post !== undefined
-        && !excluded.has(row.did)
         && !(await postExcluded(this.db, row.at_uri, this.nsfwLabels))
         && (qualifiedAt !== null || age <= this.t.qualifyDays * DAY_MS);
       if (!keep) {

@@ -9,6 +9,7 @@
 //   set, or the opt-out label, on their account.
 
 import type { QueryFn } from '../db';
+import { BSKY_POST_NSID } from '../atproto/bskyPost';
 import { accountSubjects, labelledAny, OPT_OUT_LABEL } from '../atproto/labels';
 
 const NOBRIDGE_RE = /#nobridge\b/i;
@@ -31,4 +32,14 @@ export async function authorExcluded(db: QueryFn, did: string, nsfwLabels: Reado
 /** Delete a bridged row if there is one; true if there was. */
 export async function deleteBridged(db: QueryFn, uri: string): Promise<boolean> {
   return (await db('DELETE FROM posts WHERE at_uri = $1 RETURNING 1', [uri])).length > 0;
+}
+
+/**
+ * Delete every bridged row by these authors, and return how many there were.
+ * Only bridged rows: an author's own tortok posts aren't the bridge's to drop.
+ */
+export async function deleteBridgedBy(db: QueryFn, dids: string[]): Promise<number> {
+  if (dids.length === 0) return 0;
+  const gone = await db(`DELETE FROM posts WHERE collection = '${BSKY_POST_NSID}' AND did = ANY($1) RETURNING 1`, [dids]);
+  return gone.length;
 }

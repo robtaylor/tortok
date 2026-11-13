@@ -8,7 +8,8 @@
 // - A post self-labelled with a value in the NSFW set is not indexed, and an
 //   edit that adds such a label removes it.
 // - An author the engagement poller has recorded as opted out, or whose
-//   labels mark them NSFW, is not indexed (bridgePolicy.ts).
+//   labels mark them NSFW, is not indexed (bridgePolicy.ts), and a post from
+//   one removes whatever bridged rows they still have.
 // - Rows are indexed unchecked and due: the feed serves a bridged row only
 //   once the poller has set bridge_qualified_at. An edit clears it and makes
 //   the row due again, so the edited post waits for the poller.
@@ -20,7 +21,7 @@ import { query as defaultQuery } from '../db';
 import type { QueryFn } from '../db';
 import { BSKY_POST_NSID, parseBskyVideoPost } from '../atproto/bskyPost';
 import { replaceSelfLabels, selfLabels } from '../atproto/labels';
-import { authorExcluded, deleteBridged, postExcluded } from './bridgePolicy';
+import { authorExcluded, deleteBridged, deleteBridgedBy, postExcluded } from './bridgePolicy';
 import { JetstreamSubscription, parseCommit } from './jetstream';
 import type { JetstreamEvent, WebSocketLike } from './jetstream';
 const CURSOR_KEY = 'jetstream-bsky-posts';
@@ -115,9 +116,11 @@ export class BskyFirehose {
       return;
     }
     // Author state comes from the engagement poller, which reads profiles.
+    // Every bridged row of an excluded author goes, as in the poller, which
+    // only sees an author through their due rows.
     if (await authorExcluded(this.db, did, this.nsfwLabels)) {
       this.stats['author-excluded']++;
-      await deleteBridged(this.db, uri);
+      await deleteBridgedBy(this.db, [did]);
       return;
     }
 

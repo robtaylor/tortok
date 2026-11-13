@@ -20,7 +20,7 @@ function cursorDb() {
   return { db, saved };
 }
 
-const msg = (time_us: number) => Buffer.from(JSON.stringify({ kind: 'commit', time_us }));
+const msg = (time_us: number) => ({ kind: 'commit', time_us });
 const settle = () => new Promise((r) => setImmediate(r));
 
 beforeEach(() => {
@@ -43,11 +43,11 @@ test('a failed event resyncs from the last event handled', async () => {
       },
     });
     await sub.start();
-    sockets[0].emit('message', msg(10_000_000));
+    sockets[0].deliver(msg(10_000_000));
     await settle();
     failing = true;
-    sockets[0].emit('message', msg(11_000_000));
-    sockets[0].emit('message', msg(12_000_000));
+    sockets[0].deliver(msg(11_000_000));
+    sockets[0].deliver(msg(12_000_000));
     await settle();
     expect(sockets[0].closed).toBe(true);
 
@@ -74,7 +74,7 @@ test('a backed-up queue resyncs instead of buffering', async () => {
     onEvent: () => blocked,
   });
   await sub.start();
-  for (let i = 1; i <= 5_001; i++) sockets[0].emit('message', msg(i));
+  for (let i = 1; i <= 5_001; i++) sockets[0].deliver(msg(i));
   expect(sockets[0].closed).toBe(true);
   release();
   await sub.stop();
