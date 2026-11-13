@@ -5,16 +5,17 @@
 // candidate; the bridge doesn't index it and doesn't log it, since most of
 // the stream isn't video.
 //
-// Playback is Bluesky's HLS playlist for the video blob (Decision 0010), so
-// the video CID goes into a URL and must be a plain base32 CIDv1.
+// Playback is Bluesky's HLS playlist for the video blob (Decision 0010),
+// built from the video CID when the feed is read (hlsUrl, thumbnailUrl), so
+// the CID must be a plain base32 CIDv1.
 
+import { bridgeVideoBase } from '../config';
 import { isObject } from './videoPost';
 
 export const BSKY_POST_NSID = 'app.bsky.feed.post';
 
 export interface BskyVideoPost {
   videoCid: string;
-  hlsUrl: string;
   width: number;
   height: number;
   text: string | null;
@@ -32,9 +33,10 @@ const MAX_TAGS = 20;
 const MAX_TAG = 64;
 
 // Bluesky's video service, as its AppView's app.bsky.embed.video#view names
-// it: the playlist and thumbnail for a video blob.
+// it: the playlist and thumbnail for a video blob. The e2e stack points
+// BRIDGE_VIDEO_BASE at its own content server.
 const videoBase = (did: string, videoCid: string) =>
-  `https://video.bsky.app/watch/${encodeURIComponent(did)}/${videoCid}`;
+  `${bridgeVideoBase()}/${encodeURIComponent(did)}/${videoCid}`;
 export const hlsUrl = (did: string, videoCid: string) => `${videoBase(did, videoCid)}/playlist.m3u8`;
 export const thumbnailUrl = (did: string, videoCid: string) => `${videoBase(did, videoCid)}/thumbnail.jpg`;
 
@@ -89,7 +91,6 @@ export function parseBskyVideoPost(
 
   return {
     videoCid: cid,
-    hlsUrl: hlsUrl(did, cid),
     width: ar.width,
     height: ar.height,
     text,

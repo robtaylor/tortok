@@ -7,7 +7,10 @@
 # The five test clips are published as app.tortok.video.post records to the
 # test PDS (scripts/seed-fixtures.mjs), with local webseeds and tracker, and
 # the backend's ingest indexes them by backfilling the test account, as
-# production does for its seed accounts.
+# production does for its seed accounts. One bridged Bluesky post is inserted
+# as the bridge would leave it, qualified, playing a local HLS fixture
+# (test-content/hls/) that the content server serves in place of Bluesky's
+# video service.
 #
 # Used by CI (.github/workflows/e2e.yml) and locally before `npm run e2e:*`.
 # Expects dependencies installed in the repo root, backend/, test-content/
@@ -80,8 +83,25 @@ echo "  published ($E2E_DIR/fixtures.log)"
 # and retries quietly.
 NODE_ENV=test PORT=8080 DATABASE_URL="$DB_URL" \
   JETSTREAM_URL=ws://127.0.0.1:9/subscribe INGEST_SEED_DIDS="$(net did)" PLC_DIRECTORY_URL="$(net plcUrl)" \
+  BRIDGE_VIDEO_BASE=http://localhost:8090/hls \
   start_svc backend "$REPO_ROOT/backend" node -r ts-node/register/transpile-only src/index.ts
 wait_for backend "curl -sf http://localhost:8080/health"
-wait_for backend "test \"\$(curl -sf 'http://localhost:8080/videos/feed?limit=10' | jq '.videos | length')\" = 5"
-echo "  feed serves the 5 indexed posts"
+
+# The bridged post, as the firehose and poller would leave it (the backend
+# has created the schema by now). Older than the clips, so it's last.
+BRIDGED_DID=did:plc:bridgedauthorbridgedauth
+psql "$DB_URL" -q -v ON_ERROR_STOP=1 <<SQL
+INSERT INTO bridge_authors (did, handle, display_name, avatar_url, followers_count)
+  VALUES ('$BRIDGED_DID', 'bridged.bsky.social', 'Bridged Author', NULL, 9000);
+-- The feed builds the playlist and thumbnail URLs from video_cid and
+-- BRIDGE_VIDEO_BASE, so they land on the content server's /hls/.
+INSERT INTO posts (at_uri, did, collection, rkey, cid, text, video_cid, width, height, hashtags,
+                   record_created_at, bridge_qualified_at, bridge_checked_at)
+  VALUES ('at://$BRIDGED_DID/app.bsky.feed.post/3lbridged', '$BRIDGED_DID', 'app.bsky.feed.post', '3lbridged',
+          'bafyreibridgede2e', 'A clip from Bluesky', 'bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku',
+          608, 1080, '{#bluesky}', '2026-01-01T00:00:00Z', NOW(), NOW());
+SQL
+wait_for backend "test \"\$(curl -sf 'http://localhost:8080/videos/feed?limit=10' | jq '.videos | length')\" = 6"
+wait_for content "curl -sf \"\$(curl -sf 'http://localhost:8080/videos/feed?limit=10' | jq -r '.videos[5].playback.url')\" | grep -q EXTM3U"
+echo "  feed serves the 5 indexed posts and the bridged one"
 echo "✓ e2e stack up"

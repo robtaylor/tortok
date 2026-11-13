@@ -1,7 +1,8 @@
 // Phase 3 Unit 2.5D: the inbound Bluesky bridge's firehose (Decisions 0010,
 // 0023). Subscribes to `app.bsky.feed.post` on Jetstream, on its own socket
 // and cursor (jetstream.ts), and indexes portrait or square video posts into
-// `posts` with Bluesky's HLS URL and no magnet.
+// `posts` with their video CID (the feed builds Bluesky's HLS URL from it)
+// and no magnet.
 //
 // - Every candidate's self-labels go to `labels`, whatever happens to it.
 // - A post self-labelled with a value in the NSFW set is not indexed, and an
@@ -38,12 +39,12 @@ export interface BskyFirehoseOptions {
 
 const UPSERT_SQL = `
   INSERT INTO posts (
-    at_uri, did, collection, rkey, cid, text, video_cid, hls_url,
+    at_uri, did, collection, rkey, cid, text, video_cid,
     width, height, hashtags, record_created_at, bridge_next_check_at
-  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
   ON CONFLICT (at_uri) DO UPDATE SET
     cid = EXCLUDED.cid, text = EXCLUDED.text, video_cid = EXCLUDED.video_cid,
-    hls_url = EXCLUDED.hls_url, width = EXCLUDED.width, height = EXCLUDED.height,
+    width = EXCLUDED.width, height = EXCLUDED.height,
     hashtags = EXCLUDED.hashtags, record_created_at = EXCLUDED.record_created_at,
     indexed_at = NOW(), bridge_qualified_at = NULL, bridge_next_check_at = NOW()
   WHERE posts.cid IS DISTINCT FROM EXCLUDED.cid
@@ -121,7 +122,7 @@ export class BskyFirehose {
     }
 
     await this.db(UPSERT_SQL, [
-      uri, did, BSKY_POST_NSID, rkey, c.cid, post.text, post.videoCid, post.hlsUrl,
+      uri, did, BSKY_POST_NSID, rkey, c.cid, post.text, post.videoCid,
       post.width, post.height, post.hashtags, post.createdAt,
     ]);
     this.stats.indexed++;

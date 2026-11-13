@@ -63,7 +63,6 @@ CREATE TABLE IF NOT EXISTS posts (
     magnet_link TEXT,                       -- app.tortok rows
     info_hash TEXT,
     torrent_cid TEXT,                       -- torrentBlob (Decision 0020)
-    hls_url TEXT,                           -- app.bsky rows (Decision 0010)
     record_created_at TIMESTAMPTZ NOT NULL,
     indexed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -86,6 +85,9 @@ ALTER TABLE posts ADD COLUMN IF NOT EXISTS bridge_next_check_at TIMESTAMPTZ;
 -- The poller's queue: bridged rows by when they're due. Replaces the first
 -- version's index on bridge_checked_at.
 DROP INDEX IF EXISTS idx_posts_bridge_checked;
+-- hls_url was a stored copy of the playlist URL the feed builds from
+-- video_cid; it was never read, and no bridged row existed when it went.
+ALTER TABLE posts DROP COLUMN IF EXISTS hls_url;
 CREATE INDEX IF NOT EXISTS idx_posts_bridge_due
     ON posts (bridge_next_check_at) WHERE collection = 'app.bsky.feed.post';
 -- The feed: servable rows only (native posts with a magnet, qualified bridged

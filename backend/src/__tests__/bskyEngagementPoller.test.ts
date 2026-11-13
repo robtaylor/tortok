@@ -50,8 +50,8 @@ afterEach(() => jest.restoreAllMocks());
 /** Insert a bridged row as the firehose would (due at once), `ageMs` old. */
 async function bridged(did: string, rkey: string, ageMs = HOUR, dueAt = new Date(NOW.getTime() - ageMs)) {
   await db.query(
-    `INSERT INTO posts (at_uri, did, collection, rkey, cid, video_cid, hls_url, width, height, record_created_at, bridge_next_check_at)
-     VALUES ($1, $2, $3, $4, 'bafyrec', 'bafyvid', 'https://video.bsky.app/x', 9, 16, $5, $6)`,
+    `INSERT INTO posts (at_uri, did, collection, rkey, cid, video_cid, width, height, record_created_at, bridge_next_check_at)
+     VALUES ($1, $2, $3, $4, 'bafyrec', 'bafyvid', 9, 16, $5, $6)`,
     [uri(did, rkey), did, NSID, rkey, new Date(NOW.getTime() - ageMs), dueAt]);
 }
 

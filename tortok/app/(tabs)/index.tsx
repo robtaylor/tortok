@@ -9,15 +9,17 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  Linking,
   ViewToken,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useQuery } from '@tanstack/react-query';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { authorLabel, getFeed, torrentOf, type Video } from '@/lib/api';
+import { authorLabel, blueskyPostUrl, getFeed, type Video } from '@/lib/api';
+import { usePlaybackUrl } from '@/lib/usePlaybackUrl';
+import { recordView, WatchSession } from '@/lib/watchHistory';
 import { useAppViewStore } from '@/stores/appview';
-import { useP2PUrl } from '@/lib/webtorrent/useP2PUrl';
 import { usePrefetch } from '@/lib/webtorrent/usePrefetch';
 import { useSeedPolicy } from '@/lib/webtorrent/useSeedPolicy';
 
@@ -26,9 +28,9 @@ const PHONE_ASPECT = 9 / 16; // width / height
 function configurePlayer(p: { loop: boolean; muted: boolean; timeUpdateEventInterval: number }) {
   p.loop = true;
   p.muted = false;
-  // 100ms for accurate first-frame detection. The self-removing listener
-  // in the player events effect unsubscribes after the first frame, so
-  // this only fires ~1-5 times per video load, not continuously.
+  // 100ms, for accurate first-frame detection and for the watch history's
+  // time accounting (lib/watchHistory.ts), which listens while the item is
+  // active.
   p.timeUpdateEventInterval = 0.1;
 }
 
@@ -42,13 +44,12 @@ function configurePlayer(p: { loop: boolean; muted: boolean; timeUpdateEventInte
 //   playing  — video visible, playback active
 //   paused   — video visible, playback paused
 //   error    — error overlay with retry
-//   empty    — no content
 //
 // Only the active cell mounts a player. Adjacent cells are data-prefetched
 // by usePrefetch (no player mounted). Poster visible in idle + loading → no
 // black gap.
 
-type DisplayState = 'idle' | 'loading' | 'playing' | 'paused' | 'error' | 'empty';
+type DisplayState = 'idle' | 'loading' | 'playing' | 'paused' | 'error';
 
 const VideoItem = memo(function VideoItem({
   video,
@@ -97,12 +98,11 @@ const VideoItem = memo(function VideoItem({
   }, []);
 
   // --- Display state ---
-  const [displayState, setDisplayState] = useState<DisplayState>(
-    !video.posterURL && !torrentOf(video) ? 'empty' : 'idle',
-  );
+  const [displayState, setDisplayState] = useState<DisplayState>('idle');
 
-  // Only the active cell resolves a URL.
-  const p2pUrl = useP2PUrl(isActive ? torrentOf(video) : null, tag);
+  // Only the active cell resolves a URL (lib/usePlaybackUrl.ts).
+  const sourceUrl = usePlaybackUrl(video, isActive, tag);
+  const bskyUrl = blueskyPostUrl(video);
 
   // Stable player — created once at mount, source swapped via replaceAsync.
   // Avoids 500-750ms native player construction cost on every scroll.
@@ -116,6 +116,18 @@ const VideoItem = memo(function VideoItem({
       dumpTimeline();
     }
   }, [displayState]);
+
+  // --- Watch history: one session per stint as the active item, kept on the
+  // device only (lib/watchHistory.ts) ---
+  useEffect(() => {
+    if (!isActive) return;
+    const session = new WatchSession();
+    const sub = player.addListener('timeUpdate', ({ currentTime }) => session.onTime(currentTime, player.duration));
+    return () => {
+      sub.remove();
+      recordView(video.id, video.hashtags, session.end());
+    };
+  }, [isActive, player, video.id, video.hashtags]);
 
   // --- When isActive changes ---
   useEffect(() => {
@@ -136,11 +148,11 @@ const VideoItem = memo(function VideoItem({
 
   // --- When URL resolves/drops: swap source on the stable player ---
   useEffect(() => {
-    if (p2pUrl) {
+    if (sourceUrl) {
       stamp('replaceAsync');
       console.log(`${pre} replaceAsync`);
       setDisplayState((s) => (s === 'idle' ? 'loading' : s));
-      player.replaceAsync(p2pUrl).then(() => {
+      player.replaceAsync(sourceUrl).then(() => {
         stamp('replaceResolved');
         console.log(`${pre} replaceAsync resolved`);
       });
@@ -149,7 +161,7 @@ const VideoItem = memo(function VideoItem({
         s === 'loading' || s === 'playing' || s === 'paused' ? 'idle' : s,
       );
     }
-  }, [p2pUrl, player]);
+  }, [sourceUrl, player]);
 
   // --- Player events ---
   useEffect(() => {
@@ -193,7 +205,7 @@ const VideoItem = memo(function VideoItem({
 
   // First-frame detector — diagnostic only. Measures actual decode latency.
   useEffect(() => {
-    if (!player || !p2pUrl) return;
+    if (!player || !sourceUrl) return;
     let removed = false;
     const timeSub = player.addListener('timeUpdate', (payload) => {
       if (!removed && payload.currentTime > 0) {
@@ -205,7 +217,7 @@ const VideoItem = memo(function VideoItem({
     return () => {
       if (!removed) timeSub.remove();
     };
-  }, [player, p2pUrl]);
+  }, [player, sourceUrl]);
 
   // --- Drive player from state ---
   useEffect(() => {
@@ -225,8 +237,8 @@ const VideoItem = memo(function VideoItem({
   };
 
   const handleRetry = () => {
-    if (!player || !p2pUrl) return;
-    player.replaceAsync(p2pUrl);
+    if (!player || !sourceUrl) return;
+    player.replaceAsync(sourceUrl);
     setDisplayState('loading');
   };
 
@@ -240,7 +252,7 @@ const VideoItem = memo(function VideoItem({
   // On web, useVideoPlayer(null) renders <video src=""> which triggers a
   // browser warning and a redundant network request. Skip mounting the
   // VideoView entirely until we have a real source.
-  const mountPlayer = Platform.OS !== 'web' || !!p2pUrl;
+  const mountPlayer = Platform.OS !== 'web' || !!sourceUrl;
 
   return (
     <View style={[styles.videoContainer, { width: videoWidth, height: videoHeight }]}>
@@ -280,12 +292,6 @@ const VideoItem = memo(function VideoItem({
         ) : null}
       </Pressable>
 
-      {displayState === 'empty' ? (
-        <View style={[styles.video, styles.noVideo]}>
-          <Text style={styles.noVideoText}>No video available</Text>
-        </View>
-      ) : null}
-
       {displayState === 'loading' && !video.posterURL ? (
         <View style={styles.centerOverlay} pointerEvents="none" testID="videoBuffering">
           <ActivityIndicator size="large" color="#fff" />
@@ -316,6 +322,19 @@ const VideoItem = memo(function VideoItem({
         <Text style={styles.username} testID={isActive ? 'activeVideoAuthor' : undefined}>
           {authorLabel(video.author)}
         </Text>
+        {bskyUrl ? (
+          <Pressable
+            onPress={() => void Linking.openURL(bskyUrl)}
+            accessibilityRole="link"
+            accessibilityLabel="Open on Bluesky"
+            hitSlop={8}
+            style={styles.bridgeBadge}
+            testID={isActive ? 'activeVideoBlueskyBadge' : undefined}
+          >
+            <FontAwesome name="external-link" size={11} color="#fff" />
+            <Text style={styles.bridgeBadgeText}>via Bluesky</Text>
+          </Pressable>
+        ) : null}
         <Text style={styles.caption} numberOfLines={2} testID={isActive ? 'activeVideoCaption' : undefined}>
           {video.caption}
         </Text>
@@ -525,14 +544,6 @@ const styles = StyleSheet.create({
   invisible: {
     opacity: 0,
   },
-  noVideo: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  noVideoText: {
-    color: '#888',
-    fontSize: 16,
-  },
   centerOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
@@ -569,6 +580,22 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowRadius: 4,
+  },
+  bridgeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginBottom: 4,
+    borderRadius: 10,
+    backgroundColor: 'rgba(32,139,254,0.85)', // Bluesky blue
+  },
+  bridgeBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   caption: {
     color: '#fff',

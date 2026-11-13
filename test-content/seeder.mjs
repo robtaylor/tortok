@@ -3,11 +3,16 @@
 // torrents scripts/lib/test-clips.mjs builds, the same ones seed-fixtures.mjs
 // publishes, so the infohashes always match. Posters and .torrent files
 // travel as PDS blobs (Decision 0020); this server doesn't serve them.
+//
+// It also stands in for Bluesky's video service for the e2e stack's bridged
+// post (Decision 0010): /hls/<did>/<cid>/<file> serves hls/<file>, the HLS
+// fixture make-hls-fixture.sh builds, whatever the DID and CID.
 
 import WebTorrent from 'webtorrent';
 import path from 'path';
 import http from 'http';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { CLIPS, CLIPS_DIR, buildClipTorrent, clipFiles } from '../scripts/lib/test-clips.mjs';
 
 // scripts/e2e-up.sh passes seed-fixtures.mjs these same two values
@@ -15,6 +20,8 @@ import { CLIPS, CLIPS_DIR, buildClipTorrent, clipFiles } from '../scripts/lib/te
 // magnets name a tracker this seeder doesn't announce to.
 const LOCAL_TRACKERS = ['ws://localhost:8000'];
 const httpPort = 8090;
+const HLS_DIR = fileURLToPath(new URL('hls/', import.meta.url));
+const HLS_TYPES = { '.m3u8': 'application/vnd.apple.mpegurl', '.ts': 'video/mp2t', '.jpg': 'image/jpeg' };
 
 // ---------------------------------------------------------------------------
 // HTTP server — the clips' webseed, with Range support
@@ -37,15 +44,19 @@ const httpServer = http.createServer((req, res) => {
 
   // Serve video clips — e.g. /bbb-01.mp4
   if (url?.endsWith('.mp4')) {
-    const videoPath = path.join(CLIPS_DIR, path.basename(url));
-    return serveVideoWithRange(req, res, videoPath);
+    return serveFile(req, res, path.join(CLIPS_DIR, path.basename(url)), 'video/mp4');
   }
+
+  // Bridged-video stand-in — e.g. /hls/did%3Aplc%3Ax/bafy…/playlist.m3u8
+  const hlsType = url?.startsWith('/hls/') && HLS_TYPES[path.extname(url)];
+  if (hlsType) return serveFile(req, res, path.join(HLS_DIR, path.basename(url)), hlsType);
 
   res.writeHead(404, cors);
   res.end('Not found');
 });
 
-function serveVideoWithRange(req, res, videoPath) {
+/** Serve a file, with Range support (BEP 19 webseeds fetch pieces by range). */
+function serveFile(req, res, videoPath, type) {
   let stat;
   try {
     stat = fs.statSync(videoPath);
@@ -64,7 +75,7 @@ function serveVideoWithRange(req, res, videoPath) {
     const end = endStr ? parseInt(endStr, 10) : total - 1;
     res.writeHead(206, {
       ...cors,
-      'Content-Type': 'video/mp4',
+      'Content-Type': type,
       'Content-Range': `bytes ${start}-${end}/${total}`,
       'Accept-Ranges': 'bytes',
       'Content-Length': end - start + 1,
@@ -74,7 +85,7 @@ function serveVideoWithRange(req, res, videoPath) {
   } else {
     res.writeHead(200, {
       ...cors,
-      'Content-Type': 'video/mp4',
+      'Content-Type': type,
       'Accept-Ranges': 'bytes',
       'Content-Length': total,
     });
