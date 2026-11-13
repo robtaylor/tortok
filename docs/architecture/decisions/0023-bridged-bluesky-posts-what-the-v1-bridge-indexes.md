@@ -1,6 +1,6 @@
 # Decision 0023 — Bridged Bluesky posts: what the v1 bridge indexes
 
-**Status:** Accepted (partial) (2026-11-13). Built, and on in production since that day. Item 4's repeat check reaches an author only while one of their bridged posts is still due for checks, and never reaches an excluded one; see [backend](../backend.md#implementation-status). Revises, for bridged posts in v1, [Decision 0010](0010-bluesky-video-bridge.md) items 5 (opt-out) and 6 (labelers), and [Decision 0013](0013-moderation-strategy.md) items 1, 4 and 11 (labels annotate; the default labeler set; NSFW visibility). Both stay Accepted for everything else.
+**Status:** Accepted (partial) (2026-11-13). Built, and on in production since that day. Item 4's repeat check reaches an author only while one of their bridged posts is still due for checks, and never reaches an excluded one; see [backend](../backend.md#implementation-status). A revision of that check is proposed in [Decision 0024](0024-the-bridge-keeps-only-the-posts-it-still-re-reads.md). Revises, for bridged posts in v1, [Decision 0010](0010-bluesky-video-bridge.md) items 5 (opt-out) and 6 (labelers), and [Decision 0013](0013-moderation-strategy.md) items 1, 4 and 11 (labels annotate; the default labeler set; NSFW visibility). Both stay Accepted for everything else.
 
 **Current architecture:** [Federation](../federation.md).
 

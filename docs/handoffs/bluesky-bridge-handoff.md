@@ -2,7 +2,7 @@
 
 **Created:** 2026-11-13
 **Working tree:** clean (untracked `.DS_Store`, `.idea/`, `backend/.expo/` are not ours to touch)
-**Branch:** `docs/area-backfill-federation-auth` (PR #51) until it merges, then `main`
+**Branch:** `main`; Decision 0024 is on `docs/decision-bridge-keeps-what-it-rereads` until its PR merges
 
 <!--
 Reminder: a handoff is ephemeral. At resolution, every load-bearing piece
@@ -22,9 +22,9 @@ check, which had failed since 2026-11-12, passes again.
 
 **Next session should pick up:**
 
-1. **Decide when the bridge re-reads an author** (follow-up 1).
-2. **Unit 3**, once PR #51 has merged. The plan lists what to settle
-   before the first real record.
+1. **Get Decision 0024 accepted, then build it** (follow-up 1).
+2. **Unit 3**. The plan lists what to settle before the first real
+   record.
 
 **Verification command:**
 
@@ -50,14 +50,22 @@ gh run list --workflow smoke.yml --limit 3
 
 ## Open follow-ups (priority-ordered)
 
-### 1. Decide when the bridge re-reads an author (a decision, then ~half day)
+### 1. Decision 0024: the bridge keeps only posts it still re-reads (review, then ~half day)
 
-The note under step 22 in the plan lists three consequences of reading an
-author's profile only when one of their posts is due: opting out is
-one-way, an opt-out goes unseen once all of an author's posts are past the
-recheck age, and a backdated post is never re-read. It also names a fix
-for each. Not decided. Opt-out is a Beta criterion, so settle it before
-Beta. Decision 0023 is Accepted (partial) because of this gap.
+The note under step 22 in the plan lists three gaps in how the bridge
+repeats its checks: opting out is one-way, an opt-out goes unseen once all
+of an author's posts are past the recheck age, and a backdated post is
+never re-read. [Decision 0024](../architecture/decisions/0024-the-bridge-keeps-only-the-posts-it-still-re-reads.md)
+proposes a fix for each. It is Proposed and nothing is built. Opt-out is a
+Beta criterion, so settle it before Beta.
+
+Once it is accepted: delete at the recheck age instead of clearing
+`bridge_next_check_at` (`bskyEngagementPoller.ts`), take a post's age from
+`indexed_at`, let the firehose index a post by an excluded author whose
+`bridge_authors.refreshed_at` is over a day old, and add the four test
+cases the record lists to `bskyBridge.test.ts`. On deploy, give every
+bridged row with no check date one. Then update `backend.md`, the plan's
+note, and the Status of Decisions 0023 and 0024.
 
 ### 2. Watch the bridge in production (ongoing, small)
 
@@ -99,9 +107,10 @@ cleanly for a while.
 
 ## Migration note
 
-- Follow-up 1 → a decision record revising Decision 0023 item 4 if the
-  behaviour changes, then the plan's open note and `backend.md`'s Deferred
-  row are updated or removed, and Decision 0023's Status.
+- Follow-up 1 → Decision 0024 holds the reasoning. When it is built,
+  `backend.md`'s poller section and Deferred row, `federation.md`'s
+  Deferred row, the plan's open note, and the Status of Decisions 0023 and
+  0024 change.
 - Follow-up 2 → already in `backend.md` and the CHANGELOG; drop it.
 - Critical context: the two iOS notes go when prebuild is run; the test
   notes are already in code comments.

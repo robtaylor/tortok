@@ -658,9 +658,11 @@ from the
       backdated post that qualifies on its first check is never
       re-read, so a later label can't reach it.
 
-    Refreshing `bridge_authors` rows on their own schedule would settle
-    the first two. Counting the recheck age from when the bridge first
-    saw the post would settle the third.
+    [Decision 0024](../architecture/decisions/0024-the-bridge-keeps-only-the-posts-it-still-re-reads.md) (Proposed,
+    2026-11-13) answers all three without a schedule for authors: delete
+    a bridged post when its checks end at 30 days, count a post's age
+    from when the bridge indexed it, and re-read an excluded author when
+    they next post. Nothing is built until it is accepted.
 
 The attempt-1 mirror pipeline doesn't come back: no R2 mirror, no
 ffmpeg remux, no `mirror_state` table, no `bridged/` R2 layout and no
