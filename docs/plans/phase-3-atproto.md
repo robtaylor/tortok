@@ -621,9 +621,11 @@ from the
     server serves in place of Bluesky's video service through a new
     `BRIDGE_VIDEO_BASE` backend setting. `posts.hls_url` is gone: the feed
     builds the URL from the video CID, so it was never read.
-21. **Boot** `bskyFirehose` and `bskyEngagementPoller` from
+21. ✅ **Boot** `bskyFirehose` and `bskyEngagementPoller` from
     `backend/src/index.ts` alongside `atprotoIngest`. One process for v1,
-    unless step 15 says otherwise.
+    unless step 15 says otherwise. Landed behind `BRIDGE_ENABLED` (default
+    off), which is also the bridge's off switch; production turns it on
+    with that one setting.
 22. **Tests.** Integration tests for the NSFW drop at index time and on
     re-label, the opt-out signals (`release-plan.md` makes opt-out
     tested in CI a Beta criterion), thresholds, and Bluesky-side

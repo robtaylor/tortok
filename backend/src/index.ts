@@ -10,11 +10,15 @@ import { initializeDatabase, closeDatabase, query } from './db';
 import videoRoutes from './routes/videos';
 import { createBlobRouter } from './routes/blob';
 import { ingestFromEnv } from './services/atprotoIngest';
+import { bridgeFromEnv } from './services/bskyBridge';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 let server: http.Server | undefined;
 const ingest = ingestFromEnv();
+// The Bluesky bridge (Decision 0023), in this process for v1 (step 15
+// measured the stream well inside one shared CPU). Null unless BRIDGE_ENABLED.
+const bridge = bridgeFromEnv();
 
 // Middleware
 app.use(helmet());
@@ -97,9 +101,12 @@ async function start() {
     // Initialize database
     await initializeDatabase();
 
-    // Index atproto records. A failure here is fatal: the feed reads this
-    // index.
-    await ingest.start();
+    // Index atproto records, and the bridge's candidates, concurrently: each
+    // has its own socket and cursor. A failure is fatal: the feed reads this
+    // index, and the bridge's start only reads its cursor and opens the
+    // socket, so its failing means Postgres is gone.
+    await Promise.all([ingest.start(), bridge?.start()]);
+    if (!bridge) console.log('[bridge] off (BRIDGE_ENABLED is not true)');
 
     // Start listening
     server = app.listen(PORT, () => {
@@ -119,7 +126,7 @@ async function start() {
 
 // Graceful shutdown. Fly.io sends SIGINT by default (fly.toml can
 // override it), docker/dev-down send SIGTERM, Ctrl+C sends SIGINT — handle
-// both. Order: stop accepting HTTP and ingest, then close the pool,
+// both. Order: stop accepting HTTP, ingest and the bridge, then close the pool,
 // under a hard deadline so a stuck step can't block the platform's kill.
 const SHUTDOWN_DEADLINE_MS = 8000;
 let shuttingDown = false;
@@ -140,7 +147,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
     const httpClosed = server ? promisify(server.close.bind(server))() : undefined;
     // Idle keep-alive sockets would otherwise hold close() open.
     server?.closeIdleConnections();
-    await Promise.all([httpClosed, ingest.stop()]);
+    await Promise.all([httpClosed, ingest.stop(), bridge?.stop()]);
     console.log('HTTP server closed');
     await closeDatabase();
     process.exit(0);
