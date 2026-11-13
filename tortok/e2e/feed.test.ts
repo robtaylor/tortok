@@ -1,5 +1,5 @@
 import { element, by, expect, waitFor } from 'detox';
-import { freshLaunch, signInAndWaitForFeed, tapVideoUntil, waitForActiveVideo } from './helpers';
+import { freshLaunch, signInAndWaitForFeed, swipeFeedUntil, tapVideoUntil, waitForActiveVideo } from './helpers';
 
 // Several feed items are rendered at once; the active one carries
 // activeVideo* test IDs (see VideoItem in app/(tabs)/index.tsx).
@@ -41,6 +41,17 @@ describe('Feed', () => {
   it('swipes back to the first clip, which plays again', async () => {
     await element(by.id('videoFeed')).swipe('down', 'fast', 0.8);
     await waitFor(caption('Big Buck Bunny — opening shot')).toBeVisible().withTimeout(10000);
+    await waitForActiveVideo('playing');
+  });
+
+  // The e2e stack adds one bridged Bluesky post (scripts/e2e-up.sh), older
+  // than the clips so it's last, playing a local HLS fixture in place of
+  // Bluesky's video service (test-content/hls/).
+  it('reaches the bridged Bluesky post, badged, which plays over HLS', async () => {
+    // It's the sixth item: at most five swipes from the first.
+    await swipeFeedUntil(caption('A clip from Bluesky'), 5);
+    await expect(element(by.id('activeVideoAuthor').and(by.text('@bridged.bsky.social')))).toBeVisible();
+    await expect(element(by.id('activeVideoBlueskyBadge'))).toBeVisible();
     await waitForActiveVideo('playing');
   });
 });

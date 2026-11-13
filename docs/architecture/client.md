@@ -114,9 +114,12 @@ distinguishes `APIError` (the server answered with an error status) from
 `NetworkError` (the request never completed). Its one call is `getFeed`
 (`/videos/feed`, `limit=10`, cursor sent as `offset`). `Video` is the feed item
 ([backend](backend.md#videos-and-feed)): an AT-URI `id`, an `author` whose
-`handle` is `null` unless it verified, and a `playback` holding the magnet,
-the `.torrent` URL and the AppView's extra `sources`. `authorLabel()` shows
-`@handle`, else the display name, else the DID.
+`handle` is `null` unless it verified, and a `playback` of one of two kinds:
+`torrent` (the magnet, the `.torrent` URL and the AppView's extra `sources`)
+for native posts, or `hls` (a playlist URL) for posts bridged from Bluesky
+(Decision 0010). `torrentOf()` and `hlsUrlOf()` pick them out;
+`blueskyPostUrl()` gives a bridged post's bsky.app page from its AT-URI.
+`authorLabel()` shows `@handle`, else the display name, else the DID.
 
 ## Feed and player
 
@@ -133,8 +136,11 @@ in the UI.
 
 Each `VideoItem` runs a small display state machine: `idle` (poster shown),
 `loading` (poster shown, player buffering), `playing`, `paused`, `error` (with
-a Retry button) and `empty` (no poster and no magnet). Only the active item
-resolves a playback URL through `useP2PUrl(playback)`, keyed by the magnet.
+a Retry button). Only the active item
+resolves a playback URL, through `usePlaybackUrl(video, isActive)`, which
+switches on the playback kind. A bridged post's is its HLS playlist, played
+as it is over plain HTTP with no P2P. A native post's comes from
+`useP2PUrl(playback)`, keyed by the magnet.
 On native it returns a local URL served from the torrent by the WebTorrent
 bridge (see [p2p-torrent](p2p-torrent.md#torrent-engine)); the torrent is
 added with the AppView's extra trackers and webseeds. On web it skips
@@ -151,8 +157,19 @@ policy, and posters for items −2 to +2 are prefetched into `expo-image`'s
 memory-and-disk cache. On web the bridge is a stub that rejects, so prefetch
 yields no URL there.
 
-The overlay shows the author (`authorLabel`), the caption and hashtags. It has
-no action buttons: Phase 3 ships no likes, comments or sharing. The item logs a per-video timing line
+The overlay shows the author (`authorLabel`), the caption and hashtags, and
+for a bridged post a "via Bluesky" badge that opens the post on bsky.app. It
+has no action buttons: Phase 3 ships no likes, comments or sharing.
+
+**Watch history** (`lib/watchHistory.ts`) is a log of view events, one per
+stint as the active item: the post, when, time watched (pauses and seeks
+excluded), loops, whether it completed, the video's duration and the post's
+hashtags, read from the player's time updates. A skip (left within 2 s
+without finishing) and per-post totals are derived from it (`statsFor`). It
+is a log rather than totals because ranking's modes and explanations need
+each view's time ([`feed-ranking.md`](open-problems/feed-ranking.md)). It is
+kept in MMKV on the device, capped at 20,000 events (each new one past that
+drops the oldest), and never sent anywhere; nothing reads it yet. The item logs a per-video timing line
 (activate → `replaceAsync` → ready → playing) and the first-frame time, for
 playback profiling.
 
@@ -176,8 +193,9 @@ built.
 
 ## Testing
 
-`stores/auth.test.ts` and `stores/appview.test.ts` hold Jest unit tests for
-the auth and AppView stores, run with
+`stores/auth.test.ts`, `stores/appview.test.ts` and
+`lib/watchHistory.test.ts` hold Jest unit tests for the auth and AppView
+stores and the watch history (MMKV is replaced by `__mocks__/react-native-mmkv.ts`), run with
 `npm test` from `tortok/`, which runs every `*.test.ts(x)` outside `e2e/`
 (`jest.config.js`). CI runs them with
 the app's typecheck (`.github/workflows/ci.yml`, job `client`).
@@ -186,7 +204,8 @@ the app's typecheck (`.github/workflows/ci.yml`, job `client`).
 `session`), which runs on the iOS simulator and the Android emulator against
 release builds ([Decision 0021](decisions/0021-e2e-on-hosted-runners.md)). It
 covers sign-in, the feed loading the five test clips, playback reaching
-`playing`, pause and resume on tap, swiping to the next clip and back, the
+`playing`, pause and resume on tap, swiping to the next clip and back,
+reaching the bridged post (badged, playing over HLS), the
 three tabs, the profile's handle and DID, session persistence across a
 relaunch, and sign-out.
 
@@ -197,15 +216,19 @@ relaunch, and sign-out.
   with local webseeds and tracker); then starts the backend on its own
   `tortok_e2e` database, whose ingest indexes them by backfilling the test
   account. The test handle can't verify, so the feed shows its profile's
-  display name. `scripts/e2e-down.sh` stops it. On
+  display name. It also inserts one qualified bridged Bluesky post, oldest
+  so it's last, whose playlist and thumbnail the content server serves from
+  `test-content/hls/` (built by `make-hls-fixture.sh`) in place of
+  Bluesky's video service, through the backend's `BRIDGE_VIDEO_BASE`.
+  `scripts/e2e-down.sh` stops it. On
   Android the tests reverse the stack's ports to the emulator.
 - **Sign-in:** e2e builds are bundled with `EXPO_PUBLIC_E2E=1`, which adds a
   test sign-in form to the login screen (`lib/atproto/devSignIn.ts`): an app
   password against the test PDS. User builds never set the flag, and the real
   OAuth flow isn't driven by the suite.
 - **Test hooks:** the active feed item carries `activeVideoState` (its display
-  state as an accessibility label), `activeVideoAuthor` and
-  `activeVideoCaption`; the feed list is `videoFeed`, and the tabs are
+  state as an accessibility label), `activeVideoAuthor`,
+  `activeVideoCaption` and, on a bridged post, `activeVideoBlueskyBadge`; the feed list is `videoFeed`, and the tabs are
   `homeTab`, `recordTab` and `profileTab`.
 - **Running it:** `npm run e2e:build:ios` then `npm run e2e:test:ios` (or the
   `android` pair) from `tortok/`, after `npx expo prebuild` and with the stack

@@ -19,7 +19,6 @@ describe('parseBskyVideoPost', () => {
   test('reads a portrait video post', () => {
     expect(parseBskyVideoPost(ALICE, videoRecord({ tags: ['dogs', '#cats'] }), 1, NOW)).toEqual({
       videoCid: VIDEO_CID,
-      hlsUrl: `https://video.bsky.app/watch/did%3Aplc%3Aaaaaaaaaaaaaaaaaaaaaaaaa/${VIDEO_CID}/playlist.m3u8`,
       width: 9, height: 16, text: 'a clip #cats', hashtags: ['#dogs', '#cats'],
       createdAt: new Date('2026-11-12T10:00:00.000Z'),
     });
@@ -50,7 +49,8 @@ describe('parseBskyVideoPost', () => {
   });
 
   test('hlsUrl percent-encodes the DID', () => {
-    expect(hlsUrl('did:web:example.com', VIDEO_CID)).toContain('/watch/did%3Aweb%3Aexample.com/');
+    expect(hlsUrl('did:web:example.com', VIDEO_CID))
+      .toBe(`https://video.bsky.app/watch/did%3Aweb%3Aexample.com/${VIDEO_CID}/playlist.m3u8`);
   });
 });
 
@@ -97,7 +97,7 @@ describe('BskyFirehose', () => {
     const [row] = await posts();
     expect(row).toMatchObject({
       at_uri: uri(), did: ALICE, collection: NSID, rkey: '3kvid', cid: 'bafyrecord1',
-      text: 'a clip #cats', video_cid: VIDEO_CID, hls_url: hlsUrl(ALICE, VIDEO_CID),
+      text: 'a clip #cats', video_cid: VIDEO_CID,
       width: 9, height: 16, hashtags: ['#cats'], magnet_link: null,
       bridge_checked_at: null, bridge_qualified_at: null,
     });

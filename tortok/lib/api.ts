@@ -52,10 +52,22 @@ export type TorrentPlayback = {
   sources: Sources;
 };
 
-/** How a post plays. Bridged Bluesky posts (Phase 3 Unit 2.5D) add an HLS kind. */
-export type Playback = TorrentPlayback;
+/**
+ * A bridged Bluesky post (Phase 3 Unit 2.5D, Decision 0010): plays Bluesky's
+ * HLS playlist directly, over plain HTTP, with no P2P.
+ */
+export type HlsPlayback = {
+  kind: 'hls';
+  url: string;
+};
 
-/** An indexed `app.tortok.video.post`, as GET /videos/feed serves it. */
+/** How a post plays. */
+export type Playback = TorrentPlayback | HlsPlayback;
+
+/**
+ * A post as GET /videos/feed serves it: an indexed `app.tortok.video.post`,
+ * or a bridged `app.bsky.feed.post` (its `id`'s collection says which).
+ */
 export type Video = {
   /** The record's AT-URI. */
   id: string;
@@ -94,6 +106,22 @@ export function getFeed(appView: string, cursor?: string) {
 /** The post's torrent, or null if it doesn't play over WebTorrent. */
 export function torrentOf(video: Video): TorrentPlayback | null {
   return video.playback.kind === 'torrent' ? video.playback : null;
+}
+
+/** The post's HLS playlist URL, or null if it plays over WebTorrent. */
+export function hlsUrlOf(video: Video): string | null {
+  return video.playback.kind === 'hls' ? video.playback.url : null;
+}
+
+const BSKY_POST_RE = /^at:\/\/([^/]+)\/app\.bsky\.feed\.post\/([^/]+)$/;
+
+/**
+ * For a post bridged from Bluesky, its page on bsky.app; null for a native
+ * post. The AT-URI's DID and record key are all bsky.app needs.
+ */
+export function blueskyPostUrl(video: Video): string | null {
+  const m = BSKY_POST_RE.exec(video.id);
+  return m ? `https://bsky.app/profile/${m[1]}/post/${m[2]}` : null;
 }
 
 /** How to show an author: their verified handle, else their display name, else their DID. */

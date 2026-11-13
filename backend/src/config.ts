@@ -79,3 +79,12 @@ export function bridgeThresholds(): BridgeThresholds {
     qualifyDays: envNumber('BRIDGE_QUALIFY_DAYS', 7),
   };
 }
+
+/**
+ * Where bridged videos' playlists and thumbnails are served
+ * (`BRIDGE_VIDEO_BASE`; default Bluesky's video service). The e2e stack
+ * points it at its own content server, which serves a local HLS fixture.
+ */
+export function bridgeVideoBase(): string {
+  return (process.env.BRIDGE_VIDEO_BASE ?? 'https://video.bsky.app/watch').replace(/\/+$/, '');
+}

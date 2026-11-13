@@ -2,17 +2,7 @@
 // feed check before a URL is saved, persistence and reset. Run with
 // `npm test` from `tortok/`.
 
-jest.mock('react-native-mmkv', () => {
-  const data = new Map<string, string>();
-  return {
-    __data: data,
-    MMKV: jest.fn().mockImplementation(() => ({
-      getString: (key: string) => data.get(key),
-      set: (key: string, value: string) => data.set(key, value),
-      delete: (key: string) => data.delete(key),
-    })),
-  };
-});
+jest.mock('react-native-mmkv'); // __mocks__/react-native-mmkv.ts
 jest.mock('expo-constants', () => ({ __esModule: true, default: { expoConfig: { hostUri: '192.168.1.5:8081' } } }));
 
 const URL_KEY = 'appviewUrl';

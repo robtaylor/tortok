@@ -603,7 +603,7 @@ from the
     partial index of servable rows in feed order, so a page never reads
     the unqualified bridged rows (0.13 ms over 305,000 of them). The smoke
     check checks HLS items too: one failing warns, all failing fails.
-20. **Client.**
+20. ✅ **Client.**
     - A new HLS `Playback` kind: the item plays its HLS URL directly
       through `expo-video`, bypassing `useP2PUrl`.
     - A "via Bluesky" badge when the item's AT-URI is an `app.bsky.feed.post`.
@@ -612,6 +612,15 @@ from the
       (MMKV) and never sent, so future ranking has history
       ([`feed-ranking.md`](../architecture/open-problems/feed-ranking.md)).
     - Detox cases for a bridged item, on both platforms.
+
+    Landed with `usePlaybackUrl`, which switches on the playback kind,
+    and the watch history as a bounded log of view events rather than
+    per-post totals, since modes and explanations need each view's time.
+    The e2e stack's bridged post plays a local HLS fixture
+    (`test-content/hls/`, from `make-hls-fixture.sh`), which the content
+    server serves in place of Bluesky's video service through a new
+    `BRIDGE_VIDEO_BASE` backend setting. `posts.hls_url` is gone: the feed
+    builds the URL from the video CID, so it was never read.
 21. **Boot** `bskyFirehose` and `bskyEngagementPoller` from
     `backend/src/index.ts` alongside `atprotoIngest`. One process for v1,
     unless step 15 says otherwise.

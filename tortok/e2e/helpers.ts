@@ -117,6 +117,24 @@ export async function tapVideoUntil(state: string, attempts = 3) {
 }
 
 /**
+ * Swipe the feed up, one item at a time, until `target` is visible. The feed
+ * pages and snaps, so Detox's scroll-until (`whileElement().scroll()`)
+ * doesn't step it reliably; this swipes instead. A crashed app is rethrown at
+ * once rather than read as "not there yet".
+ */
+export async function swipeFeedUntil(target: Detox.IndexableNativeElement, maxSwipes: number) {
+  for (let i = 0; ; i++) {
+    try {
+      await waitFor(target).toBeVisible().withTimeout(i === 0 ? 1000 : 5000);
+      return;
+    } catch (err) {
+      if (i >= maxSwipes || /crash/i.test(String(err))) throw err;
+      await element(by.id('videoFeed')).swipe('up', 'fast', 0.8);
+    }
+  }
+}
+
+/**
  * Tap a tab. On iOS synchronization is on for the tap only, so Detox waits
  * for a screen transition still animating (such as sign-in into the tabs)
  * instead of tapping the view sliding over it. On Android synchronization
