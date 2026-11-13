@@ -1,6 +1,6 @@
 # Handoff — Backfill the stub area docs (adoption follow-up 1)
 
-**Created:** 2026-11-04 · **Updated:** 2026-11-09
+**Created:** 2026-11-04 · **Updated:** 2026-11-13
 **Branch:** start a `docs/area-backfill-<area>` branch per area, from `main`
 
 ## Goal & next-up
@@ -27,6 +27,7 @@ covers (A002).
 |---|---|
 | `backend.md` | PR #3 (2026-11-04) |
 | `client.md` | PR #8 (2026-11-09) |
+| `federation.md`, `auth-signup.md` | Phase 3 Unit 2.5E step 19 (2026-11-13) |
 
 ## Method
 
@@ -54,13 +55,6 @@ for the open questions rather than repeating them.
 No labeler, CSAM-hashing, DMCA or age-gate code exists. The stub already says
 so (audit PR #12). Strategy is set; implementation is launch-blocking per
 [`release-plan.md`](../plans/release-plan.md).
-
-### Later: `auth-signup.md`, `federation.md`
-
-After Phase 3 Unit 2.5. Gotcha to verify then: `tortok/lib/atproto/oauth.ts`
-builds the OAuth client eagerly at module scope. Attempt 1 of Unit 2.5 found
-that crashes Expo Router's web render pass (`indexedDB is not defined`), and
-its lazy-init fix is on the plan's carry-forward list.
 
 ---
 
