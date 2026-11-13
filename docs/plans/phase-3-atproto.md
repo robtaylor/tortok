@@ -7,8 +7,10 @@
 - ✅ **Unit 0** — Decision 0012 (Lexicon namespace governance) merged; canonical NSID is **`app.tortok.*`** (reverse-DNS rooted at `tortok.app`); schema lives at `lexicons/app/tortok/video/post.json`; AppView+PDS cost note added to Deferred Decisions in [`open-problems/README.md`](../architecture/open-problems/README.md).
 - ✅ **Unit 1** — Standalone Node smoke test (`scripts/atproto-smoke-test.mjs`) round-trips an `app.tortok.video.post` record against `bsky.social` using app-password auth.
 - ✅ **Unit 2** — OAuth round-trip verified end to end on the iOS simulator (2026-05-02). Android and web haven't been verified. `tortok.app` is live on Cloudflare Pages, `@atproto/oauth-client-expo` is integrated, the Hermes polyfills are in `tortok/lib/polyfills.ts`, the login screen pre-fills the last handle, and the auth store has 7 unit tests.
-- ➡️ **Unit 2.5** — replanned 2026-05-02 after a failed first attempt, rescoped 2026-11-09. Steps 2.5-0 (cleanup), 2.5A (ingest, deployed 2026-11-11) and 2.5B (the feed reads indexed posts, with a blob route and runtime sources, 2026-11-11) are done. 2.5C (retire legacy) is done and deployed (2026-11-12): production runs no legacy auth, write routes or seeder, its legacy tables are dropped, and the app reaches the AppView at `appview.tortok.app`, a setting users can change. 2.5D (the Bluesky bridge) is done: built, tested, and on in production since 2026-11-13. Next is 2.5E (final checks). Its sub-phases run 2.5-0 → 2.5A ingest → 2.5B feed cutover → 2.5C retire legacy → 2.5D Bluesky bridge → 2.5E final checks. It absorbs Units 4 (mostly), 5 and 6.
-- **Unit 3** — after Unit 2.5; the client publishes `app.tortok.video.post` via the user's PDS.
+- ✅ **Unit 2.5** — done 2026-11-13, after a failed first attempt (replanned 2026-05-02, rescoped 2026-11-09). The AppView ingests `app.tortok.video.post` records from Jetstream (2.5A, deployed 2026-11-11) and the feed reads them, with a blob route and runtime sources (2.5B, 2026-11-11). Production runs no legacy auth, write routes or seeder, its legacy tables are dropped, and the app reaches the AppView at `appview.tortok.app`, a setting users can change (2.5C, 2026-11-12). The Bluesky bridge is built, tested, and on in production (2.5D, 2026-11-13), and the final checks passed (2.5E, 2026-11-13). Its sub-phases ran 2.5-0 → 2.5A ingest → 2.5B feed cutover → 2.5C retire legacy → 2.5D Bluesky bridge → 2.5E final checks. It absorbed Units 5 and 6 and most of Unit 4. One question from it is open: when the bridge re-reads an author (the note under 2.5D step 22).
+- ➡️ **Unit 3** — next; the client publishes `app.tortok.video.post` via the user's PDS.
+- **Unit 4** — not started. Jetstream ingest (2.5A) did most of it; known accounts on sign-in, a check against a PDS other than `bsky.social`, and dead magnets remain.
+- ✅ **Units 5 and 6** — absorbed into 2.5C.
 - **Unit 7** — web cookie auth, not started.
 - ✅ **Moderation parallel track** — Decision 0013 landed 2026-04-29 (atproto labelers + illegal-content floor + UK age-verification gate); `open-problems/moderation.md` deleted.
 
@@ -182,7 +184,7 @@ restores the session via `oauth.restore(did)`. Logout revokes. Only
 the iOS simulator was verified (2026-05-02); Android and web are
 unverified.
 
-### Unit 2.5 — Atproto-native cutover + Bluesky bridge *(~5–7 days; replanned 2026-05-02, rescoped 2026-11-09)*
+### Unit 2.5 — Atproto-native cutover + Bluesky bridge *(~5–7 days; replanned 2026-05-02, rescoped 2026-11-09)* ✅ DONE 2026-11-13
 
 Six months passed between the replan and its execution. The rescoped
 version was confirmed on 2026-11-09; the answers to the four
@@ -669,7 +671,7 @@ opted-out posts are dropped, and their labels are in `labels`. The feed
 shows native and bridged posts interleaved by `record_created_at`, and
 the iOS simulator plays both.
 
-#### 2.5E — Final checks (~half day)
+#### 2.5E — Final checks (~half day) ✅ DONE 2026-11-13
 
 18. ✅ **End-to-end run.** Drop the dev database, boot the backend clean, run
     `seed-fixtures.mjs`, let the bridge run for about 10 minutes, and
@@ -700,9 +702,12 @@ the iOS simulator plays both.
     them to here). `federation.md` records that bridged posts live in
     `posts` beside native ones, discriminated by collection NSID.
     Written 2026-11-13, each claim checked against the code.
-20. **The `unit-2.5-attempt-1` tag** stays or goes; not yet decided.
-21. **Phase status.** Update the `CLAUDE.md` phases table and this plan's
-    status for Units 4–6 absorbed.
+20. ✅ **The `unit-2.5-attempt-1` tag stays** (decided 2026-11-13). It
+    holds the lazy-init OAuth client, which `tortok/lib/atproto/oauth.ts`
+    on `main` doesn't have and the web build needs (see
+    [auth-signup](../architecture/auth-signup.md#implementation-status)).
+21. ✅ **Phase status.** Update the `CLAUDE.md` phases table and this plan's
+    status for Units 4–6 absorbed. Done 2026-11-13.
 
 **Done =** Phase 3 moves on to Unit 3 with the atproto-native data
 layer, the legacy flow retired and the bridge working.
