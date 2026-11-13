@@ -1,8 +1,8 @@
-# Handoff — Bluesky bridge (2.5D done and on in production; deploy PR #50, then 2.5E)
+# Handoff — Bluesky bridge (2.5D done and on in production; deploy PR #50, fix the smoke check, finish 2.5E)
 
 **Created:** 2026-11-13
 **Working tree:** clean (untracked `.DS_Store`, `.idea/`, `backend/.expo/` are not ours to touch)
-**Branch:** `test/bridge-integration-step-22` (PR #50) until it merges, then `main`
+**Branch:** `main`
 
 <!--
 Reminder: a handoff is ephemeral. At resolution, every load-bearing piece
@@ -15,19 +15,21 @@ See docs/handoff-discipline.md for the migration table.
 ## Goal & next-up
 
 **Goal of this session:** check the bridge in production after its
-switch-on, and do step 22 of [plan 2.5D](../plans/phase-3-atproto.md), the
-integration tests. Both done; step 22 also fixed a gap in opt-out.
+switch-on, do step 22 of [plan 2.5D](../plans/phase-3-atproto.md), the
+integration tests, and start 2.5E. Step 22 is merged (PR #50) and also
+fixed a gap in opt-out. 2.5E step 19, the two area docs, is written.
 
 **Next session should pick up:**
 
-1. **Merge PR #50 once CI is green, then deploy it** (follow-up 1).
-2. **Decide when the bridge re-reads an author** (follow-up 2).
-3. **2.5E** (follow-up 4).
+1. **Deploy PR #50** (follow-up 1).
+2. **Get the scheduled smoke check passing again** (follow-up 2).
+3. **Decide when the bridge re-reads an author** (follow-up 3).
+4. **The rest of 2.5E** (follow-up 5).
 
 **Verification command:**
 
 ```sh
-git log --oneline -3   # the PR #50 commit on top of 98d32d1
+git log --oneline -4   # PR #50's two commits on top of 98d32d1, then the area docs
 curl -s https://appview.tortok.app/health | grep -o '"sha":"[0-9a-f]*"'
 # Expect: the PR #50 commit's sha once deployed; 94e6d8a (PR #49) until then
 fly logs -a tortok-api --no-tail | grep -E '\[(bridge|poller)\]' | tail -3
@@ -39,19 +41,34 @@ fly logs -a tortok-api --no-tail | grep -E '\[(bridge|poller)\]' | tail -3
 
 | Commit | Subject | Notes |
 |---|---|---|
-| (PR #50) | the Bluesky bridge end to end; an excluded author loses every post [step 22] | `bskyBridge.test.ts`; the poller and firehose now delete every bridged row of an excluded author |
+| `250e025` (PR #50) | the Bluesky bridge end to end; an excluded author loses every post [step 22] | `bskyBridge.test.ts`; the poller and firehose now delete every bridged row of an excluded author |
+| (docs PR) | `federation.md` and `auth-signup.md` written in full [2.5E step 19] | each claim checked against the code |
 
 ## Open follow-ups (priority-ordered)
 
 ### 1. Deploy PR #50 (small)
 
-Production runs the old behaviour until `npm run deploy:backend` is run on
-`main` after the merge. The smoke workflow also fails once a backend commit
-has sat on `main` undeployed for a day. Nothing needs cleaning up first: a
-read of production on 2026-11-13 found no bridged row by an author already
+PR #50 merged on 2026-11-13. Production runs the old behaviour until
+`npm run deploy:backend` is run on `main`. Nothing needs cleaning up first:
+a read of production that day found no bridged row by an author already
 known to be excluded.
 
-### 2. Decide when the bridge re-reads an author (a decision, then ~half day)
+### 2. The scheduled smoke check has failed since 2026-11-12 (small, needs Cloudflare)
+
+Every run of `.github/workflows/smoke.yml` since 2026-11-12 18:33 UTC has
+failed: 86 in a row by 16:06 UTC the next day. That was the first run after
+2.5C step 14 pointed it at `https://appview.tortok.app`. From GitHub's
+runners every request gets `HTTP 403, not JSON`. The same URLs answer 200
+from a laptop and from the Fly machine, both through Cloudflare, so
+Cloudflare is refusing GitHub's runners in particular. Production is fine;
+the monitor is blind, and each run emails the repository owner. Cloudflare's
+Security Events for the zone will name the rule. Two ways out: let the
+runners through at Cloudflare, or point the workflow back at
+`https://tortok-api.fly.dev`, which checks the origin but not the public
+hostname. Once it runs again it will also fail if PR #50 has sat undeployed
+for a day.
+
+### 3. Decide when the bridge re-reads an author (a decision, then ~half day)
 
 The note under step 22 in the plan lists three consequences of reading an
 author's profile only when one of their posts is due: opting out is
@@ -60,7 +77,7 @@ recheck age, and a backdated post is never re-read. It also names a fix
 for each. Not decided. Opt-out is a Beta criterion, so settle it before
 Beta.
 
-### 3. Watch the bridge in production (ongoing, small)
+### 4. Watch the bridge in production (ongoing, small)
 
 About an hour after switch-on (2026-11-13): 795 bridged rows, 73 of them
 served, about 170 qualifying an hour, which is inside Decision 0023's
@@ -70,12 +87,13 @@ five native test clips are older. Off switch: `BRIDGE_ENABLED = "false"` in
 `backend/fly.toml`, then deploy. Drop this item once the bridge has run
 cleanly for a while.
 
-### 4. 2.5E final checks (~half day)
+### 5. The rest of 2.5E (~2 hours)
 
-Plan 2.5E: clean end-to-end run with the bridge on, `auth-signup.md` and
-`federation.md` written in full, the `unit-2.5-attempt-1` tag decision,
-and the phase status in `CLAUDE.md`. Decision 0023's Status is still
-Proposed although it is built and running; set it then.
+Step 19, the area docs, is done. Left in plan 2.5E: step 18, the clean
+end-to-end run with the bridge on, which needs the local iOS build fixed
+first (see Critical context); step 20, whether the `unit-2.5-attempt-1` tag
+stays; and step 21, the phase status in `CLAUDE.md`. Decision 0023's Status
+is still Proposed although it is built and running; set it then.
 
 ## Critical context
 
@@ -102,10 +120,12 @@ Proposed although it is built and running; set it then.
 ## Migration note
 
 - Follow-up 1 → nothing to migrate; it ends with the deploy.
-- Follow-up 2 → a decision record revising Decision 0023 item 4 if the
+- Follow-up 2 → `backend.md` Deployment and configuration, if the smoke
+  check's target or its way through Cloudflare changes.
+- Follow-up 3 → a decision record revising Decision 0023 item 4 if the
   behaviour changes, then the plan's open note and `backend.md`'s Deferred
   row are updated or removed.
-- Follow-up 3 → already in `backend.md` and the CHANGELOG; drop it.
+- Follow-up 4 → already in `backend.md` and the CHANGELOG; drop it.
 - Critical context: the iOS Pods note goes when prebuild is run; the others
   are already in code comments.
 - Then `git rm docs/handoffs/bluesky-bridge-handoff.md` in the 2.5E commit.
