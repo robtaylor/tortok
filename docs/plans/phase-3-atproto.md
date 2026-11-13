@@ -671,10 +671,30 @@ the iOS simulator plays both.
 
 #### 2.5E — Final checks (~half day)
 
-18. **End-to-end run.** Drop the dev database, boot the backend clean, run
+18. ✅ **End-to-end run.** Drop the dev database, boot the backend clean, run
     `seed-fixtures.mjs`, let the bridge run for about 10 minutes, and
     scroll the iOS simulator feed through native and bridged rows without
     errors.
+
+    Run 2026-11-13 on `main` at `aee7ae2`. From an empty database the
+    backend created its schema and backfilled the five clips. The dev
+    account came from `INGEST_SEED_DIDS`, and `seed-fixtures.mjs
+    --dry-run` showed all five records up to date, so the script wrote
+    nothing. The bridge ran for 11 minutes against live Bluesky, with one
+    restart that resumed from the saved cursors. It indexed about 500
+    posts, skipped 30 as NSFW and qualified about 50, with no warnings or
+    errors and a clean shutdown each time. The smoke check's feed,
+    webseed and HLS checks passed against it.
+
+    The iOS simulator then scrolled three bridged posts and the five
+    clips, each playing, with no errors logged. It used the e2e build
+    already installed, built 2026-11-13 01:24 with the current feed and
+    player code. That build crashes when it first adds a torrent if the
+    AppView lists a `ws://` tracker, which is the dev default: its bundle
+    was built a minute before `npm ci` re-applied the `bittorrent-tracker`
+    patch. So the scroll ran with `TRACKER_URLS=wss://tortok-tracker.fly.dev`.
+    CI's Detox builds fresh and passes with a `ws://` tracker. A fresh
+    local build still needs `npx expo prebuild`.
 19. ✅ **Write the area docs.** `auth-signup.md` and `federation.md` are
     written in full after the cutover (the area-doc backfill deferred
     them to here). `federation.md` records that bridged posts live in

@@ -17,7 +17,8 @@ See docs/handoff-discipline.md for the migration table.
 **Goal of this session:** check the bridge in production after its
 switch-on, do step 22 of [plan 2.5D](../plans/phase-3-atproto.md), the
 integration tests, and start 2.5E. Step 22 is merged (PR #50) and also
-fixed a gap in opt-out. 2.5E step 19, the two area docs, is written.
+fixed a gap in opt-out. 2.5E steps 18 (the end-to-end run) and 19 (the
+two area docs) are done.
 
 **Next session should pick up:**
 
@@ -42,7 +43,8 @@ fly logs -a tortok-api --no-tail | grep -E '\[(bridge|poller)\]' | tail -3
 | Commit | Subject | Notes |
 |---|---|---|
 | `250e025` (PR #50) | the Bluesky bridge end to end; an excluded author loses every post [step 22] | `bskyBridge.test.ts`; the poller and firehose now delete every bridged row of an excluded author |
-| (docs PR) | `federation.md` and `auth-signup.md` written in full [2.5E step 19] | each claim checked against the code |
+| (PR #51) | `federation.md` and `auth-signup.md` written in full [2.5E step 19] | each claim checked against the code |
+| (PR #51) | the end-to-end run [2.5E step 18] | recorded under step 18 in the plan; no code change |
 
 ## Open follow-ups (priority-ordered)
 
@@ -87,13 +89,13 @@ five native test clips are older. Off switch: `BRIDGE_ENABLED = "false"` in
 `backend/fly.toml`, then deploy. Drop this item once the bridge has run
 cleanly for a while.
 
-### 5. The rest of 2.5E (~2 hours)
+### 5. The rest of 2.5E (~half hour, after two decisions)
 
-Step 19, the area docs, is done. Left in plan 2.5E: step 18, the clean
-end-to-end run with the bridge on, which needs the local iOS build fixed
-first (see Critical context); step 20, whether the `unit-2.5-attempt-1` tag
-stays; and step 21, the phase status in `CLAUDE.md`. Decision 0023's Status
-is still Proposed although it is built and running; set it then.
+Steps 18 and 19 are done. Left in plan 2.5E: step 20, whether the
+`unit-2.5-attempt-1` tag stays; and step 21, the phase status in
+`CLAUDE.md` and the plan. Decision 0023's Status is still Proposed although
+it is built and running; set it then. This handoff is deleted in that
+commit.
 
 ## Critical context
 
@@ -103,6 +105,12 @@ is still Proposed although it is built and running; set it then.
   authoritative run meanwhile. `npm ci` was run in the repo root and
   `tortok/`, and `tortok/ios/.xcode.env.local` now points at
   `/opt/homebrew/bin/node`.
+- **The e2e build installed on the iPhone 17 Pro simulator is stale.** It
+  was built 2026-11-13 01:24, a minute before that `npm ci` re-applied the
+  `bittorrent-tracker` patch, so it crashes (`Cannot read property
+  'protocol' of undefined`) when it first adds a torrent with a `ws://`
+  tracker, which is the local backend's default. Start the backend with
+  `TRACKER_URLS=wss://tortok-tracker.fly.dev` to use that build, or rebuild.
 - **Backend tests that touch the DB must import `../db` dynamically, after
   `createTestDb()`**. A static import once truncated the dev DB; the Jest
   guard in `db/index.ts` now fails such a test instead.
