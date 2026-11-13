@@ -106,7 +106,7 @@ tortok runs no relay, no PLC directory and no PDS. It depends on these, each beh
 | AppView by service DID | The app takes an AppView URL. Naming one by its service DID and proxying through the PDS (Decision 0017 item 4) isn't built. | [Phase 3 plan](../plans/phase-3-atproto.md), decision 4 of Unit 2.5 |
 | AppView discovery and self-hosting | No declaration records (Decision 0017 item 6) and no self-hosting guide (item 5). | Phase 4 or later |
 | Labeler subscriptions | The bridge reads labels from `getPosts` and self-labels only. No labeler is subscribed to, and tortok runs none (Decisions 0013 and 0023). | [moderation](moderation.md) |
-| Bridge: re-reading authors | An excluded author is never re-read, so opting back in has no effect. | [Phase 3 plan](../plans/phase-3-atproto.md), the note under step 22 |
+| Bridge: re-reading authors | An excluded author is never re-read, so opting back in has no effect. | [Decision 0024](decisions/0024-the-bridge-keeps-only-the-posts-it-still-re-reads.md) (Proposed) |
 | Account events | Jetstream `account` events (takedown, deactivation) are ignored. | Phase 4 |
 | `did:web` setup guide | Decision 0019 item 4 says tortok documents the DNS setup. No such guide exists. | None yet |
 | Own PDS | tortok runs no PDS. | [`open-problems/own-pds.md`](open-problems/own-pds.md) |
@@ -121,3 +121,4 @@ tortok runs no relay, no PLC directory and no PDS. It depends on these, each beh
 - [Decision 0019 — v1 uses each user's existing PDS through atproto OAuth](decisions/0019-v1-uses-existing-pds-via-oauth.md)
 - [Decision 0020 — Video posts carry their torrent metadata as a PDS blob](decisions/0020-torrent-metadata-as-pds-blob.md)
 - [Decision 0023 — What the v1 bridge indexes](decisions/0023-bridged-bluesky-posts-what-the-v1-bridge-indexes.md), based on the [labels spike](decisions/spikes/bluesky-labels-on-bridged-video-posts.md)
+- [Decision 0024 — The bridge keeps only the posts it still re-reads](decisions/0024-the-bridge-keeps-only-the-posts-it-still-re-reads.md) (Proposed, not built)
