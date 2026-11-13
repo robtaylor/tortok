@@ -12,9 +12,10 @@ The backend (`backend/`) is a single Node + TypeScript Express process backed by
 
 1. `initializeDatabase()` applies `db/schema.sql`. A failure here exits the process with code 1.
 2. `ingest.start()` starts [atproto ingest](#atproto-ingest). A failure here exits the process with code 1.
-3. `app.listen(PORT)`, default port 8080.
+3. When `BRIDGE_ENABLED=true`, the [Bluesky bridge](#bluesky-bridge): the firehose, then the poller. A failure here exits the process with code 1. Unset or `false`, the bridge doesn't run; any other value fails boot.
+4. `app.listen(PORT)`, default port 8080.
 
-On `SIGTERM` or `SIGINT` the process shuts down once, in order: it stops the HTTP server (closing idle keep-alive connections) while stopping ingest (which saves its cursor), then closes the Postgres pool once in-flight requests have drained, and exits 0. An error in any step exits 1, and an 8-second deadline forces exit 1 if shutdown stalls.
+On `SIGTERM` or `SIGINT` the process shuts down once, in order: it stops the HTTP server (closing idle keep-alive connections) while stopping ingest and the bridge (each saves its cursor; the poller finishes its batch), then closes the Postgres pool once in-flight requests have drained, and exits 0. An error in any step exits 1, and an 8-second deadline forces exit 1 if shutdown stalls.
 
 Unmatched routes return `404 {"error":"Not found"}`. Uncaught route errors return `500 {"error":"Internal server error"}`; the underlying `message` is included only when `NODE_ENV=development`.
 
@@ -59,7 +60,7 @@ The backend has no auth. Sign-in is atproto OAuth against the user's own PDS, ru
 |---|---|
 | `posts` | Indexed post records, keyed by AT-URI: record CID, caption, duration, dimensions, hashtags, magnet, infohash, and blob CIDs for the thumbnail and `.torrent`. Columns for bridged Bluesky posts: `video_cid` (the feed builds the playlist and thumbnail URLs from it), and the poller's `bridge_checked_at`, `bridge_next_check_at` and `bridge_qualified_at` (which gates serving). Written only by ingest. |
 | `bridge_authors` | Authors of bridged posts as Bluesky's AppView describes them: handle (null if `handle.invalid`), display name, CDN avatar URL, follower count, `nobridge` (`#nobridge` in the bio or display name), refresh time. Kept apart from `profiles` so the bridge never overwrites a native author's PDS-verified row. Written by the engagement poller. |
-| `labels` | Every atproto label seen, keyed by subject (AT-URI or DID), subject CID (`''` for the whole subject), source and value, with `neg`, `cts` and `exp`. A row changes only for a newer label, so a negation replaces what it negates; a subject's self-labels are replaced as a set, so one the author removes is deleted (`atproto/labels.ts`, Decision 0023 item 2). Policy matches on value alone, which is sound while Bluesky's moderation labeler and self-labels are the only sources; a second labeler needs a trusted-source set beside the value set, since `!hide` and `!takedown` mean something only from a trusted one. Written by the bridge's firehose and poller, which aren't booted yet. |
+| `labels` | Every atproto label seen, keyed by subject (AT-URI or DID), subject CID (`''` for the whole subject), source and value, with `neg`, `cts` and `exp`. A row changes only for a newer label, so a negation replaces what it negates; a subject's self-labels are replaced as a set, so one the author removes is deleted (`atproto/labels.ts`, Decision 0023 item 2). Policy matches on value alone, which is sound while Bluesky's moderation labeler and self-labels are the only sources; a second labeler needs a trusted-source set beside the value set, since `!hide` and `!takedown` mean something only from a trusted one. Written by the bridge's firehose and poller. |
 | `profiles` | Authors: handle (null if it doesn't verify), display name, avatar CID, PDS endpoint, refresh time. |
 | `ingest_cursor` | The Jetstream resume cursor. Operator-local: a rebuild needs it. |
 | `known_accounts` | DIDs backfilled on boot, with how each became known (`jetstream` or `seed`). Operator-local. |
@@ -82,7 +83,7 @@ The file begins by dropping the legacy native tables (`users`, `videos`, `hashta
 
 ## Bluesky bridge
 
-Two services, built and tested but **not booted** yet (plan 2.5D step 21): `services/bskyFirehose.ts` indexes candidates, and `services/bskyEngagementPoller.ts` checks them against Bluesky's AppView and decides which reach the feed (Decisions 0010 and 0023). Which authors are kept out is one rule both apply, `services/bridgePolicy.ts`.
+Two services, started and stopped together as `services/bskyBridge.ts`, run in this process when `BRIDGE_ENABLED=true` (default off, which also makes it the bridge's off switch): `services/bskyFirehose.ts` indexes candidates, and `services/bskyEngagementPoller.ts` checks them against Bluesky's AppView and decides which reach the feed (Decisions 0010 and 0023). Which authors are kept out is one rule both apply, `services/bridgePolicy.ts`.
 
 ### Firehose
 
@@ -117,13 +118,13 @@ Two services, built and tested but **not booted** yet (plan 2.5D step 21): `serv
 - **Public domain:** `appview.tortok.app` is the AppView's address: clients default to it and the feed's blob URLs use it (`PUBLIC_BASE_URL`). It is a proxied CNAME in Cloudflare's `tortok.app` zone to the Fly app, which holds a Let's Encrypt certificate for the name (`fly certs`, validated through an unproxied `_acme-challenge.appview` CNAME; `_fly-ownership.appview` is the ownership TXT). The zone's SSL mode is Full. A Cache Rule makes `/blob/*` on that host cacheable with the origin's `Cache-Control`, so Cloudflare keeps each blob for a year; everything else (the feed, `/health`) passes through uncached.
 - **Deploying:** `npm run deploy:backend` (`scripts/deploy-backend.sh`) deploys only a clean checkout at `origin/main`, passes the commit's SHA and the build time as build args, then runs the smoke check against production expecting that SHA. Deploys are run by hand; nothing deploys on merge, so merging a change to the feed's shape without deploying it makes the scheduled smoke check fail every 15 minutes until production catches up.
 - **Smoke check:** `scripts/smoke.mjs <base-url> [--expect-sha <sha>]` is read-only. It checks `/health` (healthy, Postgres reachable, a SHA), the feed and `/turn/credentials` contract (a TURN server with credentials), and, for up to five torrent items, that the `.torrent`'s info hash matches the magnet and that its first and last pieces, fetched from the magnet's webseed with no peers, match the piece hashes. For up to five HLS items it checks the poster and fetches the playlist. Bluesky serves those, so one item failing is a warning, but every checked HLS item failing (a broken URL scheme, or Bluesky refusing us) fails the run. `.github/workflows/smoke.yml` runs it against production every 15 minutes and on demand, then fails if production is missing a backend commit that reached `main` more than a day ago. A failed run emails the repository owner. Its tests (`scripts/smoke.test.mjs`) run in CI against a stub backend serving a real production torrent (`scripts/fixtures/bbb-01.torrent`) and its clip.
-- **Environment:** documented in `backend/.env.example`. Required in production: `DATABASE_URL` and `TRACKER_URLS`. Optional with code defaults: `PORT`, `NODE_ENV`, `INSTANCE_DOMAIN`, `ALLOWED_ORIGINS`, `TURN_SECRET`, `JETSTREAM_URL`, `INGEST_SEED_DIDS`, `PLC_DIRECTORY_URL`, `PUBLIC_BASE_URL`, `BRIDGE_NSFW_LABELS`, `BRIDGE_ASPECT_MIN`, `BRIDGE_APPVIEW_URL`, `BRIDGE_MIN_LIKES`, `BRIDGE_MIN_REPOSTS`, `BRIDGE_MIN_FOLLOWERS`, `BRIDGE_QUALIFY_DAYS`, `BRIDGE_RECHECK_DAYS`, `BRIDGE_VIDEO_BASE`, and `TRACKER_URLS` outside production. `TRACKER_URLS` is read by the feed (`config.ts`). `scripts/init-dev-secrets.sh` (run by `dev-up.sh`) fills in `TURN_SECRET` for local development.
+- **Environment:** documented in `backend/.env.example`. Required in production: `DATABASE_URL` and `TRACKER_URLS`. Optional with code defaults: `PORT`, `NODE_ENV`, `INSTANCE_DOMAIN`, `ALLOWED_ORIGINS`, `TURN_SECRET`, `JETSTREAM_URL`, `INGEST_SEED_DIDS`, `PLC_DIRECTORY_URL`, `PUBLIC_BASE_URL`, `BRIDGE_ENABLED`, `BRIDGE_NSFW_LABELS`, `BRIDGE_ASPECT_MIN`, `BRIDGE_APPVIEW_URL`, `BRIDGE_MIN_LIKES`, `BRIDGE_MIN_REPOSTS`, `BRIDGE_MIN_FOLLOWERS`, `BRIDGE_QUALIFY_DAYS`, `BRIDGE_RECHECK_DAYS`, `BRIDGE_VIDEO_BASE`, and `TRACKER_URLS` outside production. `TRACKER_URLS` is read by the feed (`config.ts`). `scripts/init-dev-secrets.sh` (run by `dev-up.sh`) fills in `TURN_SECRET` for local development.
 
 ## Constraints
 
 - **Record limits** are the Lexicon's, enforced by ingest's validator (`atproto/videoPost.ts`).
 - **Request bodies** are capped at 10 MB. Video bytes never pass through the backend; it serves posters, avatars and `.torrent` files only.
-- **Single process:** the API, ingest and the schema bootstrap share one process, so the API machine is kept always-on for ingest.
+- **Single process:** the API, ingest, the bridge and the schema bootstrap share one process, so the API machine is kept always-on for ingest.
 - **Tests:** `npm test` runs Jest over `src/__tests__/`. Ingest has integration tests against a real Postgres: each test file creates a throwaway database from `TEST_PG_ADMIN_URL` (default the local server) and applies `schema.sql`; under Jest, `db/index.ts` has no dev default, so a test that loads it before setting `DATABASE_URL` fails instead of using the dev database; with Jetstream, DID resolution and PDS calls stubbed. The feed routes have the same kind of integration test, with records put in through ingest, and so do the bridge's firehose and poller (`bskyFirehose.test.ts`, `bskyEngagementPoller.test.ts`, the AppView stubbed). The blob route, the CID function (against a real PDS blob), the record validator and the identity resolver have unit tests. CI (`.github/workflows/ci.yml`) runs `tsc` and `npm test` on Node 22 with a Postgres 17 service, on every pull request and every push to `main`.
 
 ## Implementation status
@@ -138,7 +139,7 @@ Two services, built and tested but **not booted** yet (plan 2.5D step 21): `serv
 | TURN credential issuance | `backend/src/index.ts` |
 | Graceful shutdown (SIGTERM/SIGINT) | `backend/src/index.ts` |
 | atproto ingest: Jetstream, backfill, validation, author resolution | `backend/src/services/atprotoIngest.ts`, `backend/src/services/jetstream.ts`, `backend/src/atproto/` |
-| Bluesky bridge firehose and engagement poller (not booted) | `backend/src/services/bskyFirehose.ts`, `backend/src/services/bskyEngagementPoller.ts`, `backend/src/services/bridgePolicy.ts`, `backend/src/atproto/bskyPost.ts`, `backend/src/atproto/labels.ts` |
+| Bluesky bridge firehose and engagement poller (booted by `index.ts` behind `BRIDGE_ENABLED`) | `backend/src/services/bskyBridge.ts`, `backend/src/services/bskyFirehose.ts`, `backend/src/services/bskyEngagementPoller.ts`, `backend/src/services/bridgePolicy.ts`, `backend/src/atproto/bskyPost.ts`, `backend/src/atproto/labels.ts` |
 | Fly.io deployment, always-on | `backend/Dockerfile`, `backend/fly.toml` |
 
 **Deferred:**
@@ -146,7 +147,7 @@ Two services, built and tested but **not booted** yet (plan 2.5D step 21): `serv
 | Part | Gap | Tracking |
 |---|---|---|
 | Account lifecycle | Jetstream `account` events (takedown, deactivation) are ignored, and known accounts are never removed. | Phase 4 |
-| Bluesky bridge | The firehose and poller exist but aren't booted; the feed's bridged items, the client and boot are still to come. The attempt-1 tables are dropped on boot. | Phase 3 Unit 2.5D; [federation](federation.md) |
+| Bluesky bridge | Built end to end: firehose, poller, the feed's HLS items and the client. It runs only with `BRIDGE_ENABLED=true`; the integration tests of step 22 are still to come. The attempt-1 tables are dropped on boot. | Phase 3 Unit 2.5D; [federation](federation.md) |
 | Own PDS | No PDS is run; users log in against their existing PDS. | [`open-problems/own-pds.md`](open-problems/own-pds.md) |
 | Social graph | No follows or likes; they will reuse Bluesky's Lexicons. | Later phase |
 | View recording | Nothing records views. | [`open-problems/view-counting.md`](open-problems/view-counting.md), Phase 4 |

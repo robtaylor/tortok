@@ -19,6 +19,7 @@ deciding whether to upgrade.
 
 ### Added
 
+- The backend runs the Bluesky bridge's firehose and engagement poller when `BRIDGE_ENABLED=true`. It is off by default, and setting it back to `false` switches the bridge off without a code change (Phase 3 Unit 2.5D).
 - The app plays bridged Bluesky posts: straight from Bluesky's HLS stream, with a "via Bluesky" badge that opens the post on bsky.app. It also keeps a private watch history on your phone (time watched, completions, loops, skips), which never leaves it, so a future feed can adapt to you (Phase 3 Unit 2.5D).
 - The feed serves bridged Bluesky posts the engagement poller has let in, interleaved with native posts by date, as a new HLS playback kind with Bluesky's thumbnail and the author's Bluesky handle and avatar. None appear until the bridge is switched on (Phase 3 Unit 2.5D).
 - The backend has the Bluesky bridge's engagement poller: it re-checks bridged posts against Bluesky, drops ones that are deleted, labelled NSFW or by authors who opted out (`!no-unauthenticated` or `#nobridge`), and lets a post into the feed once it has 50 likes, 10 reposts or an author with 5,000 followers. Thresholds are configurable. Not switched on yet (Phase 3 Unit 2.5D, Decision 0023).

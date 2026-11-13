@@ -50,6 +50,15 @@ export function bridgeAspectMin(): number {
   return envNumber('BRIDGE_ASPECT_MIN', 1);
 }
 
+/** A `true`/`false` setting, or `fallback` when unset; anything else is an error, not a guess. */
+export function envBool(name: string, fallback: boolean): boolean {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  throw new Error(`${name} must be true or false, not ${raw}`);
+}
+
 /** A positive number setting, or `fallback` when unset. */
 export function envNumber(name: string, fallback: number): number {
   const raw = process.env[name];
