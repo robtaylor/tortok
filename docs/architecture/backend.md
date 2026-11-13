@@ -83,7 +83,7 @@ The file begins by dropping the legacy native tables (`users`, `videos`, `hashta
 
 ## Bluesky bridge
 
-Two services, started and stopped together as `services/bskyBridge.ts`, run in this process when `BRIDGE_ENABLED=true` (default off, which also makes it the bridge's off switch): `services/bskyFirehose.ts` indexes candidates, and `services/bskyEngagementPoller.ts` checks them against Bluesky's AppView and decides which reach the feed (Decisions 0010 and 0023). Which authors are kept out is one rule both apply, `services/bridgePolicy.ts`.
+Two services, started and stopped together as `services/bskyBridge.ts`, run in this process when `BRIDGE_ENABLED=true` (default off, which also makes it the bridge's off switch; production sets it in `backend/fly.toml`): `services/bskyFirehose.ts` indexes candidates, and `services/bskyEngagementPoller.ts` checks them against Bluesky's AppView and decides which reach the feed (Decisions 0010 and 0023). Which authors are kept out is one rule both apply, `services/bridgePolicy.ts`.
 
 ### Firehose
 
@@ -147,7 +147,7 @@ Two services, started and stopped together as `services/bskyBridge.ts`, run in t
 | Part | Gap | Tracking |
 |---|---|---|
 | Account lifecycle | Jetstream `account` events (takedown, deactivation) are ignored, and known accounts are never removed. | Phase 4 |
-| Bluesky bridge | Built end to end: firehose, poller, the feed's HLS items and the client. It runs only with `BRIDGE_ENABLED=true`; the integration tests of step 22 are still to come. The attempt-1 tables are dropped on boot. | Phase 3 Unit 2.5D; [federation](federation.md) |
+| Bluesky bridge | Built end to end: firehose, poller, the feed's HLS items and the client. It runs only with `BRIDGE_ENABLED=true`, which production sets (from 2026-11-13); the integration tests of step 22 are still to come. The attempt-1 tables are dropped on boot. | Phase 3 Unit 2.5D; [federation](federation.md) |
 | Own PDS | No PDS is run; users log in against their existing PDS. | [`open-problems/own-pds.md`](open-problems/own-pds.md) |
 | Social graph | No follows or likes; they will reuse Bluesky's Lexicons. | Later phase |
 | View recording | Nothing records views. | [`open-problems/view-counting.md`](open-problems/view-counting.md), Phase 4 |

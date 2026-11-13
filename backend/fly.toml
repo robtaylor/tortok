@@ -24,6 +24,8 @@ kill_timeout = 10
   # AppView's public domain, which Cloudflare proxies and caches. The app
   # sits behind TLS-terminating proxies, so the request itself says http.
   PUBLIC_BASE_URL = "https://appview.tortok.app"
+  # Run the Bluesky bridge (Decision 0023). "false" is its off switch.
+  BRIDGE_ENABLED = "true"
 
 [http_service]
   internal_port = 8080
