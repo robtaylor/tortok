@@ -46,9 +46,10 @@ Each has a `Must resolve by:` header stating the phase that forces it.
   the device, which ranks moderated candidates from the AppView with an
   explainable, shareable recipe in a small bounded language.
 - **[`own-pds.md`](own-pds.md)** — parked. v1 uses users' existing atproto
-  identities (typically `bsky.social`); no tortok PDS is in scope. Documents the
-  costs we're avoiding, the risks taken on, and the triggers that would force a
-  revisit (and a new decision record).
+  identities (typically `bsky.social`); no tortok PDS is in scope. Documents
+  what a stock PDS covers and what running one would still cost, the risks
+  taken on, and the triggers that would force a revisit (and a new decision
+  record).
 
 ## Execution risks
 

@@ -16,28 +16,74 @@ amended 2026-04-29), Decision 0005 (backend evolves to AppView), Decision 0006
 TorTok's v1 architecture uses whichever PDS the user is already on
 — for the overwhelming majority that is `bsky.social`. We define our
 own Lexicon (`app.tortok.video.post`), run our own AppView, and write
-records into the user's existing repo via `@atproto/api`. We do not
-fork the reference PDS, we do not run signup ourselves, and we do not
-hold rotation keys.
+records into the user's existing repo via `@atproto/api`. We run no
+PDS, we do not run signup ourselves, and we do not hold rotation keys.
 
 This decision is reversible. The question is: **under what conditions
 would the cost of running our own PDS become worth it again?**
 
-## Costs we are currently avoiding
+## What running our own PDS would cost
 
-- Forking `bluesky-social/atproto`'s reference PDS and tracking
-  upstream forever.
-- Operating a second stateful service (PDS) alongside the AppView.
-- Choosing per-user upload quotas, which set the abuse surface and the
-  storage bill. Users' existing PDSes apply their own blob limits today.
-- Custodial rotation-key storage (KMS, audit logging, breach
-  surface).
-- Email/password auth: argon2id, email delivery on critical path,
-  reset tokens, verification.
-- Signup spam ladder (Turnstile, rate limits, account-age gating;
-  Decision 0007's original escalation ladder).
-- Lexicon governance — already an issue, but more pressing if we
-  sole-source storage.
+Checked on 2026-11-13 against the reference PDS's README and
+configuration source (`bluesky-social/pds`, `bluesky-social/atproto`) and
+the relay's source (`bluesky-social/indigo`). An earlier version of this
+file assumed a fork of the reference PDS. A fork isn't needed: Bluesky
+ships the PDS as a stock image, set up through environment variables.
+
+The stock image covers these by configuration:
+
+- Sign-in, sign-up and account pages, served by the PDS inside the OAuth
+  flow the app already uses. The app can ask for the sign-up page
+  (`prompt=create`).
+- Branding of those pages: the service's name, logo, colours, and its
+  terms and privacy links (`PDS_SERVICE_NAME`, `PDS_LOGO_URL`,
+  `PDS_PRIMARY_COLOR` and others).
+- Handles under our own domain (`PDS_SERVICE_HANDLE_DOMAINS`), which needs
+  a wildcard DNS record.
+- Email and password auth, with verification and resets, given an SMTP
+  service (`PDS_EMAIL_SMTP_URL`).
+- Signup gating by invite codes, on by default (`PDS_INVITE_REQUIRED`),
+  and by hCaptcha (`PDS_HCAPTCHA_*`). It has no Turnstile, which
+  Decision 0007 named.
+- Blobs on disk or on S3-compatible storage (`PDS_BLOBSTORE_S3_*`), under
+  one blob size limit for everyone (`PDS_BLOB_UPLOAD_LIMIT`, 300 MB by
+  default).
+- The PLC rotation key from a setting or from AWS KMS
+  (`PDS_PLC_ROTATION_KEY_KMS_KEY_ID`).
+- Hooks for a moderation service and a report service
+  (`PDS_MOD_SERVICE_URL`, `PDS_REPORT_SERVICE_URL`).
+
+These costs stay, fork or no fork:
+
+- A second stateful service, and this one is a source of truth. The
+  AppView's Postgres can be rebuilt from the network (Decision 0017). A
+  PDS can't: losing its disk loses users' repos and keys, so backups and
+  restores have to be proven.
+- Key custody. The PDS holds each account's signing key and a rotation
+  key for its `did:plc`.
+- Email delivery on the critical path.
+- Hosting duties. These are ordinary atproto accounts, so we'd host
+  whatever they post to any atproto app, not only tortok video. Takedowns
+  and abuse reports arrive at the PDS.
+- Signup spam. Invite codes and hCaptcha are the stock tools. Anything
+  more, such as the rest of Decision 0007's ladder, is ours to build in
+  front of them.
+- Relay limits. The relay software lets a new PDS host have 100 active
+  accounts by default (`RELAY_DEFAULT_ACCOUNT_LIMIT`), and gives hosts on
+  its trusted list more. What Bluesky's own relay is set to isn't known.
+  The AppView reads the network through Jetstream, which that relay
+  feeds, so accounts over the limit may not reach the feed.
+- Upgrades of the image, in place of tracking a fork.
+- Lexicon governance, which matters more if we are the only place the
+  records are stored.
+
+The stock image doesn't do these:
+
+- Per-user upload quotas. There is one blob limit for everyone.
+- Sign-up on native screens with atproto hidden, as Decision 0007 first
+  described. In the OAuth flow, sign-up happens on the PDS's web pages,
+  and the accounts have atproto handles. Calling the PDS's account API
+  from a native screen wasn't looked at.
 
 ## Risks we have taken on by punting
 
@@ -88,10 +134,18 @@ Any of these would make the trade flip:
 Listed roughly in increasing investment.
 
 - **Stay as-is.** No own-PDS, monitor triggers. (Current.)
-- **Run our own PDS as an alternative auth source.** "Sign up with
-  TorTok" alongside "sign in with Bluesky." Adds branded signup; keeps
-  the easy on-ramp for existing atproto users. Ratchets up cost
-  significantly (most of original Decision 0003/007 surface returns).
+- **A "create a Bluesky account" button at sign-in.** No PDS. The app
+  opens Bluesky's own sign-up page inside the OAuth flow, and the user
+  comes back signed in. `bsky.social` advertises `prompt=create`, and the
+  OAuth client takes a PDS address in place of a handle; both were read
+  from metadata and types on 2026-11-13, and neither was run. It answers
+  trigger 2 in part and trigger 3 not at all. Its own decision record is
+  to follow.
+- **Run a stock PDS as an alternative auth source.** "Sign up with
+  TorTok" alongside "sign in with Bluesky", on the unmodified reference
+  image. Adds branded signup; keeps the easy on-ramp for existing atproto
+  users. Little has to be built. The cost is being a host, as listed
+  above. The button of the previous candidate would point at it.
 - **Run our own PDS as the default, with Bluesky OAuth as a
   shortcut.** The original Decision 0006 Phase 3 plan, with an OAuth side
   door. Most expensive; gives us the most control.
@@ -112,4 +166,5 @@ Listed roughly in increasing investment.
 
 The right time to revisit is not "when it would be nice to control
 this" — it's "when one of the triggers above has materially fired."
-The cost of running our own PDS is high; the trigger should justify it.
+A stock PDS is cheap to start and costly to keep; the trigger should
+justify it.
