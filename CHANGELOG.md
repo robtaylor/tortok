@@ -42,6 +42,8 @@ deciding whether to upgrade.
 
 ### Changed
 
+- The Bluesky bridge keeps a bridged post for 30 days (`BRIDGE_RECHECK_DAYS`), re-checks it at least daily until then, and then deletes it. Before, a served post stayed in the feed unchecked once it was 30 days old, so an opt-out or label added later never reached it (Decision 0024).
+- The bridge counts a post's age from when it indexed the record, not from the date the record carries, so a backdated post gets the same checks as any other.
 - Native build logs are mostly quiet: dependencies' compiler warnings are suppressed at `expo prebuild` (iOS from about 3,700 to about 580, Android from about 730 to about 5). `TORTOK_NATIVE_WARNINGS=1` brings them back.
 - The backend and tracker run on Node 22 (was Node 18, out of support since April 2025), in their Docker images and in CI.
 - Production backend (`tortok-api` on Fly.io) keeps one machine running at all times, so the in-process origin seeder no longer stops when traffic idles.
@@ -69,6 +71,8 @@ deciding whether to upgrade.
 
 ### Fixed
 
+- The bridge's poller no longer takes an unreadable reply from Bluesky's AppView for an empty one. An empty answer is acted on, so such a reply would have deleted every post it asked about. The batch now fails and is retried.
+- An author who removes `#nobridge` or the `!no-unauthenticated` label is bridged again from their next video post. Before, an exclusion never lifted. Their earlier posts don't come back.
 - The scheduled production smoke check passes again: Cloudflare's Bot Fight Mode, which answered GitHub's runners with a challenge, is off for `tortok.app`. It had failed every scheduled run since the check moved to `appview.tortok.app` on 2026-11-12.
 - The Bluesky bridge removes every bridged post by an author who opts out (`!no-unauthenticated` or `#nobridge`), or whose account is labelled NSFW, as soon as it notices. Before, each post waited for its own next check, up to a day, and a post more than 30 days old stayed in the feed for good (Phase 3 Unit 2.5D, Decision 0023).
 - Pressing return in Profile's AppView field saves the address now in the field. Straight after a paste it could check the previous text instead and show that text's error.

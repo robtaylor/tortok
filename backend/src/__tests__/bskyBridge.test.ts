@@ -1,11 +1,12 @@
-// The Bluesky bridge end to end (plan 2.5D step 22, Decision 0023): commits in
-// as Jetstream messages on a stubbed socket, the engagement poller run against
-// a stubbed Bluesky AppView, and GET /videos/feed out. bskyFirehose.test.ts
-// and bskyEngagementPoller.test.ts cover each service's details; these check
-// what a viewer of the feed is served: nothing below the thresholds, nothing
-// labelled NSFW, nothing deleted on Bluesky, and nothing by an author who
-// opted out, which release-plan.md makes a Beta criterion. Against a real
-// Postgres (Decision 0016).
+// The Bluesky bridge end to end (plan 2.5D step 22, Decisions 0023 and 0024):
+// commits in as Jetstream messages on a stubbed socket, the engagement poller
+// run against a stubbed Bluesky AppView, and GET /videos/feed out.
+// bskyFirehose.test.ts and bskyEngagementPoller.test.ts cover each service's
+// details; these check what a viewer of the feed is served: nothing below the
+// thresholds, nothing labelled NSFW, nothing deleted on Bluesky, nothing the
+// bridge has stopped re-reading, and nothing by an author who opted out, which
+// release-plan.md makes a Beta criterion. Against a real Postgres (Decision
+// 0016).
 
 import { createTestDb, TestDb } from './helpers/testDb';
 // Type-only and db-free imports here: anything that loads ../db must wait
@@ -33,8 +34,9 @@ let server: TestServer;
 let poller: PollerT;
 /** What Bluesky's AppView says; tests change it between polls. */
 let appview: AppViewStub;
-/** How far the poller's clock is ahead of the real one. */
+/** How far the bridge's clock, the firehose's and the poller's, is ahead of the real one. */
 let ahead: number;
+const now = () => new Date(Date.now() + ahead);
 
 beforeAll(async () => {
   testDb = await createTestDb();
@@ -58,7 +60,7 @@ beforeEach(async () => {
   ahead = 0;
   poller = new Poller({
     fetch: fakeAppView(appview).fetch,
-    now: () => new Date(Date.now() + ahead),
+    now,
     thresholds: { minLikes: 50, minReposts: 10, minFollowers: 5000, qualifyDays: 7 },
     recheckDays: 30,
   });
@@ -72,7 +74,7 @@ const commit = (did: string, rkey: string, operation: string, record?: unknown, 
 /** Deliver commits as Jetstream does, as messages on a firehose's socket; stop() returns once all are handled. */
 async function jetstream(...events: object[]) {
   const { sockets, wsFactory } = fakeSockets();
-  const firehose = new Firehose({ wsFactory });
+  const firehose = new Firehose({ wsFactory, now });
   await firehose.start();
   for (const e of events) sockets[0].deliver(e);
   await firehose.stop();
@@ -94,29 +96,29 @@ interface Video {
   rkey: string;
   /** Record fields over the fixture's. */
   record?: Record<string, unknown>;
-  /** How long ago it was posted. */
-  ageMs?: number;
 }
 
 /**
  * Publish video posts on Bluesky: the AppView has each, with 500 likes (enough
  * to qualify, so a test that isn't about thresholds needn't say), and their
- * commits arrive on Jetstream. createdAt is relative to the real clock, since
- * the poller drops by age.
+ * commits arrive on Jetstream.
  */
 async function publish(...videos: Video[]) {
   for (const v of videos) view(v.did, v.rkey, { likeCount: 500 });
-  await jetstream(...videos.map((v) => commit(v.did, v.rkey, 'create',
-    videoRecord({ createdAt: new Date(Date.now() - (v.ageMs ?? HOUR)).toISOString(), ...v.record }))));
+  await jetstream(...videos.map((v) => commit(v.did, v.rkey, 'create', videoRecord(v.record))));
+}
+
+/** Let time pass on the bridge's clock. */
+function pass(ms: number) {
+  ahead += ms;
 }
 
 /**
  * One poll, a day and an hour after the last: later than any scheduled check,
- * so every post still in the queue is due, and every author's profile is read
- * again.
+ * so every bridged post is due, and every author's profile is read again.
  */
 async function poll() {
-  ahead += 25 * HOUR;
+  pass(25 * HOUR);
   return poller.runOnce();
 }
 
@@ -158,18 +160,20 @@ describe('thresholds', () => {
     await poll();
     expect(await feed()).toEqual(['a']);
 
-    await jetstream(commit(ALICE, 'a', 'update', videoRecord({ text: 'edited', createdAt: new Date().toISOString() }), 'bafyrec2'));
+    await jetstream(commit(ALICE, 'a', 'update', videoRecord({ text: 'edited' }), 'bafyrec2'));
     expect(await feed()).toEqual([]);
     await poll();
     expect(await feed()).toEqual(['a']);
   });
 
   test('a post that has not qualified within 7 days is dropped', async () => {
-    await publish({ did: ALICE, rkey: 'quiet', ageMs: 5 * DAY }, { did: BOB, rkey: 'liked', ageMs: 5 * DAY });
+    await publish({ did: ALICE, rkey: 'quiet' }, { did: BOB, rkey: 'liked' });
     view(ALICE, 'quiet', { likeCount: 3 });
     await poll();
+    pass(4 * DAY);
+    await poll(); // a little over 6 days since it was indexed
     expect(await indexed()).toEqual(['liked', 'quiet']);
-    await poll(); // now a little over 7 days old
+    await poll(); // a little over 7
     expect(await indexed()).toEqual(['liked']);
     expect(await feed()).toEqual(['liked']);
   });
@@ -207,13 +211,11 @@ describe('NSFW (Decision 0023 item 1)', () => {
   });
 
   test('an account a labeler labels NSFW loses every bridged post, and later ones are not indexed', async () => {
-    // 'old' is past the 30-day recheck horizon: it qualifies on its first
-    // check and is never due again.
-    await publish({ did: ALICE, rkey: 'old', ageMs: 40 * DAY }, { did: ALICE, rkey: 'new' }, { did: BOB, rkey: 'b' });
+    await publish({ did: ALICE, rkey: 'a1' }, { did: ALICE, rkey: 'a2' }, { did: BOB, rkey: 'b' });
     await poll();
-    expect(await feed()).toEqual(['b', 'new', 'old']);
+    expect(await feed()).toEqual(['a1', 'a2', 'b']);
 
-    view(ALICE, 'new', { likeCount: 500, author: { labels: [lbl(ALICE, 'porn')] } });
+    view(ALICE, 'a2', { likeCount: 500, author: { labels: [lbl(ALICE, 'porn')] } });
     await poll();
     expect(await feed()).toEqual(['b']);
     expect(await indexed()).toEqual(['b']);
@@ -242,16 +244,60 @@ describe('opt-out (Decision 0023 item 4)', () => {
   });
 
   test.each(SIGNALS)('%s, added once the author is in the feed: every bridged post of theirs goes', async (_signal, optOut) => {
-    // 'old' is past the 30-day recheck horizon, so no check of its own would
-    // ever remove it.
-    await publish({ did: ALICE, rkey: 'old', ageMs: 40 * DAY }, { did: ALICE, rkey: 'new' }, { did: BOB, rkey: 'b' });
+    await publish({ did: ALICE, rkey: 'a1' }, { did: ALICE, rkey: 'a2' }, { did: BOB, rkey: 'b' });
     await poll();
-    expect(await feed()).toEqual(['b', 'new', 'old']);
+    expect(await feed()).toEqual(['a1', 'a2', 'b']);
 
     profile(ALICE, optOut);
     await poll();
     expect(await feed()).toEqual(['b']);
     expect(await indexed()).toEqual(['b']);
+  });
+
+  test('an opt-out added when a post is 29 days old takes it out of the feed', async () => {
+    await publish({ did: ALICE, rkey: 'a' });
+    await poll();
+    pass(27 * DAY);
+    profile(ALICE, { description: '#nobridge' });
+    await poll();
+    expect(await feed()).toEqual([]);
+  });
+
+  test.each(SIGNALS)('%s, then removed: the author is indexed again from their next post', async (_signal, optOut) => {
+    profile(ALICE, optOut);
+    await publish({ did: ALICE, rkey: 'a' });
+    await poll();
+    expect(await indexed()).toEqual([]);
+
+    // Read within the day: still out, whatever their profile says now.
+    profile(ALICE, {});
+    await publish({ did: ALICE, rkey: 'b' });
+    expect(await indexed()).toEqual([]);
+
+    // A day on, their next post is held, unserved, until the poller has
+    // read them again. The earlier posts don't come back.
+    pass(25 * HOUR);
+    await publish({ did: ALICE, rkey: 'c' });
+    expect(await indexed()).toEqual(['c']);
+    expect(await feed()).toEqual([]);
+    await poll();
+    expect(await feed()).toEqual(['c']);
+  });
+
+  test('an author still opted out is read again once a day at most, and stays out', async () => {
+    profile(ALICE, { description: '#nobridge' });
+    await publish({ did: ALICE, rkey: 'a' });
+    await poll();
+
+    pass(25 * HOUR);
+    await publish({ did: ALICE, rkey: 'b' });
+    expect(await feed()).toEqual([]);
+    await poll();
+    expect(await indexed()).toEqual([]);
+
+    // Read again just now, so their next post is skipped.
+    await publish({ did: ALICE, rkey: 'c' });
+    expect(await indexed()).toEqual([]);
   });
 
   test("opting out of the bridge leaves the author's own tortok posts alone", async () => {
@@ -266,6 +312,31 @@ describe('opt-out (Decision 0023 item 4)', () => {
     profile(ALICE, { description: '#nobridge' });
     await poll();
     expect(await feed()).toEqual(['native']);
+  });
+});
+
+describe('the bridge keeps only posts it still re-reads (Decision 0024)', () => {
+  test('a served post is checked until it is 30 days old, then deleted', async () => {
+    await publish({ did: ALICE, rkey: 'a' });
+    await poll();
+    pass(27 * DAY);
+    await poll(); // a little over 29 days since it was indexed
+    expect(await feed()).toEqual(['a']);
+
+    await poll(); // a little over 30
+    expect(await feed()).toEqual([]);
+    expect(await indexed()).toEqual([]);
+  });
+
+  test('a backdated post is checked like any other', async () => {
+    // Its record says it is 40 days old; the bridge counts from when it indexed it.
+    await publish({ did: ALICE, rkey: 'old', record: { createdAt: new Date(Date.now() - 40 * DAY).toISOString() } });
+    await poll();
+    expect(await feed()).toEqual(['old']);
+
+    view(ALICE, 'old', { likeCount: 500, labels: [lbl(uri(ALICE, 'old'), 'porn')] });
+    await poll();
+    expect(await feed()).toEqual([]);
   });
 });
 

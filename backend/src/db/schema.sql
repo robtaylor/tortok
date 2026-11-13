@@ -74,11 +74,11 @@ CREATE INDEX IF NOT EXISTS idx_posts_info_hash ON posts (info_hash);
 -- Unit 2.5D: bridged app.bsky.feed.post rows (Decision 0023). The firehose
 -- indexes them unchecked and due (bridge_next_check_at = now). The
 -- engagement poller sets bridge_checked_at each time it re-reads the post
--- from Bluesky's AppView, bridge_next_check_at for when it should next (NULL:
--- no more checks), and bridge_qualified_at once the post has passed the
--- NSFW and opt-out checks and an engagement threshold. The feed serves a
--- bridged row only once bridge_qualified_at is set. All stay NULL on
--- app.tortok rows.
+-- from Bluesky's AppView, bridge_next_check_at for when it should next, and
+-- bridge_qualified_at once the post has passed the NSFW and opt-out checks
+-- and an engagement threshold. The feed serves a bridged row only once
+-- bridge_qualified_at is set. Every bridged row has a check due, until the
+-- poller deletes it (Decision 0024). All three stay NULL on app.tortok rows.
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS bridge_checked_at TIMESTAMPTZ;
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS bridge_qualified_at TIMESTAMPTZ;
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS bridge_next_check_at TIMESTAMPTZ;
@@ -90,6 +90,11 @@ DROP INDEX IF EXISTS idx_posts_bridge_checked;
 ALTER TABLE posts DROP COLUMN IF EXISTS hls_url;
 CREATE INDEX IF NOT EXISTS idx_posts_bridge_due
     ON posts (bridge_next_check_at) WHERE collection = 'app.bsky.feed.post';
+-- Before Decision 0024 the poller cleared bridge_next_check_at on a served
+-- row 30 days after its createdAt, and never looked at it again. Any such row
+-- goes back in the queue, where the poller deletes it or carries on checking.
+UPDATE posts SET bridge_next_check_at = NOW()
+ WHERE collection = 'app.bsky.feed.post' AND bridge_next_check_at IS NULL;
 -- The feed: servable rows only (native posts with a magnet, qualified bridged
 -- posts), in feed order, so a page reads its own rows and not the hundreds of
 -- thousands of unqualified bridged ones. Its predicate is feedView.ts's

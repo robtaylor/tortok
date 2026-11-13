@@ -7,12 +7,25 @@
 // - An author is excluded when `bridge_authors.nobridge` is set (#nobridge in
 //   their bio or display name), or `labels` holds a live label in the NSFW
 //   set, or the opt-out label, on their account.
+//
+// What's stored about an author is only as fresh as the poller's last read of
+// their profile. authorReadIsFresh is the one rule for how long a read
+// stands: the poller reads an author again once it lapses, and the firehose
+// acts on an exclusion only until it does (Decision 0024 item 3). The two
+// must agree, or an author who opted back in is never read again.
 
 import type { QueryFn } from '../db';
 import { BSKY_POST_NSID } from '../atproto/bskyPost';
 import { accountSubjects, labelledAny, OPT_OUT_LABEL } from '../atproto/labels';
 
 const NOBRIDGE_RE = /#nobridge\b/i;
+
+const AUTHOR_READ_MS = 24 * 60 * 60_000;
+
+/** Whether a read of an author's profile at `refreshedAt` still stands at `now`. */
+export function authorReadIsFresh(refreshedAt: Date, now: Date): boolean {
+  return now.getTime() - refreshedAt.getTime() < AUTHOR_READ_MS;
+}
 
 /** `#nobridge` in a bio or display name (Decision 0023 item 4). */
 export function saysNoBridge(...texts: (string | null | undefined)[]): boolean {
@@ -23,10 +36,27 @@ export function postExcluded(db: QueryFn, uri: string, nsfwLabels: ReadonlySet<s
   return labelledAny(db, [uri], nsfwLabels);
 }
 
+const accountLabelled = (db: QueryFn, did: string, nsfwLabels: ReadonlySet<string>) =>
+  labelledAny(db, accountSubjects(did), [...nsfwLabels, OPT_OUT_LABEL]);
+
+/** Whether what's stored excludes this author. The poller asks this straight after reading them. */
 export async function authorExcluded(db: QueryFn, did: string, nsfwLabels: ReadonlySet<string>): Promise<boolean> {
   const [row] = await db<{ nobridge: boolean }>('SELECT nobridge FROM bridge_authors WHERE did = $1', [did]);
   if (row?.nobridge) return true;
-  return labelledAny(db, accountSubjects(did), [...nsfwLabels, OPT_OUT_LABEL]);
+  return accountLabelled(db, did, nsfwLabels);
+}
+
+/**
+ * Whether the firehose should act on a stored exclusion: the author is
+ * excluded, and the poller's read of them still stands. False for an author
+ * it has never read, or not lately, whatever is stored: their post is indexed
+ * instead, so its first check reads them again.
+ */
+export async function exclusionStands(db: QueryFn, did: string, nsfwLabels: ReadonlySet<string>, now: Date): Promise<boolean> {
+  const [row] = await db<{ nobridge: boolean; refreshed_at: Date }>(
+    'SELECT nobridge, refreshed_at FROM bridge_authors WHERE did = $1', [did]);
+  if (!row || !authorReadIsFresh(row.refreshed_at, now)) return false;
+  return row.nobridge || accountLabelled(db, did, nsfwLabels);
 }
 
 /** Delete a bridged row if there is one; true if there was. */

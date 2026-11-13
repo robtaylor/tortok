@@ -1,7 +1,7 @@
-// The bridge's engagement poller (plan 2.5D step 18, Decision 0023): labels
-// stored, NSFW/gone/opted-out rows dropped, thresholds, the 7-day cutoff and
-// the decaying schedule. Against a real Postgres (Decision 0016); Bluesky's
-// AppView is stubbed.
+// The bridge's engagement poller (plan 2.5D step 18, Decisions 0023 and
+// 0024): labels stored, NSFW/gone/opted-out rows dropped, thresholds, the
+// 7-day cutoff, the decaying schedule and the 30 days a post is kept.
+// Against a real Postgres (Decision 0016); Bluesky's AppView is stubbed.
 
 import { createTestDb, TestDb } from './helpers/testDb';
 // Type-only and db-free imports here: anything that loads ../db must wait
@@ -16,6 +16,7 @@ const ALICE = 'did:plc:aaaaaaaaaaaaaaaaaaaaaaaa';
 const BOB = 'did:plc:bbbbbbbbbbbbbbbbbbbbbbbb';
 const NOW = new Date('2026-11-12T12:00:00Z');
 const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
 const MIN = 60_000;
 
 let testDb: TestDb;
@@ -44,12 +45,13 @@ beforeEach(async () => {
 
 afterEach(() => jest.restoreAllMocks());
 
-/** Insert a bridged row as the firehose would (due at once), `ageMs` old. */
-async function bridged(did: string, rkey: string, ageMs = HOUR, dueAt = new Date(NOW.getTime() - ageMs)) {
+/** Insert a bridged row as the firehose would, indexed and dated `ageMs` ago, and due since then unless `dueAt` says otherwise. */
+async function bridged(did: string, rkey: string, ageMs = HOUR, dueAt?: Date) {
+  const indexedAt = new Date(NOW.getTime() - ageMs);
   await db.query(
-    `INSERT INTO posts (at_uri, did, collection, rkey, cid, video_cid, width, height, record_created_at, bridge_next_check_at)
-     VALUES ($1, $2, $3, $4, 'bafyrec', 'bafyvid', 9, 16, $5, $6)`,
-    [uri(did, rkey), did, NSID, rkey, new Date(NOW.getTime() - ageMs), dueAt]);
+    `INSERT INTO posts (at_uri, did, collection, rkey, cid, video_cid, width, height, record_created_at, indexed_at, bridge_next_check_at)
+     VALUES ($1, $2, $3, $4, 'bafyrec', 'bafyvid', 9, 16, $5, $5, $6)`,
+    [uri(did, rkey), did, NSID, rkey, indexedAt, dueAt ?? indexedAt]);
 }
 
 function makePoller(stub: AppViewStub, opts: PollerOptions = {}) {
@@ -57,6 +59,7 @@ function makePoller(stub: AppViewStub, opts: PollerOptions = {}) {
   const poller = new Poller({
     fetch, now: () => NOW,
     thresholds: { minLikes: 50, minReposts: 10, minFollowers: 5000, qualifyDays: 7 },
+    recheckDays: 30,
     ...opts,
   });
   return { poller, calls };
@@ -67,7 +70,7 @@ const row = (u: string) => db.query<Record<string, any>>('SELECT * FROM posts WH
 test('nextCheckDelayMs is half the age, between 15 minutes and a day', () => {
   expect(nextCheckDelayMs(0)).toBe(15 * MIN);
   expect(nextCheckDelayMs(4 * HOUR)).toBe(2 * HOUR);
-  expect(nextCheckDelayMs(10 * 24 * HOUR)).toBe(24 * HOUR);
+  expect(nextCheckDelayMs(10 * DAY)).toBe(DAY);
 });
 
 test('saysNoBridge finds #nobridge in any of the texts', () => {
@@ -101,7 +104,7 @@ test('drops a post gone from the AppView, labelled NSFW, or unqualified after 7 
   await bridged(ALICE, 'gone');
   await bridged(ALICE, 'porn');
   await bridged(ALICE, 'negated');
-  await bridged(ALICE, 'old', 8 * 24 * HOUR);
+  await bridged(ALICE, 'old', 8 * DAY);
   const { poller } = makePoller({
     posts: [
       postView(uri(ALICE, 'porn'), { likeCount: 500, labels: [lbl(uri(ALICE, 'porn'), 'porn', MOD, { cid: 'bafyrec' })] }),
@@ -119,17 +122,36 @@ test('drops a post gone from the AppView, labelled NSFW, or unqualified after 7 
   ]);
 });
 
-test('a qualified post that ages past 7 days stays, on a daily schedule, until the recheck horizon', async () => {
-  await bridged(ALICE, 'q', 10 * 24 * HOUR);
-  await bridged(ALICE, 'old', 31 * 24 * HOUR);
-  await db.query('UPDATE posts SET bridge_qualified_at = $1', [new Date(NOW.getTime() - 9 * 24 * HOUR)]);
+test('a qualified post that ages past 7 days stays, on a daily schedule, until it is 30 days old; then it is deleted', async () => {
+  await bridged(ALICE, 'q', 10 * DAY);
+  await bridged(ALICE, 'old', 31 * DAY);
+  await db.query('UPDATE posts SET bridge_qualified_at = $1', [new Date(NOW.getTime() - 9 * DAY)]);
   const { poller } = makePoller(
-    { posts: [postView(uri(ALICE, 'q')), postView(uri(ALICE, 'old'))], profiles: [profileView(ALICE)] },
-    { recheckDays: 30 });
-  expect(await poller.runOnce()).toEqual({ checked: 2, qualified: 0, dropped: 0 });
-  expect((await row(uri(ALICE, 'q'))).bridge_next_check_at).toEqual(new Date(NOW.getTime() + 24 * HOUR));
-  // Past 30 days: out of the queue, still served.
-  expect(await row(uri(ALICE, 'old'))).toMatchObject({ bridge_next_check_at: null, bridge_checked_at: NOW });
+    { posts: [postView(uri(ALICE, 'q')), postView(uri(ALICE, 'old'))], profiles: [profileView(ALICE)] });
+  expect(await poller.runOnce()).toEqual({ checked: 2, qualified: 0, dropped: 1 });
+  expect((await row(uri(ALICE, 'q'))).bridge_next_check_at).toEqual(new Date(NOW.getTime() + DAY));
+  // Past 30 days it goes, rather than staying in the feed unchecked (Decision 0024 item 1).
+  expect(await row(uri(ALICE, 'old'))).toBeUndefined();
+});
+
+test("a post's age counts from when the bridge indexed it, not from its createdAt", async () => {
+  // Both indexed an hour ago. One is dated 40 days back, past the 30 days;
+  // the other 8 days back, past the 7 it has to qualify.
+  await bridged(BOB, 'famous');
+  await bridged(ALICE, 'quiet');
+  const dated = (rkey: string, daysAgo: number) =>
+    db.query('UPDATE posts SET record_created_at = $1 WHERE rkey = $2', [new Date(NOW.getTime() - daysAgo * DAY), rkey]);
+  await dated('famous', 40);
+  await dated('quiet', 8);
+  const { poller } = makePoller({
+    posts: [postView(uri(BOB, 'famous')), postView(uri(ALICE, 'quiet'), { likeCount: 3 })],
+    profiles: [profileView(ALICE), profileView(BOB, { followersCount: 5000 })],
+  });
+  expect(await poller.runOnce()).toEqual({ checked: 2, qualified: 1, dropped: 0 });
+  // Each is checked again in 30 minutes, like any post indexed an hour ago.
+  for (const u of [uri(BOB, 'famous'), uri(ALICE, 'quiet')]) {
+    expect((await row(u)).bridge_next_check_at).toEqual(new Date(NOW.getTime() + 30 * MIN));
+  }
 });
 
 test('opted-out authors are recorded and their posts dropped: !no-unauthenticated or #nobridge', async () => {
@@ -154,9 +176,9 @@ test("an excluded author's bridged posts all go, due or not; their tortok posts 
   const inAnHour = new Date(NOW.getTime() + HOUR);
   await bridged(ALICE, 'due');
   await bridged(ALICE, 'later', HOUR, inAnHour);
-  // Qualified and past the recheck horizon: never due again.
-  await bridged(ALICE, 'settled', 40 * 24 * HOUR);
-  await db.query(`UPDATE posts SET bridge_qualified_at = $1, bridge_next_check_at = NULL WHERE rkey = 'settled'`, [NOW]);
+  // Served, and checked a moment ago.
+  await bridged(ALICE, 'served', 20 * DAY, new Date(NOW.getTime() + DAY));
+  await db.query(`UPDATE posts SET bridge_qualified_at = $1 WHERE rkey = 'served'`, [NOW]);
   await bridged(BOB, 'b', HOUR, inAnHour);
   const native = `at://${ALICE}/${VIDEO_POST_NSID}/native`;
   await db.query(
@@ -212,6 +234,28 @@ test('authors are refreshed at most daily, and a removed profile self-label is d
   expect((await db.query('SELECT handle FROM bridge_authors'))[0]).toEqual({ handle: null });
 });
 
+test('an author the AppView does not return counts as read, and keeps what is stored', async () => {
+  await bridged(ALICE, 'a');
+  await bridged(BOB, 'b');
+  await db.query(
+    `INSERT INTO bridge_authors (did, handle, followers_count, refreshed_at) VALUES ($1, 'bob.test', 7000, $2)`,
+    [BOB, new Date(NOW.getTime() - 25 * HOUR)]);
+  // Neither profile comes back: ALICE was never read, BOB's row is a day old.
+  const stub: AppViewStub = { posts: [postView(uri(ALICE, 'a')), postView(uri(BOB, 'b'))], profiles: [] };
+  const first = makePoller(stub);
+  expect(await first.poller.runOnce()).toEqual({ checked: 2, qualified: 1, dropped: 0 });
+  expect(await db.query('SELECT did, handle, followers_count, refreshed_at FROM bridge_authors ORDER BY did')).toEqual([
+    { did: ALICE, handle: null, followers_count: null, refreshed_at: NOW },
+    { did: BOB, handle: 'bob.test', followers_count: 7000, refreshed_at: NOW },
+  ]);
+
+  // Due again the same day: neither is asked for again.
+  await db.query('UPDATE posts SET bridge_next_check_at = $1', [NOW]);
+  const again = makePoller(stub);
+  await again.poller.runOnce();
+  expect(again.calls.map((c) => c.method)).toEqual(['app.bsky.feed.getPosts']);
+});
+
 test('an AppView error throws and leaves the batch due', async () => {
   await bridged(ALICE, 'a');
   const { poller } = makePoller({ posts: [], profiles: [], status: 429 });
@@ -219,13 +263,31 @@ test('an AppView error throws and leaves the batch due', async () => {
   expect(await row(uri(ALICE, 'a'))).toMatchObject({ bridge_checked_at: null, bridge_next_check_at: new Date(NOW.getTime() - HOUR) });
 });
 
-test('takes at most 25 due posts, longest-due first, and skips ones not due or out of the queue', async () => {
+test('a reply without the list throws, rather than passing for an empty one', async () => {
+  await bridged(ALICE, 'a');
+  // A 200 whose body isn't the method's: read as "no posts", it would delete
+  // the row as gone, and mark its author read for the day.
+  const poller = new Poller({
+    fetch: (async () => Response.json({ message: 'try later' })) as typeof globalThis.fetch,
+    now: () => NOW,
+    thresholds: { minLikes: 50, minReposts: 10, minFollowers: 5000, qualifyDays: 7 },
+  });
+  await expect(poller.runOnce()).rejects.toThrow('app.bsky.feed.getPosts returned no posts list');
+  expect(await row(uri(ALICE, 'a'))).toMatchObject({ bridge_checked_at: null });
+  expect(await db.query('SELECT did FROM bridge_authors')).toEqual([]);
+});
+
+test('refuses a post lifetime shorter than the time a post has to qualify', () => {
+  expect(() => makePoller({ posts: [], profiles: [] }, { recheckDays: 5 }))
+    .toThrow('BRIDGE_RECHECK_DAYS (5) is less than BRIDGE_QUALIFY_DAYS (7)');
+});
+
+test('takes at most 25 due posts, longest-due first, and skips ones not due', async () => {
   // p00 is due last, p29 first.
   for (let i = 0; i < 30; i++) await bridged(ALICE, `p${String(i).padStart(2, '0')}`, HOUR, new Date(NOW.getTime() - (i + 1) * MIN));
   await db.query(`UPDATE posts SET bridge_next_check_at = $1 WHERE rkey = 'p29'`, [new Date(NOW.getTime() + MIN)]);
-  await db.query(`UPDATE posts SET bridge_next_check_at = NULL WHERE rkey = 'p28'`);
   const { poller, calls } = makePoller({ posts: [], profiles: [] });
   await poller.runOnce();
   const asked = calls.find((c) => c.method === 'app.bsky.feed.getPosts')!.params;
-  expect(asked).toEqual(Array.from({ length: 25 }, (_, i) => uri(ALICE, `p${27 - i}`.replace(/^p(\d)$/, 'p0$1'))));
+  expect(asked).toEqual(Array.from({ length: 25 }, (_, i) => uri(ALICE, `p${String(28 - i).padStart(2, '0')}`)));
 });
