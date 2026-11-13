@@ -16,11 +16,14 @@ function AppViewSetting() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const save = async () => {
+  // Takes the text to save rather than reading `draft`: return can arrive
+  // before onChangeText's update has re-rendered (a paste then return, or
+  // Detox's replaceText), and `draft` here would still be the old text.
+  const save = async (text: string) => {
     setError(null);
     setSaving(true);
     try {
-      setDraft(await setUrl(draft));
+      setDraft(await setUrl(text));
     } catch (e) {
       setError(e instanceof AppViewUrlError ? e.message : 'Couldn’t save the AppView');
     } finally {
@@ -48,13 +51,13 @@ function AppViewSetting() {
         autoCorrect={false}
         keyboardType="url"
         returnKeyType="done"
-        onSubmitEditing={save}
+        onSubmitEditing={(e) => save(e.nativeEvent.text)}
         testID="appViewUrlField"
       />
       {error ? <Text style={authStyles.error} testID="appViewError">{error}</Text> : null}
       <TouchableOpacity
         style={[authStyles.button, saving && authStyles.buttonDisabled]}
-        onPress={save}
+        onPress={() => save(draft)}
         disabled={saving}
         testID="appViewSaveButton"
       >

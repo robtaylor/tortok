@@ -68,10 +68,11 @@ export async function signIn(network = testNetwork(), password = network.appPass
 }
 
 /**
- * Set a text field, then close the keyboard: it opens on focus and would
- * cover the fields and button below.
+ * Type into a field and submit it with the return key, then give the keyboard
+ * time to close. The return arrives right after replaceText, before React has
+ * re-rendered, so a field's submit handler must read the event's text, not
+ * its state (profile.tsx, login.tsx).
  */
-/** Type into a field and submit it, then give the keyboard time to close. */
 export async function fill(id: string, text: string) {
   await element(by.id(id)).replaceText(text);
   await element(by.id(id)).tapReturnKey();
