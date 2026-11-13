@@ -18,3 +18,22 @@ export function validRecord(overrides: Record<string, unknown> = {}): Record<str
     ...overrides,
   };
 }
+
+/** A bridged-video candidate's video blob CID (base32 CIDv1). */
+export const VIDEO_CID = 'bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku';
+
+/** An app.bsky.feed.post with a portrait video embed, as Jetstream delivers it. */
+export function videoRecord(over: Record<string, unknown> = {}, aspectRatio: unknown = { width: 9, height: 16 }) {
+  return {
+    $type: 'app.bsky.feed.post',
+    text: 'a clip #cats',
+    createdAt: '2026-11-12T10:00:00.000Z',
+    facets: [{ index: { byteStart: 7, byteEnd: 12 }, features: [{ $type: 'app.bsky.richtext.facet#tag', tag: 'cats' }] }],
+    embed: {
+      $type: 'app.bsky.embed.video',
+      video: { $type: 'blob', ref: { $link: VIDEO_CID }, mimeType: 'video/mp4', size: 1_000_000 },
+      aspectRatio,
+    },
+    ...over,
+  };
+}

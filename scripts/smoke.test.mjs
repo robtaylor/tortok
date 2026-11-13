@@ -33,6 +33,9 @@ const defaults = () => ({
   file: FILE,
   ignoreRange: false,
   turn: { iceServers: [{ urls: 'stun:x:3478' }, { urls: 'turn:x:3478', username: 'u', credential: 'c' }] },
+  // Bridged items (Decision 0010): none by default; `b` is the stub's base URL.
+  hls: () => [],
+  playlist: '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\n360p/video.m3u8\n',
 });
 
 const server = createServer((req, res) => {
@@ -48,8 +51,12 @@ const server = createServer((req, res) => {
         id: 'v1',
         posterURL: `${base}/files/poster.jpg`,
         playback: { kind: 'torrent', magnetLink: state.magnet(base), torrentFileUrl: state.torrentFileUrl(base), sources: state.sources(base) },
-      }],
+      }, ...state.hls(base)],
     });
+  }
+  if (req.url === '/hls/playlist.m3u8') {
+    res.writeHead(200, { 'content-type': 'application/vnd.apple.mpegurl' });
+    return res.end(state.playlist);
   }
   if (req.url === '/files/poster.jpg') {
     res.writeHead(200, { 'content-type': state.posterType });
@@ -92,6 +99,41 @@ test('passes against a correctly populated backend', async () => {
   assert.equal(code, 0, out);
   assert.match(out, /ok {4}webseed: v1 — 1 webseed\(s\); pieces 0 and 178 of 179 verified/);
   assert.match(out, /all checks passed/);
+});
+
+const hlsItem = (url, id = 'b1') => ({ id, playback: { kind: 'hls', url } });
+
+test('checks a bridged HLS item alongside torrent items', async () => {
+  state = { ...defaults(), hls: (b) => [hlsItem(`${b}/hls/playlist.m3u8`)] };
+  const { code, out } = await smoke();
+  assert.equal(code, 0, out);
+  assert.match(out, /ok {4}contract: feed — 2 item\(s\)/);
+  assert.match(out, /ok {4}webseed: v1/);
+  assert.match(out, /ok {4}hls: b1 — playlist ok \(1 entries\)/);
+});
+
+test("only warns when one of Bluesky's playlists doesn't load", async () => {
+  state = { ...defaults(), hls: (b) => [hlsItem(`${b}/hls/missing.m3u8`), hlsItem(`${b}/hls/playlist.m3u8`, 'b2')] };
+  const { code, out } = await smoke();
+  assert.equal(code, 0, out);
+  assert.match(out, /WARN  hls: b1 — playlist: HTTP 404/);
+  assert.match(out, /ok {4}hls: b2/);
+  assert.match(out, /all checks passed/);
+});
+
+test('fails when no HLS item loads', async () => {
+  state = { ...defaults(), hls: (b) => [hlsItem(`${b}/hls/missing.m3u8`), hlsItem(`${b}/hls/playlist.m3u8`, 'b2')], playlist: 'not a playlist' };
+  const { code, out } = await smoke();
+  assert.equal(code, 1, out);
+  assert.match(out, /WARN  hls: b2 — playlist is not an HLS playlist/);
+  assert.match(out, /FAIL  hls: none of the 2 checked item\(s\) passed/);
+});
+
+test('fails an HLS item without a URL', async () => {
+  state = { ...defaults(), hls: () => [{ id: 'b1', playback: { kind: 'hls' } }] };
+  const { code, out } = await smoke();
+  assert.equal(code, 1);
+  assert.match(out, /FAIL  contract: feed — \/videos\/feed: item b1 has an HLS playback without an http\(s\) URL/);
 });
 
 test('verifies pieces when the webseed ignores Range', async () => {

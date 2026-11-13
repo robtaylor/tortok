@@ -7,27 +7,12 @@ import { createTestDb, TestDb } from './helpers/testDb';
 import { hlsUrl, parseBskyVideoPost } from '../atproto/bskyPost';
 import type { BskyFirehose as BskyFirehoseT } from '../services/bskyFirehose';
 import { fakeSockets } from './helpers/fakeSocket';
+import { VIDEO_CID, videoRecord } from './helpers/fixtures';
+
+const NOW = new Date('2026-11-12T12:00:00Z');
 
 const NSID = 'app.bsky.feed.post';
 const ALICE = 'did:plc:aaaaaaaaaaaaaaaaaaaaaaaa';
-const VIDEO_CID = 'bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku';
-const NOW = new Date('2026-11-12T12:00:00Z');
-
-function videoRecord(over: Record<string, unknown> = {}, aspectRatio: unknown = { width: 9, height: 16 }) {
-  return {
-    $type: NSID,
-    text: 'a clip #cats',
-    createdAt: '2026-11-12T10:00:00.000Z',
-    facets: [{ index: { byteStart: 7, byteEnd: 12 }, features: [{ $type: 'app.bsky.richtext.facet#tag', tag: 'cats' }] }],
-    embed: {
-      $type: 'app.bsky.embed.video',
-      video: { $type: 'blob', ref: { $link: VIDEO_CID }, mimeType: 'video/mp4', size: 1_000_000 },
-      aspectRatio,
-    },
-    ...over,
-  };
-}
-
 const selfLabelled = (...vals: string[]) => videoRecord({ labels: { $type: 'com.atproto.label.defs#selfLabels', values: vals.map((val) => ({ val })) } });
 
 describe('parseBskyVideoPost', () => {

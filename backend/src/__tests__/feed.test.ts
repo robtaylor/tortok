@@ -7,8 +7,9 @@ import express from 'express';
 import type { AddressInfo } from 'net';
 import type { Identity, Profile } from '../atproto/identity';
 import { createTestDb, TestDb } from './helpers/testDb';
-import { validRecord } from './helpers/fixtures';
+import { validRecord, VIDEO_CID, videoRecord } from './helpers/fixtures';
 import { VIDEO_POST_NSID } from '../atproto/videoPost';
+import { BSKY_POST_NSID } from '../atproto/bskyPost';
 
 const NSID = VIDEO_POST_NSID;
 const ALICE = 'did:plc:aaaaaaaaaaaaaaaaaaaaaaaa';
@@ -19,6 +20,7 @@ const BLOB_BASE = 'https://appview.example.com';
 let testDb: TestDb;
 let db: typeof import('../db');
 let ingest: import('../services/atprotoIngest').AtprotoIngest;
+let firehose: import('../services/bskyFirehose').BskyFirehose;
 let server: http.Server;
 let base: string;
 
@@ -44,6 +46,8 @@ beforeAll(async () => {
     wsFactory: () => { throw new Error('no Jetstream in tests'); },
     fetch: (async () => new Response('{}', { status: 404 })) as typeof fetch,
   });
+  const { BskyFirehose } = await import('../services/bskyFirehose');
+  firehose = new BskyFirehose({ wsFactory: () => { throw new Error('no Jetstream in tests'); } });
   const app = express();
   app.use('/videos', (await import('../routes/videos')).default);
   server = app.listen(0);
@@ -58,7 +62,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await db.query('TRUNCATE posts, profiles, ingest_cursor, known_accounts');
+  await db.query('TRUNCATE posts, profiles, ingest_cursor, known_accounts, bridge_authors, labels');
   for (const level of ['log', 'warn', 'error'] as const) jest.spyOn(console, level).mockImplementation(() => {});
 });
 
@@ -132,6 +136,87 @@ describe('GET /videos/feed', () => {
 
   it('serves nothing when nothing is indexed', async () => {
     expect((await getJson('/videos/feed')).body).toEqual({ videos: [], nextCursor: null, hasMore: false });
+  });
+});
+
+// Bridged rows go in through the firehose, as in production; the UPDATE
+// stands in for the engagement poller qualifying them.
+const BSKY = BSKY_POST_NSID;
+async function bridged(did: string, rkey: string, createdAt: string, qualified = true) {
+  const record = videoRecord({ text: 'from bluesky', createdAt }, { width: 1080, height: 1920 });
+  await firehose.handleEvent({ did, time_us: 1, kind: 'commit', commit: { operation: 'create', collection: BSKY, rkey, cid: 'bafyrec', record } });
+  if (qualified) await db.query('UPDATE posts SET bridge_qualified_at = NOW() WHERE at_uri = $1', [`at://${did}/${BSKY}/${rkey}`]);
+}
+
+describe('GET /videos/feed: bridged Bluesky posts', () => {
+  const CAROL = 'did:plc:cccccccccccccccccccccccc';
+
+  it('serves qualified bridged posts as HLS, interleaved with native posts by createdAt', async () => {
+    await index(ALICE, 'native', validRecord({ createdAt: '2026-11-02T00:00:00.000Z' }));
+    await bridged(CAROL, 'newer', '2026-11-03T00:00:00.000Z');
+    await bridged(CAROL, 'older', '2026-11-01T00:00:00.000Z');
+    await bridged(CAROL, 'unqualified', '2026-11-04T00:00:00.000Z', false);
+    await db.query(
+      `INSERT INTO bridge_authors (did, handle, display_name, avatar_url, followers_count)
+       VALUES ($1, 'carol.bsky.social', 'Carol', 'https://cdn.bsky.app/img/avatar/plain/carol', 9000)`, [CAROL]);
+
+    const { body } = await getJson('/videos/feed');
+    expect(body.videos.map((v: { id: string }) => v.id.split('/').pop())).toEqual(['newer', 'native', 'older']);
+    const item = body.videos[0];
+    expect(item).toEqual({
+      id: `at://${CAROL}/${BSKY}/newer`,
+      cid: 'bafyrec',
+      author: { did: CAROL, handle: 'carol.bsky.social', displayName: 'Carol', avatarURL: 'https://cdn.bsky.app/img/avatar/plain/carol' },
+      caption: 'from bluesky',
+      playback: { kind: 'hls', url: `https://video.bsky.app/watch/did%3Aplc%3Acccccccccccccccccccccccc/${VIDEO_CID}/playlist.m3u8` },
+      posterURL: `https://video.bsky.app/watch/did%3Aplc%3Acccccccccccccccccccccccc/${VIDEO_CID}/thumbnail.jpg`,
+      durationSeconds: 0,
+      width: 1080,
+      height: 1920,
+      hashtags: ['#cats'],
+      createdAt: '2026-11-03T00:00:00.000Z',
+    });
+    expect(body.videos[1].playback.kind).toBe('torrent');
+
+    const one = await getJson(`/videos/${encodeURIComponent(`at://${CAROL}/${BSKY}/older`)}`);
+    expect(one.body).toMatchObject({ playback: { kind: 'hls' } });
+    const hidden = await getJson(`/videos/${encodeURIComponent(`at://${CAROL}/${BSKY}/unqualified`)}`);
+    expect(hidden.status).toBe(404);
+  });
+
+  it('reads a page from the feed index, not by scanning bridged rows', async () => {
+    // A tiny table gets a seq scan or a bitmap scan plus sort, so turn those
+    // off: what's left shows that the WHERE clause still matches
+    // idx_posts_feed's predicate and that the index gives feed order.
+    const { FEED_PAGE_SQL } = await import('../services/feedView');
+    const { Client } = await import('pg');
+    const c = new Client({ connectionString: process.env.DATABASE_URL });
+    await c.connect();
+    try {
+      await c.query('SET enable_seqscan = off; SET enable_bitmapscan = off');
+      const plan = (await c.query(`EXPLAIN ${FEED_PAGE_SQL}`, [20, 0])).rows.map((r) => r['QUERY PLAN']).join('\n');
+      expect(plan).toMatch(/Index Scan using idx_posts_feed/);
+      expect(plan).not.toMatch(/Sort/);
+    } finally {
+      await c.end();
+    }
+  });
+
+  it("uses the author's profiles row over bridge_authors, and copes with neither", async () => {
+    // Direct, not through ingest: its in-memory freshness cache outlives TRUNCATE.
+    await db.query(
+      `INSERT INTO profiles (did, handle, display_name, avatar_cid, pds_endpoint)
+       VALUES ($1, 'alice.example.com', 'Alice', 'bafkavatar', $2)`, [ALICE, PDS]);
+    await bridged(ALICE, 'bsky', '2026-11-03T00:00:00.000Z');
+    await bridged(CAROL, 'anon', '2026-11-02T00:00:00.000Z');
+    await db.query(`INSERT INTO bridge_authors (did, handle) VALUES ($1, 'alice.bsky.social')`, [ALICE]);
+
+    const { body } = await getJson('/videos/feed');
+    const byRkey = Object.fromEntries(body.videos.map((v: { id: string }) => [v.id.split('/').pop(), v]));
+    expect(byRkey.bsky.author).toEqual({
+      did: ALICE, handle: 'alice.example.com', displayName: 'Alice', avatarURL: `${BLOB_BASE}/blob/${ALICE}/bafkavatar`,
+    });
+    expect(byRkey.anon.author).toEqual({ did: CAROL, handle: null, displayName: null, avatarURL: null });
   });
 });
 
