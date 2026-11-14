@@ -6,7 +6,7 @@ import type { Identity, Profile } from '../atproto/identity';
 import { createTestDb, TestDb } from './helpers/testDb';
 import { commitEvent } from './helpers/fakeSocket';
 import { feedRkeys, startFeedServer, TestServer } from './helpers/testServer';
-import { validRecord, VIDEO_CID, videoRecord } from './helpers/fixtures';
+import { bskyPostUri, validRecord, VIDEO_CID, videoRecord } from './helpers/fixtures';
 import { VIDEO_POST_NSID } from '../atproto/videoPost';
 import { BSKY_POST_NSID } from '../atproto/bskyPost';
 
@@ -173,6 +173,35 @@ describe('GET /videos/feed: bridged Bluesky posts', () => {
     expect(hidden.status).toBe(404);
   });
 
+  /** Set when a bridged post's next check is due, as an interval from now; null for no date. */
+  const checkDue = (rkey: string, due: string | null) =>
+    db.query('UPDATE posts SET bridge_next_check_at = NOW() + $2::interval WHERE at_uri = $1', [bskyPostUri(CAROL, rkey), due]);
+  const byId = (rkey: string) => server.getJson(`/videos/${encodeURIComponent(bskyPostUri(CAROL, rkey))}`);
+
+  it('leaves out a bridged post whose check is more than a day overdue, in the feed and by id (Decision 0025)', async () => {
+    await index(ALICE, 'native', validRecord({ createdAt: '2026-11-05T00:00:00.000Z' }));
+    await bridged(CAROL, 'late', '2026-11-03T00:00:00.000Z');
+    await checkDue('late', '-23 hours');
+    await bridged(CAROL, 'overdue', '2026-11-02T00:00:00.000Z');
+    await checkDue('overdue', '-25 hours');
+
+    expect(feedRkeys((await server.getJson('/videos/feed')).body)).toEqual(['native', 'late']);
+    expect((await byId('late')).status).toBe(200);
+    expect((await byId('overdue')).status).toBe(404);
+  });
+
+  it('does not serve a qualified post with no check date, nor once a boot has queued it for the poller', async () => {
+    await bridged(CAROL, 'undated', '2026-11-01T00:00:00.000Z');
+    await checkDue('undated', null);
+    expect((await byId('undated')).status).toBe(404);
+
+    await db.initializeDatabase(); // schema.sql gives it a check date
+    const [row] = await db.query<{ due: boolean }>(
+      'SELECT bridge_next_check_at <= NOW() AS due FROM posts WHERE at_uri = $1', [bskyPostUri(CAROL, 'undated')]);
+    expect(row.due).toBe(true);
+    expect((await byId('undated')).status).toBe(404);
+  });
+
   it('reads a page from the feed index, not by scanning bridged rows', async () => {
     // A tiny table gets a seq scan or a bitmap scan plus sort, so turn those
     // off: what's left shows that the WHERE clause still matches
@@ -183,7 +212,7 @@ describe('GET /videos/feed: bridged Bluesky posts', () => {
     await c.connect();
     try {
       await c.query('SET enable_seqscan = off; SET enable_bitmapscan = off');
-      const plan = (await c.query(`EXPLAIN ${FEED_PAGE_SQL}`, [20, 0])).rows.map((r) => r['QUERY PLAN']).join('\n');
+      const plan = (await c.query(`EXPLAIN ${FEED_PAGE_SQL}`, [new Date(), 20, 0])).rows.map((r) => r['QUERY PLAN']).join('\n');
       expect(plan).toMatch(/Index Scan using idx_posts_feed/);
       expect(plan).not.toMatch(/Sort/);
     } finally {

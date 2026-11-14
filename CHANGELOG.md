@@ -71,6 +71,7 @@ deciding whether to upgrade.
 
 ### Fixed
 
+- Bridged Bluesky posts no longer stay in the feed while the bridge is switched off or its poller is failing. The feed leaves a bridged post out once its check is a day overdue, and serves it again when the bridge has re-read it. A label or opt-out now goes unseen for two days at most (three for `#nobridge`, which the bridge reads from the profile once a day), and switching the bridge off takes its posts out of the feed within two days (Decision 0025).
 - The bridge's poller no longer takes an unreadable reply from Bluesky's AppView for an empty one. An empty answer is acted on, so such a reply would have deleted every post it asked about. The batch now fails and is retried.
 - An author who removes `#nobridge` or the `!no-unauthenticated` label is bridged again from their next video post. Before, an exclusion never lifted. Their earlier posts don't come back.
 - The scheduled production smoke check passes again: Cloudflare's Bot Fight Mode, which answered GitHub's runners with a challenge, is off for `tortok.app`. It had failed every scheduled run since the check moved to `appview.tortok.app` on 2026-11-12.

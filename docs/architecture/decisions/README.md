@@ -62,6 +62,7 @@ Write all three in the same present tense and a reader can't tell *why we did it
 | [0022](0022-clients-learn-extra-video-sources-from-their-appview.md) | Clients learn extra video sources from their AppView | Proposed |
 | [0023](0023-bridged-bluesky-posts-what-the-v1-bridge-indexes.md) | Bridged Bluesky posts: what the v1 bridge indexes | Accepted (partial) |
 | [0024](0024-the-bridge-keeps-only-the-posts-it-still-re-reads.md) | The bridge keeps only the posts it still re-reads | Accepted |
+| [0025](0025-the-feed-leaves-out-a-bridged-post-whose-check-is-overdue.md) | The feed leaves out a bridged post whose check is overdue | Accepted |
 
 Forward-looking items that are **not yet decisions** — unresolved design problems, deferred decisions, and explicit out-of-scope — live in [`../open-problems/`](../open-problems/README.md), a tortok-specific extension to the stock discipline (each entry carries a phase-gated `Must resolve by` header). `uv run docs/scripts/doctool.py lint` checks this table against the decision files.
 

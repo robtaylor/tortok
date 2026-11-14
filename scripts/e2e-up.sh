@@ -94,12 +94,14 @@ psql "$DB_URL" -q -v ON_ERROR_STOP=1 <<SQL
 INSERT INTO bridge_authors (did, handle, display_name, avatar_url, followers_count)
   VALUES ('$BRIDGED_DID', 'bridged.bsky.social', 'Bridged Author', NULL, 9000);
 -- The feed builds the playlist and thumbnail URLs from video_cid and
--- BRIDGE_VIDEO_BASE, so they land on the content server's /hls/.
+-- BRIDGE_VIDEO_BASE, so they land on the content server's /hls/. No poller
+-- runs here, so the post's check is never due: the feed leaves out a bridged
+-- post whose check is a day overdue (Decision 0025).
 INSERT INTO posts (at_uri, did, collection, rkey, cid, text, video_cid, width, height, hashtags,
-                   record_created_at, bridge_qualified_at, bridge_checked_at)
+                   record_created_at, bridge_qualified_at, bridge_checked_at, bridge_next_check_at)
   VALUES ('at://$BRIDGED_DID/app.bsky.feed.post/3lbridged', '$BRIDGED_DID', 'app.bsky.feed.post', '3lbridged',
           'bafyreibridgede2e', 'A clip from Bluesky', 'bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku',
-          608, 1080, '{#bluesky}', '2026-01-01T00:00:00Z', NOW(), NOW());
+          608, 1080, '{#bluesky}', '2026-01-01T00:00:00Z', NOW(), NOW(), 'infinity');
 SQL
 wait_for backend "test \"\$(curl -sf 'http://localhost:8080/videos/feed?limit=10' | jq '.videos | length')\" = 6"
 wait_for content "curl -sf \"\$(curl -sf 'http://localhost:8080/videos/feed?limit=10' | jq -r '.videos[5].playback.url')\" | grep -q EXTM3U"

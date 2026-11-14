@@ -11,7 +11,9 @@
 //   (`playback.kind 'hls'`, Decision 0010), with Bluesky's thumbnail as the
 //   poster, both built from the video CID (bskyPost.ts) so the URL scheme
 //   lives in one place. Only rows the engagement poller has qualified are served
-//   (Decision 0023). Their author is the `profiles` row if ingest has one for
+//   (Decision 0023), and only while it keeps re-reading them: a row whose
+//   check is more than a day overdue is left out until it is read again
+//   (Decision 0025). Their author is the `profiles` row if ingest has one for
 //   the DID (a tortok author who also posts on Bluesky), else the bridge's
 //   `bridge_authors` row, with Bluesky's CDN avatar.
 //
@@ -87,12 +89,27 @@ export interface FeedContext {
   /** Origin the blob route is served from, e.g. https://appview.tortok.app. */
   blobBase: string;
   trackers: string[];
+  /** When the request is served; decides which bridged posts' checks are overdue. */
+  now: Date;
 }
 
+/**
+ * How late a bridged post's check may be before the feed leaves the post out
+ * (Decision 0025). The poller checks a post at least daily, so a served post
+ * was read from Bluesky no more than two days ago, whether or not the poller
+ * is running. Its author's profile, where `#nobridge` is, may have been read
+ * a day before that (bridgePolicy.ts, authorReadIsFresh).
+ */
+export const CHECK_OVERDUE_MS = 24 * 60 * 60_000;
+
+const overdueBefore = (now: Date) => new Date(now.getTime() - CHECK_OVERDUE_MS);
+
 // Every feed read: playable native rows and qualified bridged rows, with
-// their author from either table. The WHERE clause is idx_posts_feed's
-// predicate (schema.sql), word for word, so the planner can walk that index
-// in feed order: keep the two in step, and the NSIDs literals.
+// their author from either table. The first WHERE condition is
+// idx_posts_feed's predicate (schema.sql), word for word, so the planner can
+// walk that index in feed order: keep the two in step, and the NSIDs literals.
+// The second ($1, overdueBefore) can't be in the index, because it moves with
+// the clock. A bridged row with no check date fails it.
 const SELECT_POSTS = `
   SELECT p.at_uri, p.did, p.collection, p.cid, p.text, p.thumbnail_cid, p.duration_ms, p.width, p.height,
          p.hashtags, p.magnet_link, p.torrent_cid, p.video_cid, p.record_created_at,
@@ -102,7 +119,8 @@ const SELECT_POSTS = `
     LEFT JOIN profiles pr ON pr.did = p.did
     LEFT JOIN bridge_authors ba ON ba.did = p.did
    WHERE ((p.collection = '${VIDEO_POST_NSID}' AND p.magnet_link IS NOT NULL)
-       OR (p.collection = '${BSKY_POST_NSID}' AND p.bridge_qualified_at IS NOT NULL AND p.video_cid IS NOT NULL))`;
+       OR (p.collection = '${BSKY_POST_NSID}' AND p.bridge_qualified_at IS NOT NULL AND p.video_cid IS NOT NULL))
+     AND (p.collection <> '${BSKY_POST_NSID}' OR p.bridge_next_check_at > $1)`;
 
 function toFeedItem(row: FeedRow, ctx: FeedContext): FeedItem {
   const blob = (cid: string | null) => (cid ? `${ctx.blobBase}/blob/${row.did}/${cid}` : null);
@@ -132,16 +150,16 @@ function toFeedItem(row: FeedRow, ctx: FeedContext): FeedItem {
   };
 }
 
-/** A feed page's query ($1 limit, $2 offset); exported so a test can EXPLAIN it. */
-export const FEED_PAGE_SQL = `${SELECT_POSTS} ORDER BY p.record_created_at DESC, p.at_uri LIMIT $1 OFFSET $2`;
+/** A feed page's query ($1 overdue-before, $2 limit, $3 offset); exported so a test can EXPLAIN it. */
+export const FEED_PAGE_SQL = `${SELECT_POSTS} ORDER BY p.record_created_at DESC, p.at_uri LIMIT $2 OFFSET $3`;
 
 /** Newest first; ties broken by AT-URI so pages don't overlap. */
 export async function feedPage(limit: number, offset: number, ctx: FeedContext): Promise<FeedItem[]> {
-  const rows = await query<FeedRow>(FEED_PAGE_SQL, [limit, offset]);
+  const rows = await query<FeedRow>(FEED_PAGE_SQL, [overdueBefore(ctx.now), limit, offset]);
   return rows.map((r) => toFeedItem(r, ctx));
 }
 
 export async function feedItem(atUri: string, ctx: FeedContext): Promise<FeedItem | null> {
-  const [row] = await query<FeedRow>(`${SELECT_POSTS} AND p.at_uri = $1`, [atUri]);
+  const [row] = await query<FeedRow>(`${SELECT_POSTS} AND p.at_uri = $2`, [overdueBefore(ctx.now), atUri]);
   return row ? toFeedItem(row, ctx) : null;
 }

@@ -77,8 +77,10 @@ CREATE INDEX IF NOT EXISTS idx_posts_info_hash ON posts (info_hash);
 -- from Bluesky's AppView, bridge_next_check_at for when it should next, and
 -- bridge_qualified_at once the post has passed the NSFW and opt-out checks
 -- and an engagement threshold. The feed serves a bridged row only once
--- bridge_qualified_at is set. Every bridged row has a check due, until the
--- poller deletes it (Decision 0024). All three stay NULL on app.tortok rows.
+-- bridge_qualified_at is set, and only while bridge_next_check_at is less
+-- than a day past (Decision 0025). Every bridged row has a check due, until
+-- the poller deletes it (Decision 0024). All three stay NULL on app.tortok
+-- rows.
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS bridge_checked_at TIMESTAMPTZ;
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS bridge_qualified_at TIMESTAMPTZ;
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS bridge_next_check_at TIMESTAMPTZ;
@@ -93,12 +95,15 @@ CREATE INDEX IF NOT EXISTS idx_posts_bridge_due
 -- Before Decision 0024 the poller cleared bridge_next_check_at on a served
 -- row 30 days after its createdAt, and never looked at it again. Any such row
 -- goes back in the queue, where the poller deletes it or carries on checking.
-UPDATE posts SET bridge_next_check_at = NOW()
+-- Its check counts as due since the epoch, not since now: the feed serves a
+-- row for a day after its check falls due (Decision 0025), and this one
+-- hasn't been read.
+UPDATE posts SET bridge_next_check_at = 'epoch'
  WHERE collection = 'app.bsky.feed.post' AND bridge_next_check_at IS NULL;
 -- The feed: servable rows only (native posts with a magnet, qualified bridged
 -- posts), in feed order, so a page reads its own rows and not the hundreds of
--- thousands of unqualified bridged ones. Its predicate is feedView.ts's
--- WHERE clause, word for word.
+-- thousands of unqualified bridged ones. Its predicate is the first
+-- condition of feedView.ts's WHERE clause, word for word.
 CREATE INDEX IF NOT EXISTS idx_posts_feed
     ON posts (record_created_at DESC, at_uri)
     WHERE ((collection = 'app.tortok.video.post' AND magnet_link IS NOT NULL)

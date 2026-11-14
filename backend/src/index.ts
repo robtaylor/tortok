@@ -7,7 +7,7 @@ import crypto from 'crypto';
 import http from 'http';
 import { promisify } from 'util';
 import { initializeDatabase, closeDatabase, query } from './db';
-import videoRoutes from './routes/videos';
+import { createVideosRouter } from './routes/videos';
 import { createBlobRouter } from './routes/blob';
 import { ingestFromEnv } from './services/atprotoIngest';
 import { bridgeFromEnv } from './services/bskyBridge';
@@ -78,7 +78,7 @@ app.get('/turn/credentials', (req, res) => {
 });
 
 // Routes
-app.use('/videos', videoRoutes);
+app.use('/videos', createVideosRouter());
 app.use('/blob', createBlobRouter());
 
 // 404 handler
