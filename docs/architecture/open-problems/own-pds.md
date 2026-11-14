@@ -136,11 +136,13 @@ Listed roughly in increasing investment.
 - **Stay as-is.** No own-PDS, monitor triggers. (Current.)
 - **A "create a Bluesky account" button at sign-in.** No PDS. The app
   opens Bluesky's own sign-up page inside the OAuth flow, and the user
-  comes back signed in. `bsky.social` advertises `prompt=create`, and the
-  OAuth client takes a PDS address in place of a handle; both were read
-  from metadata and types on 2026-11-13, and neither was run. It answers
-  trigger 2 in part and trigger 3 not at all. Its own decision record is
-  to follow.
+  comes back signed in. It answers trigger 2 in part and trigger 3 not at
+  all. Proposed as
+  [Decision 0026](../decisions/0026-the-sign-in-screen-offers-to-create-a-bluesky-account.md);
+  its
+  [spike](../decisions/spikes/creating-a-bluesky-account-inside-the-sign-in-flow.md)
+  ran the flow against `bsky.social` as far as the sign-up page, and to
+  the end against a local PDS.
 - **Run a stock PDS as an alternative auth source.** "Sign up with
   TorTok" alongside "sign in with Bluesky", on the unmodified reference
   image. Adds branded signup; keeps the easy on-ramp for existing atproto
