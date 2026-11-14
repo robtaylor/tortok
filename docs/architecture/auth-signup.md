@@ -67,6 +67,7 @@ tortok has none of its own. Signup spam is the PDS's to stop ([Decision 0007](de
 | A CI check on the client metadata | The copies are compared by hand. | None yet |
 | Rate limits | Decision 0019 item 3 keeps per-user rate limits at the AppView's ingest and endpoints. None exist. | None yet |
 | Age verification | Decision 0013's UK age gate isn't built. | [moderation](moderation.md) |
+| A way in without an account | The login screen has no sign-up action. A "Create a Bluesky account" button, which opens Bluesky's sign-up inside the OAuth flow, is proposed and not built. | [Decision 0026](decisions/0026-the-sign-in-screen-offers-to-create-a-bluesky-account.md) (Proposed) and its [spike](decisions/spikes/creating-a-bluesky-account-inside-the-sign-in-flow.md) |
 | tortok's own signup | tortok runs no PDS, so it can't create accounts. | [`open-problems/own-pds.md`](open-problems/own-pds.md) |
 
 ## Decisions behind this
