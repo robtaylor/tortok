@@ -665,6 +665,12 @@ from the
     `backend.md`'s Deferred table: an account label that a labeler
     withdraws may still keep its author out.
 
+    Review of that build found one more: the feed went on serving
+    qualified posts while the poller was off or failing.
+    [Decision 0025](../architecture/decisions/0025-the-feed-leaves-out-a-bridged-post-whose-check-is-overdue.md)
+    (2026-11-14) settled it, and is built: the feed leaves a bridged
+    post out once its check is a day overdue.
+
 The attempt-1 mirror pipeline doesn't come back: no R2 mirror, no
 ffmpeg remux, no `mirror_state` table, no `bridged/` R2 layout and no
 backend `/torrents` route.

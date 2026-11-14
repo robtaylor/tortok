@@ -48,13 +48,14 @@ A client picks its AppView by URL. A release build defaults to tortok's, `https:
 
 ## Bluesky bridge
 
-The bridge is inbound only ([Decision 0010](decisions/0010-bluesky-video-bridge.md)). It indexes Bluesky's square and portrait video posts, `app.bsky.feed.post` records with a video embed, from a second Jetstream subscription. What it keeps and drops is [Decision 0023](decisions/0023-bridged-bluesky-posts-what-the-v1-bridge-indexes.md), how long it keeps a post is [Decision 0024](decisions/0024-the-bridge-keeps-only-the-posts-it-still-re-reads.md), and how it does both is in [backend](backend.md#bluesky-bridge).
+The bridge is inbound only ([Decision 0010](decisions/0010-bluesky-video-bridge.md)). It indexes Bluesky's square and portrait video posts, `app.bsky.feed.post` records with a video embed, from a second Jetstream subscription. What it keeps and drops is [Decision 0023](decisions/0023-bridged-bluesky-posts-what-the-v1-bridge-indexes.md), how long it keeps a post is [Decision 0024](decisions/0024-the-bridge-keeps-only-the-posts-it-still-re-reads.md), what the feed does when a check is late is [Decision 0025](decisions/0025-the-feed-leaves-out-a-bridged-post-whose-check-is-overdue.md), and how it does all three is in [backend](backend.md#bluesky-bridge).
 
 Bridged posts live in `posts` beside native ones. The collection NSID in the row, and in the AT-URI the feed serves as `id`, tells them apart: `app.bsky.feed.post` or `app.tortok.video.post`. There is no separate table and no source column.
 
 - A bridged post reaches the feed only after the engagement poller has checked it against Bluesky's AppView and it has met a threshold of likes, reposts or author followers.
 - A post labelled NSFW, or by an author who opted out with the `!no-unauthenticated` profile label or `#nobridge`, is not indexed, and is deleted if the label or opt-out comes later.
 - A bridged post is kept for 30 days, re-checked at least daily, and then deleted. A label or opt-out added at any time in between takes it out within a day or two.
+- A bridged post is served only while the bridge keeps to its checks. If a post's check is more than a day overdue, because the bridge is switched off or can't reach Bluesky, the feed leaves the post out until it has been read again.
 - An author who opts back in is bridged again from their next video post. Their earlier posts don't come back.
 - Every label the bridge sees is stored in `labels`, whatever happens to the post.
 - The video plays from Bluesky's HLS playlist on `video.bsky.app`. tortok doesn't copy or re-host it, and it gets no P2P.
@@ -123,3 +124,4 @@ tortok runs no relay, no PLC directory and no PDS. It depends on these, each beh
 - [Decision 0020 — Video posts carry their torrent metadata as a PDS blob](decisions/0020-torrent-metadata-as-pds-blob.md)
 - [Decision 0023 — What the v1 bridge indexes](decisions/0023-bridged-bluesky-posts-what-the-v1-bridge-indexes.md), based on the [labels spike](decisions/spikes/bluesky-labels-on-bridged-video-posts.md)
 - [Decision 0024 — The bridge keeps only the posts it still re-reads](decisions/0024-the-bridge-keeps-only-the-posts-it-still-re-reads.md)
+- [Decision 0025 — The feed leaves out a bridged post whose check is overdue](decisions/0025-the-feed-leaves-out-a-bridged-post-whose-check-is-overdue.md)

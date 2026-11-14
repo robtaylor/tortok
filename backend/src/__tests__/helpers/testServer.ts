@@ -28,11 +28,12 @@ export function startServer(mount: string, router: Router): TestServer {
 }
 
 /**
- * The /videos routes. Call it after createTestDb(): the routes load
- * ../../db, which reads DATABASE_URL when first imported.
+ * The /videos routes, on the real clock unless given another. Call it after
+ * createTestDb(): the routes load ../../db, which reads DATABASE_URL when
+ * first imported.
  */
-export async function startFeedServer(): Promise<TestServer> {
-  return startServer('/videos', (await import('../../routes/videos')).default);
+export async function startFeedServer(now?: () => Date): Promise<TestServer> {
+  return startServer('/videos', (await import('../../routes/videos')).createVideosRouter({ now }));
 }
 
 /** The rkeys of a feed response's items, in the order served. */

@@ -67,6 +67,12 @@ function makePoller(stub: AppViewStub, opts: PollerOptions = {}) {
 
 const row = (u: string) => db.query<Record<string, any>>('SELECT * FROM posts WHERE at_uri = $1', [u]).then((r) => r[0]);
 
+// Decision 0025's bound, which backend.md and the feed's comments state.
+test('a served post was read at most two days ago: the longest wait for a check, plus how late the feed lets one be', async () => {
+  const { CHECK_OVERDUE_MS } = await import('../services/feedView');
+  expect(nextCheckDelayMs(Number.MAX_SAFE_INTEGER) + CHECK_OVERDUE_MS).toBeLessThanOrEqual(2 * DAY);
+});
+
 test('nextCheckDelayMs is half the age, between 15 minutes and a day', () => {
   expect(nextCheckDelayMs(0)).toBe(15 * MIN);
   expect(nextCheckDelayMs(4 * HOUR)).toBe(2 * HOUR);
