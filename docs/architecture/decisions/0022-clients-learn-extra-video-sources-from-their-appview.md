@@ -1,6 +1,6 @@
 # Decision 0022 — Clients learn extra video sources from their AppView
 
-**Status:** Proposed. Resolves the Phase 3 requirement of the open problem [`cross-deployment-transport.md`](../open-problems/cross-deployment-transport.md) (how clients learn extra sources). Choosing mirrors or seeders, the content key layout and piece size stay open there.
+**Status:** Accepted (2026-11-14). Built in Phase 3 Unit 2.5B (2026-11-11) and in production. Resolves the Phase 3 requirement of the open problem [`cross-deployment-transport.md`](../open-problems/cross-deployment-transport.md) (how clients learn extra sources). Choosing mirrors or seeders, the content key layout and piece size stay open there.
 
 **Current architecture:** [P2P & torrent engine](../p2p-torrent.md).
 

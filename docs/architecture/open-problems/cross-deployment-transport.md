@@ -1,6 +1,6 @@
 # Open problem: Where video bytes come from across deployments
 
-**Status:** Partly resolved. The Phase 3 requirement (how clients learn extra sources) is met by Decision 0022 (Proposed): each AppView lists extra webseeds and trackers per feed item. Mirrors vs seeders, the content key layout and piece size remain open.
+**Status:** Partly resolved. The Phase 3 requirement (how clients learn extra sources) is met by Decision 0022: each AppView lists extra webseeds and trackers per feed item. Mirrors vs seeders, the content key layout and piece size remain open.
 **Must resolve by:** Unit 3 of Phase 3 for the content key layout and piece size, because the first real records are published then and their magnets can't be changed afterwards. Phase 4 for choosing between seeders and mirrors.
 **Blocks:** publishing `app.tortok.video.post` records with production URLs (Phase 3); any third-party AppView serving tortok video reliably.
 **Related decision records:** Decision 0001 (WebTorrent end to end), Decision 0002 (AT Protocol), Decision 0008 (R2 origin and CDN), Decision 0010 (Bluesky bridge), Decision 0017 (the AppView's Postgres is a rebuildable index), Decision 0020 (torrent metadata as a PDS blob), Decision 0022 (clients learn extra sources from their AppView).

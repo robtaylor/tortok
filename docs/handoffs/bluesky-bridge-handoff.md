@@ -23,7 +23,9 @@ check, which had failed since 2026-11-12, passes again.
 **Next session should pick up:**
 
 1. **Deploy the Decision 0024 and 0025 builds** (follow-up 1).
-2. **Unit 3**. The plan lists what to settle before the first real
+2. **The sign-up button**: one real sign-up, then Decision 0026
+   (follow-up 3).
+3. **Unit 3**. The plan lists what to settle before the first real
    record.
 
 **Verification command:**
@@ -88,6 +90,25 @@ five native test clips are older. Off switch: `BRIDGE_ENABLED = "false"` in
 `backend/fly.toml`, then deploy. Drop this item once the bridge has run
 cleanly for a while.
 
+### 3. A "Create a Bluesky account" button (a spike step, then a decision)
+
+[Decision 0026](../architecture/decisions/0026-the-sign-in-screen-offers-to-create-a-bluesky-account.md)
+is Proposed: the login screen opens Bluesky's sign-up inside the OAuth
+flow (`prompt=create`) and the person comes back signed in. Its
+[spike](../architecture/decisions/spikes/creating-a-bluesky-account-inside-the-sign-in-flow.md)
+is Open with one step left, Q3b: a real sign-up on `bsky.social`, which a
+person has to type.
+
+```sh
+SPIKE_OPEN=1 node scripts/oauth-signup-spike.mjs loopback
+# Opens Bluesky's sign-up in the browser. Finish it there.
+# Expect: "signed in: did=… handle=….bsky.social"
+```
+
+Then: record the result in the spike, resolve it, accept or rewrite
+Decision 0026, and add the build to the Phase 3 plan. When it is built
+(before Beta or after Unit 3) is not decided.
+
 ## Critical context
 
 - **Local iOS Detox doesn't build on this Mac**: the Pods are out of step with
@@ -122,6 +143,8 @@ cleanly for a while.
   0024 and 0025, `backend.md` and the plan's note already say what was
   built.
 - Follow-up 2 → already in `backend.md` and the CHANGELOG; drop it.
+- Follow-up 3 → the spike record and Decision 0026 hold it; once the
+  decision is accepted, the Phase 3 plan gets the build as a unit.
 - Critical context: the two iOS notes go when prebuild is run; the test
   notes are already in code comments.
 - Then `git rm docs/handoffs/bluesky-bridge-handoff.md`, once follow-up 1
