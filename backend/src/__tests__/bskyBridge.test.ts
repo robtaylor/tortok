@@ -1,4 +1,4 @@
-// The Bluesky bridge end to end (plan 2.5D step 22, Decisions 0023 and 0024):
+// The Bluesky bridge end to end (plan 2.5D step 22, Decisions 0023 to 0025):
 // commits in as Jetstream messages on a stubbed socket, the engagement poller
 // run against a stubbed Bluesky AppView, and GET /videos/feed out.
 // bskyFirehose.test.ts and bskyEngagementPoller.test.ts cover each service's
@@ -34,7 +34,7 @@ let server: TestServer;
 let poller: PollerT;
 /** What Bluesky's AppView says; tests change it between polls. */
 let appview: AppViewStub;
-/** How far the bridge's clock, the firehose's and the poller's, is ahead of the real one. */
+/** How far the bridge's clock is ahead of the real one. The firehose, the poller and the feed all read it. */
 let ahead: number;
 const now = () => new Date(Date.now() + ahead);
 
@@ -44,7 +44,7 @@ beforeAll(async () => {
   ({ BskyFirehose: Firehose } = await import('../services/bskyFirehose'));
   ({ BskyEngagementPoller: Poller } = await import('../services/bskyEngagementPoller'));
   await db.initializeDatabase();
-  server = await startFeedServer();
+  server = await startFeedServer(now);
 });
 
 afterAll(async () => {
@@ -337,6 +337,25 @@ describe('the bridge keeps only posts it still re-reads (Decision 0024)', () => 
     view(ALICE, 'old', { likeCount: 500, labels: [lbl(uri(ALICE, 'old'), 'porn')] });
     await poll();
     expect(await feed()).toEqual([]);
+  });
+});
+
+describe('the feed leaves out a post whose check is overdue (Decision 0025)', () => {
+  test('with the poller stopped, served posts leave the feed within two days; read again, they are back, or gone if their author opted out meanwhile', async () => {
+    await publish({ did: ALICE, rkey: 'a' }, { did: BOB, rkey: 'b' });
+    await poll(); // their next checks are due in half their age, 12.5 hours
+    expect(await feed()).toEqual(['a', 'b']);
+
+    profile(BOB, { description: '#nobridge' });
+    pass(DAY); // 11.5 hours overdue
+    expect(await feed()).toEqual(['a', 'b']);
+    pass(DAY); // 35.5 hours overdue
+    expect(await feed()).toEqual([]);
+    expect(await indexed()).toEqual(['a', 'b']);
+
+    await poller.runOnce();
+    expect(await feed()).toEqual(['a']);
+    expect(await indexed()).toEqual(['a']);
   });
 });
 
