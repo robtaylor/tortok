@@ -92,6 +92,11 @@ export class BskyFirehose {
     this.logStats();
   }
 
+  /** Whether the Jetstream subscription's cursor has stopped moving. */
+  stalled(): boolean {
+    return this.jetstream.stalled();
+  }
+
   private logStats(): void {
     console.log(`[bridge] ${Object.entries(this.stats).map(([k, v]) => `${k}=${v}`).join(' ')}`);
   }

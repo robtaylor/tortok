@@ -35,12 +35,17 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 // Postgres outage is reported (`database`) rather than failing the check,
 // so Fly doesn't route around the only machine and take down routes that
 // don't need the database; the smoke check (scripts/smoke.mjs) fails on it.
+// The same goes for a Jetstream subscription whose cursor has stopped
+// moving, and for a bridge poller whose batches keep failing: `ingest` and
+// `bridge` report it, and the smoke check fails.
 // `sha` and `buildTime` are the image's Dockerfile build args.
 app.get('/health', async (req, res) => {
   const dbOk = await query('SELECT 1').then(() => true, () => false);
   res.json({
     status: 'healthy',
     database: dbOk ? 'ok' : 'unreachable',
+    ingest: ingest.stalled() ? 'stalled' : 'ok',
+    bridge: !bridge ? 'off' : bridge.stalled() ? 'stalled' : 'ok',
     sha: process.env.GIT_SHA || null,
     buildTime: process.env.BUILD_TIME || null,
     timestamp: new Date().toISOString(),

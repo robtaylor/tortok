@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import type { QueryConfig } from 'pg';
 import fs from 'fs';
 import path from 'path';
 
@@ -43,11 +44,21 @@ pool.on('error', (err) => {
 });
 
 /**
- * Execute a query
+ * How long a query may take before it is given up as failed. Without a
+ * bound, a query on a dead connection never settles, and whatever awaits it
+ * (a Jetstream handler, the poller) stops for good without a word.
  */
-export async function query<T = any>(text: string, params?: any[]): Promise<T[]> {
+const QUERY_TIMEOUT_MS = 30_000;
+
+/**
+ * Execute a query. It rejects if no answer comes within `timeoutMs`; the
+ * schema bootstrap doesn't go through here, so it stays unbounded.
+ */
+export async function query<T = any>(text: string, params?: any[], timeoutMs = QUERY_TIMEOUT_MS): Promise<T[]> {
   const start = Date.now();
-  const result = await pool.query(text, params);
+  // node-postgres reads query_timeout off a query's config; its types only list it for the pool.
+  const config: QueryConfig & { query_timeout: number } = { text, values: params, query_timeout: timeoutMs };
+  const result = await pool.query(config);
   const duration = Date.now() - start;
 
   if (process.env.NODE_ENV === 'development') {

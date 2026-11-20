@@ -117,6 +117,11 @@ export class AtprotoIngest {
     console.log('[ingest] stopped');
   }
 
+  /** Whether the Jetstream subscription's cursor has stopped moving (`/health` reports it). */
+  stalled(): boolean {
+    return this.jetstream.stalled();
+  }
+
   /** Resolves once the boot-time backfill has finished (for tests and logs). */
   whenBackfilled(): Promise<void> {
     return this.backfillRun;

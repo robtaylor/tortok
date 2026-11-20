@@ -19,6 +19,11 @@ export class BskyBridge {
   async stop(): Promise<void> {
     await Promise.all([this.firehose.stop(), this.poller.stop()]);
   }
+
+  /** Whether the firehose's cursor has stopped moving or the poller's batches keep failing (`/health` reports it). */
+  stalled(): boolean {
+    return this.firehose.stalled() || this.poller.failing();
+  }
 }
 
 /**

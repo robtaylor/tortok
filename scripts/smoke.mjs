@@ -5,7 +5,9 @@
 //   node scripts/smoke.mjs <base-url> [--expect-sha <sha>] [--sha-file <path>] [--max-items <n>]
 //
 // Checks:
-//   version  /health is healthy, Postgres reachable, and reports a git SHA
+//   version  /health is healthy, Postgres reachable, neither `ingest` nor
+//            `bridge` stalled (a Jetstream cursor that has stopped moving, or
+//            a bridge poller that keeps failing), and reports a git SHA
 //            (the given one, with --expect-sha). With --sha-file <path>, the
 //            reported SHA is also written there, for callers that compare it
 //            with main.
@@ -120,12 +122,17 @@ async function checkVersion({ base, expectSha, shaFile }) {
   if (status !== 200 || json.status !== 'healthy' || json.database !== 'ok') {
     throw new SmokeError(`/health: HTTP ${status}, status=${json.status}, database=${json.database}`);
   }
+  for (const stream of ['ingest', 'bridge']) {
+    if (json[stream] === 'stalled') {
+      throw new SmokeError(`/health: ${stream} is stalled`);
+    }
+  }
   if (!json.sha) throw new SmokeError('/health reports no git SHA: the image was built without GIT_SHA');
   if (shaFile) writeFileSync(shaFile, `${json.sha}\n`);
   if (expectSha && !json.sha.startsWith(expectSha)) {
     throw new SmokeError(`/health reports ${json.sha}, expected ${expectSha}`);
   }
-  return `sha ${json.sha.slice(0, 12)}, built ${json.buildTime ?? 'unknown'}`;
+  return `sha ${json.sha.slice(0, 12)}, built ${json.buildTime ?? 'unknown'}, ingest ${json.ingest ?? 'unreported'}, bridge ${json.bridge ?? 'unreported'}`;
 }
 
 async function checkFeed({ base }) {
