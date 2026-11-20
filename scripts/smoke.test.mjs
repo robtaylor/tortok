@@ -24,7 +24,7 @@ const BTIH = '2800ecd68564a29c14561b6d90fbce7d6de95825';
 let state;
 let base;
 const defaults = () => ({
-  health: { status: 'healthy', database: 'ok', sha: 'abc123def456', buildTime: '2026-11-11T00:00:00Z' },
+  health: { status: 'healthy', database: 'ok', ingest: 'ok', bridge: 'off', sha: 'abc123def456', buildTime: '2026-11-11T00:00:00Z' },
   magnet: (b) => `magnet:?xt=urn:btih:${BTIH}&dn=bbb-01.mp4&ws=${encodeURIComponent(`${b}/files/bbb-01.mp4`)}`,
   // Extra sources the AppView lists (Decision 0022); `b` is the stub's base URL.
   sources: () => ({ webseeds: [], trackers: ['wss://tracker.invalid'] }),
@@ -97,6 +97,7 @@ test('passes against a correctly populated backend', async () => {
   state = defaults();
   const { code, out } = await smoke('--expect-sha', 'abc123');
   assert.equal(code, 0, out);
+  assert.match(out, /ok {4}version — sha abc123def456, built 2026-11-11T00:00:00Z, ingest ok, bridge off/);
   assert.match(out, /ok {4}webseed: v1 — 1 webseed\(s\); pieces 0 and 178 of 179 verified/);
   assert.match(out, /all checks passed/);
 });
@@ -216,6 +217,15 @@ test('fails when Postgres is unreachable', async () => {
   assert.equal(code, 1);
   assert.match(out, /FAIL {2}version — \/health: HTTP 200, status=healthy, database=unreachable/);
 });
+
+for (const stream of ['ingest', 'bridge']) {
+  test(`fails when ${stream}'s Jetstream subscription is stalled`, async () => {
+    state = { ...defaults(), health: { ...defaults().health, [stream]: 'stalled' } };
+    const { code, out } = await smoke();
+    assert.equal(code, 1);
+    assert.match(out, new RegExp(`FAIL {2}version — /health: ${stream} is stalled`));
+  });
+}
 
 test('fails when TURN credentials are missing', async () => {
   state = { ...defaults(), turn: { iceServers: [{ urls: 'stun:x:3478' }] } };

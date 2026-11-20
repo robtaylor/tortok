@@ -39,6 +39,8 @@ const DAY_MS = 24 * 60 * 60_000;
 const MIN_DELAY_MS = 15 * 60_000;
 const FETCH_TIMEOUT_MS = 15_000;
 const BACKOFF_MAX_MS = 30 * 60_000;
+/** Consecutive failed batches after which the poller reports itself failing: about seven minutes of backoff. */
+const FAILING_AFTER = 4;
 
 /** How long until a post of this age is checked again. */
 export function nextCheckDelayMs(ageMs: number): number {
@@ -125,6 +127,11 @@ export class BskyEngagementPoller {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     await this.running;
+  }
+
+  /** Whether the last few batches have all failed (`/health` reports it). */
+  failing(): boolean {
+    return this.failures >= FAILING_AFTER;
   }
 
   private schedule(delayMs: number): void {

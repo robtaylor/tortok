@@ -269,6 +269,30 @@ test('an AppView error throws and leaves the batch due', async () => {
   expect(await row(uri(ALICE, 'a'))).toMatchObject({ bridge_checked_at: null, bridge_next_check_at: new Date(NOW.getTime() - HOUR) });
 });
 
+test('reports itself failing after four failed batches in a row, until one succeeds', async () => {
+  const until = async (cond: () => boolean) => {
+    for (let i = 0; i < 400 && !cond(); i++) await new Promise((r) => setTimeout(r, 5));
+  };
+  await bridged(ALICE, 'p1');
+  const stub: AppViewStub = { posts: [], profiles: [], status: 502 };
+  // Each failure doubles the wait: batches at 0, 20, 60 and 140 ms, the fifth at 300.
+  const { poller, calls } = makePoller(stub, { tickMs: 10 });
+  const batches = () => calls.filter((c) => c.method === 'app.bsky.feed.getPosts').length;
+  poller.start();
+  try {
+    await until(() => batches() >= 3);
+    expect(poller.failing()).toBe(false);
+    await until(() => poller.failing());
+    expect(batches()).toBe(4);
+
+    delete stub.status;
+    await until(() => !poller.failing());
+    expect(poller.failing()).toBe(false);
+  } finally {
+    await poller.stop();
+  }
+});
+
 test('a reply without the list throws, rather than passing for an empty one', async () => {
   await bridged(ALICE, 'a');
   // A 200 whose body isn't the method's: read as "no posts", it would delete

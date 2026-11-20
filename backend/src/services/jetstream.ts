@@ -10,8 +10,19 @@
 // only past events that were handled. A handler that throws means the
 // infrastructure failed (handlers skip bad records without throwing), so the
 // subscription resyncs: it drops the queued events and reconnects, with
-// backoff, from the last event handled. It does the same if the queue backs
-// up, so a stalled database can't grow it without bound.
+// backoff, from the last event handled.
+//
+// Two things keep it moving when the other end misbehaves:
+// - Jetstream replays a cursor far faster than events are handled here, so
+//   the socket is paused while events are queued and read again once they
+//   drain. If the queue backs up all the same, the subscription resyncs, so
+//   a stalled database can't grow it without bound.
+// - Jetstream can leave a connection open and send nothing more on it (it
+//   did, for 26 hours, on 2026-11-19). A socket that delivers nothing for
+//   SILENCE_MS is dropped and the subscription connects again.
+//
+// A socket the subscription has left can still deliver what it had buffered;
+// those events are ignored, or the cursor would move past the ones dropped.
 
 import WebSocket from 'ws';
 import { query as defaultQuery } from '../db';
@@ -25,6 +36,12 @@ export interface WebSocketLike {
   on(event: 'close', cb: (code: number, reason: Buffer) => void): unknown;
   on(event: 'error', cb: (err: Error) => void): unknown;
   close(): void;
+  /** Drop the connection at once, with no closing handshake. */
+  terminate(): void;
+  /** Stop reading from the connection, so the sender has to wait. */
+  pause(): void;
+  resume(): void;
+  readonly isPaused: boolean;
 }
 
 export interface JetstreamEvent {
@@ -68,8 +85,19 @@ export function parseCommit(event: JetstreamEvent, collection: string): Commit |
 const CURSOR_REWIND_US = 5_000_000;
 const RECONNECT_INITIAL_MS = 1_000;
 const RECONNECT_MAX_MS = 60_000;
+/**
+ * Queued events at which the socket is paused, and at which it is read again.
+ * A paused socket isn't read at all, and a server may drop a reader that
+ * stops for long, so it is read again well before the queue is empty.
+ */
+const PAUSE_AT = 1_000;
+const RESUME_AT = 500;
 /** Queued events past which the subscription resyncs instead of buffering more. */
 const MAX_QUEUED = 5_000;
+/** A socket that delivers nothing for this long is dropped. Jetstream's streams are never this quiet. */
+const SILENCE_MS = 60_000;
+/** With the cursor unmoved for this long, the subscription reports itself stalled. */
+const STALLED_MS = 5 * 60_000;
 
 export interface JetstreamOptions {
   /** Prefix for log lines, e.g. 'ingest'. */
@@ -99,6 +127,11 @@ export class JetstreamSubscription {
   private queued = 0;
   /** Bumped by resync(); events queued under an older generation are dropped. */
   private generation = 0;
+  private silenceTimer: NodeJS.Timeout | null = null;
+  /** Whether the socket has delivered anything since the last silence check. */
+  private heard = false;
+  /** When the cursor last moved. Replayed events don't count: a socket can deliver its rewind and nothing else. */
+  private lastProgressAt = Date.now();
 
   constructor(opts: JetstreamOptions) {
     if (opts.collections.length === 0) throw new Error(`[${opts.tag}] no collections to subscribe to`);
@@ -120,8 +153,10 @@ export class JetstreamSubscription {
       'SELECT cursor FROM ingest_cursor WHERE key = $1', [this.opts.cursorKey]);
     this.cursor = row?.cursor != null ? Number(row.cursor) : null;
     this.savedCursor = this.cursor;
+    this.lastProgressAt = Date.now();
     this.connect();
     this.flushTimer = setInterval(() => void this.flushCursor(), this.opts.cursorFlushMs);
+    this.silenceTimer = setInterval(() => this.checkSilence(), SILENCE_MS);
     console.log(`[${this.opts.tag}] subscribing from cursor ${this.cursor ?? 'now'}`);
   }
 
@@ -130,11 +165,17 @@ export class JetstreamSubscription {
     this.stopped = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.flushTimer) clearInterval(this.flushTimer);
-    this.reconnectTimer = this.flushTimer = null;
+    if (this.silenceTimer) clearInterval(this.silenceTimer);
+    this.reconnectTimer = this.flushTimer = this.silenceTimer = null;
     this.ws?.close();
     this.ws = null;
     await this.queue;
     await this.flushCursor();
+  }
+
+  /** Whether the cursor hasn't moved for STALLED_MS: the stream, or what handles it, is stuck. */
+  stalled(): boolean {
+    return Date.now() - this.lastProgressAt > STALLED_MS;
   }
 
   private subscribeUrl(): string {
@@ -158,11 +199,15 @@ export class JetstreamSubscription {
       return;
     }
     this.ws = ws;
+    // A new socket gets a full interval to deliver something.
+    this.heard = true;
     ws.on('open', () => {
       this.reconnectDelayMs = RECONNECT_INITIAL_MS;
       console.log(`[${tag}] Jetstream connected`);
     });
     ws.on('message', (data) => {
+      if (this.ws !== ws) return;
+      this.heard = true;
       let event: JetstreamEvent;
       try {
         event = JSON.parse(data.toString());
@@ -170,9 +215,11 @@ export class JetstreamSubscription {
         console.warn(`[${tag}] dropped a non-JSON Jetstream message`);
         return;
       }
-      this.enqueue(event);
+      this.enqueue(ws, event);
     });
-    ws.on('error', (err) => console.error(`[${tag}] Jetstream error:`, err.message));
+    ws.on('error', (err) => {
+      if (this.ws === ws) console.error(`[${tag}] Jetstream error:`, err.message);
+    });
     ws.on('close', (code) => {
       if (this.ws !== ws) return;
       this.ws = null;
@@ -191,15 +238,18 @@ export class JetstreamSubscription {
     }, delay);
   }
 
-  private enqueue(event: JetstreamEvent): void {
+  /** Queue an event from the current socket. */
+  private enqueue(ws: WebSocketLike, event: JetstreamEvent): void {
     if (this.queued >= MAX_QUEUED) {
       this.resync(`${MAX_QUEUED} events queued`);
       return;
     }
     const generation = this.generation;
     this.queued++;
+    if (this.queued >= PAUSE_AT && !ws.isPaused) ws.pause();
     this.queue = this.queue.then(async () => {
       this.queued--;
+      if (this.queued <= RESUME_AT && this.ws?.isPaused) this.ws.resume();
       if (generation !== this.generation) return;
       try {
         await this.opts.onEvent(event);
@@ -210,8 +260,22 @@ export class JetstreamSubscription {
       }
       if (typeof event.time_us === 'number' && (this.cursor === null || event.time_us > this.cursor)) {
         this.cursor = event.time_us;
+        this.lastProgressAt = Date.now();
       }
     });
+  }
+
+  /** Drop a socket that has delivered nothing since the last check. */
+  private checkSilence(): void {
+    if (this.stalled()) {
+      const minutes = Math.round((Date.now() - this.lastProgressAt) / 60_000);
+      console.error(`[${this.opts.tag}] stalled: the cursor hasn't moved for ${minutes} min (${this.queued} queued)`);
+    }
+    // Between sockets the reconnect timer is running. A paused socket is quiet
+    // by our doing, and keeps `heard` from the message that paused it.
+    if (!this.ws || this.ws.isPaused) return;
+    if (!this.heard) this.resync(`nothing received for ${SILENCE_MS / 1000} s`);
+    this.heard = false;
   }
 
   /** Drop queued events and reconnect, with backoff, from the last event handled. */
@@ -221,7 +285,8 @@ export class JetstreamSubscription {
     if (!ws) return; // already reconnecting
     console.warn(`[${this.opts.tag}] resyncing from cursor ${this.cursor ?? 'now'}: ${reason}`);
     this.ws = null;
-    ws.close();
+    // Not close(): its handshake waits on a peer that may be dead or mid-flood.
+    ws.terminate();
     this.scheduleReconnect();
   }
 

@@ -24,6 +24,11 @@ afterAll(async () => {
   await testDb?.drop();
 });
 
+test('a query that gets no answer in time fails, and the pool carries on', async () => {
+  await expect(db.query('SELECT pg_sleep(5)', [], 50)).rejects.toThrow('Query read timeout');
+  expect(await db.query('SELECT 1 AS one')).toEqual([{ one: 1 }]);
+});
+
 test('drops legacy tables and keeps a new table that reuses a legacy name', async () => {
   // The legacy shapes, cut down to the columns the guard checks, with the
   // foreign keys that force children to go first.

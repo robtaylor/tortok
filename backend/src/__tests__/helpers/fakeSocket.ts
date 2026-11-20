@@ -5,9 +5,15 @@ import { EventEmitter } from 'events';
 import type { JetstreamEvent, WebSocketLike } from '../../services/jetstream';
 
 export class FakeSocket extends EventEmitter implements WebSocketLike {
+  /** Left by the subscription, with close() or terminate(). */
   closed = false;
+  terminated = false;
+  isPaused = false;
   constructor(public url: string) { super(); }
   close() { this.closed = true; }
+  terminate() { this.closed = this.terminated = true; }
+  pause() { this.isPaused = true; }
+  resume() { this.isPaused = false; }
   /** Deliver an event as Jetstream does, as one JSON message. */
   deliver(event: object) { this.emit('message', Buffer.from(JSON.stringify(event))); }
 }

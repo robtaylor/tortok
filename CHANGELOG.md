@@ -71,6 +71,9 @@ deciding whether to upgrade.
 
 ### Fixed
 
+- The backend's Jetstream subscriptions no longer stall when Jetstream leaves a connection open and stops sending on it. On 2026-11-19 that stopped the Bluesky bridge indexing for 26 hours, and nothing noticed. A socket that delivers nothing for a minute is now dropped and reconnected. `/health` reports a subscription whose cursor hasn't moved for five minutes, and a bridge poller whose batches keep failing (`ingest`, `bridge`), and the smoke check fails on either.
+- Catching up after a gap no longer drops events or reconnects in a loop. Jetstream replays far faster than the backend handles events, so the backend now pauses the socket while events are queued. It also ignores what a socket it has left still delivers, which used to move the cursor past events it had dropped.
+- A database query that gets no answer within 30 seconds now fails. Before, it waited for ever, and whatever was waiting on it (a Jetstream handler, the bridge's poller) stopped without a word.
 - Bridged Bluesky posts no longer stay in the feed while the bridge is switched off or its poller is failing. The feed leaves a bridged post out once its check is a day overdue, and serves it again when the bridge has re-read it. A label or opt-out now goes unseen for two days at most (three for `#nobridge`, which the bridge reads from the profile once a day), and switching the bridge off takes its posts out of the feed within two days (Decision 0025).
 - The bridge's poller no longer takes an unreadable reply from Bluesky's AppView for an empty one. An empty answer is acted on, so such a reply would have deleted every post it asked about. The batch now fails and is retried.
 - An author who removes `#nobridge` or the `!no-unauthenticated` label is bridged again from their next video post. Before, an exclusion never lifted. Their earlier posts don't come back.
