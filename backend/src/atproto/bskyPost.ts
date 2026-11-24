@@ -10,8 +10,8 @@
 // the CID must be a plain base32 CIDv1.
 
 import { bridgeVideoBase } from '../config';
-import { timestamp } from './json';
-import { isObject, MAX_DIMENSION } from './videoPost';
+import { integer, timestamp } from './json';
+import { isObject } from './videoPost';
 
 export const BSKY_POST_NSID = 'app.bsky.feed.post';
 
@@ -40,9 +40,6 @@ const videoBase = (did: string, videoCid: string) =>
   `${bridgeVideoBase()}/${encodeURIComponent(did)}/${videoCid}`;
 export const hlsUrl = (did: string, videoCid: string) => `${videoBase(did, videoCid)}/playlist.m3u8`;
 export const thumbnailUrl = (did: string, videoCid: string) => `${videoBase(did, videoCid)}/thumbnail.jpg`;
-
-const dimension = (v: unknown): v is number =>
-  typeof v === 'number' && Number.isInteger(v) && v > 0 && v <= MAX_DIMENSION;
 
 /** Tags from the record's `tags` and its facets' #tag features, '#'-prefixed, deduplicated. */
 function hashtags(record: Record<string, unknown>): string[] {
@@ -77,9 +74,11 @@ export function parseBskyVideoPost(
   const embed = record.embed.$type === 'app.bsky.embed.recordWithMedia' ? record.embed.media : record.embed;
   if (!isObject(embed) || embed.$type !== 'app.bsky.embed.video') return 'no-video';
 
-  const ar = embed.aspectRatio;
-  if (!isObject(ar) || !dimension(ar.width) || !dimension(ar.height)) return 'no-aspect-ratio';
-  if (ar.height / ar.width < aspectMin) return 'too-wide';
+  const ar = isObject(embed.aspectRatio) ? embed.aspectRatio : {};
+  const width = integer(ar.width, 1);
+  const height = integer(ar.height, 1);
+  if (width === null || height === null) return 'no-aspect-ratio';
+  if (height / width < aspectMin) return 'too-wide';
 
   const video = embed.video;
   const cid = isObject(video) && isObject(video.ref) ? video.ref.$link : undefined;
@@ -93,8 +92,8 @@ export function parseBskyVideoPost(
 
   return {
     videoCid: cid,
-    width: ar.width,
-    height: ar.height,
+    width,
+    height,
     text,
     hashtags: hashtags(record),
     createdAt: createdAt > now ? now : createdAt,

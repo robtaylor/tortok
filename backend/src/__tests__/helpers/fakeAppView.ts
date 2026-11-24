@@ -12,16 +12,22 @@ export interface AppViewStub {
   profiles: Record<string, unknown>[];
   /** Answer every call with this HTTP status instead. */
   status?: number;
+  /** Answer 414 to a URL longer than this, as Bluesky's AppView does past about 8,000 characters. */
+  maxUrl?: number;
+  /** Answer 502 to every call from this one on, counting from 1. */
+  failsFromCall?: number;
 }
 
 export function fakeAppView(stub: AppViewStub) {
-  const calls: { method: string; params: string[] }[] = [];
+  const calls: { method: string; params: string[]; urlLength: number }[] = [];
   const fetchFn = (async (input: string | URL | Request) => {
     const url = new URL(String(input));
     const method = url.pathname.replace('/xrpc/', '');
     const params = [...url.searchParams.values()];
-    calls.push({ method, params });
+    calls.push({ method, params, urlLength: String(input).length });
     if (stub.status) return new Response('{}', { status: stub.status });
+    if (stub.failsFromCall && calls.length >= stub.failsFromCall) return new Response('{}', { status: 502 });
+    if (stub.maxUrl && String(input).length > stub.maxUrl) return new Response('', { status: 414 });
     if (method === 'app.bsky.feed.getPosts') {
       return Response.json({ posts: stub.posts.filter((p) => params.includes(p.uri as string)) });
     }

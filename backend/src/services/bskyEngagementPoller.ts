@@ -26,7 +26,7 @@ import { query as defaultQuery } from '../db';
 import type { QueryFn } from '../db';
 import type { FetchFn } from '../atproto/identity';
 import { BSKY_POST_NSID } from '../atproto/bskyPost';
-import { parseJson } from '../atproto/json';
+import { integer, parseJson } from '../atproto/json';
 import { accountSubjects, replaceSelfLabels, upsertLabels, viewLabels } from '../atproto/labels';
 import { isObject } from '../atproto/videoPost';
 import {
@@ -39,6 +39,13 @@ const BATCH = 25;
 const DAY_MS = 24 * 60 * 60_000;
 const MIN_DELAY_MS = 15 * 60_000;
 const FETCH_TIMEOUT_MS = 15_000;
+/**
+ * The longest request URL sent. Bluesky's AppView answers 414 to one past
+ * about 8,000 characters, whatever it asks for (measured 2026-11-24), and a
+ * post's address can run to 1,600 once encoded. A batch that doesn't fit is
+ * asked for in parts.
+ */
+const MAX_URL_LENGTH = 6_000;
 const BACKOFF_MAX_MS = 30 * 60_000;
 /** Consecutive failed batches after which the poller reports itself failing: about seven minutes of backoff. */
 const FAILING_AFTER = 4;
@@ -247,7 +254,7 @@ export class BskyEngagementPoller {
       }
       await upsertLabels(this.db, labels.filter((l) => l.src !== did));
       const handle = str(p.handle);
-      const count = typeof p.followersCount === 'number' ? p.followersCount : null;
+      const count = integer(p.followersCount);
       await this.db(
         `INSERT INTO bridge_authors (did, handle, display_name, avatar_url, followers_count, nobridge, refreshed_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -276,14 +283,27 @@ export class BskyEngagementPoller {
    * read must not pass for one.
    */
   private async xrpcList(method: string, param: string, values: string[], key: string): Promise<Record<string, unknown>[]> {
-    const url = new URL(`/xrpc/${method}`, this.appviewUrl);
-    for (const v of values) url.searchParams.append(param, v);
-    const res = await this.fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-    if (!res.ok) throw new AppViewError(method, res.status);
-    const body = parseJson(await res.text());
-    const list = isObject(body) ? body[key] : undefined;
-    if (!Array.isArray(list)) throw new AppViewError(method, res.status, `returned no ${key} list`);
-    return list.filter(isObject);
+    // Usually one request. Long values are spread over as many as keep each URL under MAX_URL_LENGTH.
+    const base = new URL(`/xrpc/${method}`, this.appviewUrl);
+    const urls = [new URL(base)];
+    for (const v of values) {
+      let url = urls.at(-1)!;
+      const pair = new URLSearchParams([[param, v]]).toString();
+      if (url.search && url.href.length + 1 + pair.length > MAX_URL_LENGTH) urls.push(url = new URL(base));
+      url.searchParams.append(param, v);
+    }
+    // One after another, and all or nothing: an empty answer is acted on, so
+    // what a failed request would have returned mustn't pass for missing.
+    const out: Record<string, unknown>[] = [];
+    for (const url of urls) {
+      const res = await this.fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      if (!res.ok) throw new AppViewError(method, res.status);
+      const body = parseJson(await res.text());
+      const list = isObject(body) ? body[key] : undefined;
+      if (!Array.isArray(list)) throw new AppViewError(method, res.status, `returned no ${key} list`);
+      out.push(...list.filter(isObject));
+    }
+    return out;
   }
 }
 

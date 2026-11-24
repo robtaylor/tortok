@@ -281,6 +281,50 @@ test('a NUL in what the AppView returns does not fail the batch', async () => {
   expect(await db.query('SELECT val FROM labels WHERE subject = $1', [profile])).toEqual([{ val: 'x' }]);
 });
 
+// A batch that fails every time is never got past: the longest-due posts are
+// taken first, and nothing ages them out. Bluesky's AppView answers 414 to a
+// URL past about 8,000 characters (25 posts with 512-character keys make one
+// of 14,780), so a full batch of long addresses failed every time it was asked for.
+test('a batch whose addresses are too long for one request is asked for in parts', async () => {
+  // A key's colons and tildes are each three characters in a URL.
+  const keys = Array.from({ length: 25 }, (_, i) => `${String(i).padStart(2, '0')}${':~'.repeat(255)}`);
+  for (const [i, k] of keys.entries()) await bridged(ALICE, k, HOUR, new Date(NOW.getTime() - HOUR + i));
+  const { poller, calls } = makePoller({
+    posts: keys.map((k) => postView(uri(ALICE, k), { likeCount: 50 })), profiles: [profileView(ALICE)], maxUrl: 8_000,
+  });
+  expect(await poller.runOnce()).toEqual({ checked: 25, qualified: 25, dropped: 0 });
+  const asked = calls.filter((c) => c.method === 'app.bsky.feed.getPosts');
+  // Three addresses to a request: each is about 1,600 characters once encoded.
+  expect(asked.map((c) => c.params.length)).toEqual([3, 3, 3, 3, 3, 3, 3, 3, 1]);
+  expect(Math.max(...asked.map((c) => c.urlLength))).toBeLessThanOrEqual(6_000);
+  expect(asked.flatMap((c) => c.params).sort()).toEqual(keys.map((k) => uri(ALICE, k)).sort());
+});
+
+// A post the AppView doesn't return is deleted as gone. So the posts of a
+// request that failed must never pass for ones it didn't return.
+test('one of a batch\'s requests failing fails the batch, and nothing in it is acted on', async () => {
+  const keys = Array.from({ length: 25 }, (_, i) => `${String(i).padStart(2, '0')}${':~'.repeat(255)}`);
+  for (const k of keys) await bridged(ALICE, k);
+  const { poller } = makePoller({
+    posts: keys.map((k) => postView(uri(ALICE, k), { likeCount: 50 })), profiles: [profileView(ALICE)], failsFromCall: 3,
+  });
+  await expect(poller.runOnce()).rejects.toThrow('returned 502');
+  expect(await db.query('SELECT count(*)::int AS held, count(bridge_checked_at)::int AS checked FROM posts'))
+    .toEqual([{ held: 25, checked: 0 }]);
+});
+
+test('a follower count the index cannot hold is stored as unknown, and does not fail the batch', async () => {
+  await bridged(ALICE, 'one');
+  await bridged(BOB, 'two');
+  const { poller } = makePoller({
+    posts: [postView(uri(ALICE, 'one')), postView(uri(BOB, 'two'))],
+    profiles: [profileView(ALICE, { followersCount: 2 ** 31 }), profileView(BOB, { followersCount: 5000.5 })],
+  });
+  expect(await poller.runOnce()).toEqual({ checked: 2, qualified: 0, dropped: 0 });
+  expect(await db.query('SELECT followers_count FROM bridge_authors ORDER BY did'))
+    .toEqual([{ followers_count: null }, { followers_count: null }]);
+});
+
 test('an AppView error throws and leaves the batch due', async () => {
   await bridged(ALICE, 'a');
   const { poller } = makePoller({ posts: [], profiles: [], status: 429 });
