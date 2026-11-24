@@ -42,6 +42,7 @@ deciding whether to upgrade.
 
 ### Changed
 
+- A failing production smoke check now opens one GitHub issue for the incident, labelled `smoke-failure`, and closes it when the check has passed four times running. Before, each failed run only sent an email: 139 of them in the 36-hour stall of 2026-11-22, and nothing acted on them. Opening the issue starts a Claude Code scheduled task that looks into the failure and comments on the issue; the same task checks production once a day (`.github/workflows/smoke.yml`).
 - The Bluesky bridge keeps a bridged post for 30 days (`BRIDGE_RECHECK_DAYS`), re-checks it at least daily until then, and then deletes it. Before, a served post stayed in the feed unchecked once it was 30 days old, so an opt-out or label added later never reached it (Decision 0024).
 - The bridge counts a post's age from when it indexed the record, not from the date the record carries, so a backdated post gets the same checks as any other.
 - Native build logs are mostly quiet: dependencies' compiler warnings are suppressed at `expo prebuild` (iOS from about 3,700 to about 580, Android from about 730 to about 5). `TORTOK_NATIVE_WARNINGS=1` brings them back.

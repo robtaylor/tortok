@@ -31,8 +31,8 @@ deployed (follow-up 3 has the detail):
 
 1. **The poller, where one failure still fails a whole batch**
    (follow-up 1): the one cause found is fixed; the shape wants a design.
-2. **The database's size** (follow-up 2): a small spend to agree, then a
-   design change. The volume fills around mid-December at today's rate.
+2. **The database's growth** (follow-up 2): resized on 2026-11-24, which
+   buys months; the design that stops the growth is still to do.
 3. **Watch the bridge** (follow-up 3).
 4. **The sign-up button**: one real sign-up, then Decision 0026
    (follow-up 4).
@@ -119,32 +119,29 @@ backfill stops there at every boot; and a subscription with no saved
 cursor doesn't retry a failed event, because it reconnects at the live
 end.
 
-### 2. The database is small for the bridge (a spend to agree, then a design)
+### 2. The database grows with the bridge (resized; a design left)
 
 `backend.md` (Constraints) has the facts. In short:
 
-- `tortok-db` is one `shared-cpu-1x` machine with 256 MB and a 1 GB
-  volume, sized before the bridge. The database is bigger than its
-  memory, and Fly's health check for it fails on I/O wait a few times an
-  hour.
-- 388 MB of the volume was used on 2026-11-21 and 461 MB on 2026-11-24:
-  about 20 MB a day. Fly Postgres turns read-only at 90%, which that
-  rate reaches around mid-December. `posts` levels off 30 days after
-  switch-on (2026-12-13); `bridge_authors` and `labels` never do.
+- `tortok-db` was resized on 2026-11-24, from 256 MB and a 1 GB volume to
+  512 MB and 3 GB. The database (302 MB) now fits in memory, and the
+  volume is 15% full. Before, Fly's health check for it failed on I/O
+  wait a few times an hour, and the volume was filling at about 20 MB a
+  day towards the 90% at which Fly Postgres turns read-only.
+- That buys months. `posts` levels off 30 days after switch-on
+  (2026-12-13); `bridge_authors` and `labels` never do.
 - The cause of most of the writing: every check rewrites the whole
   `posts` row and an entry in each of its indexes, because
   `bridge_next_check_at` is indexed. 2.8 million such updates in eight
   days.
 
-To decide:
+What to look at: `fly ssh console -a tortok-db -C "df -m /data"` now and
+then (415 MB used on 2026-11-24), and `fly checks list -a tortok-db`.
 
-- A bigger volume (`fly volumes extend`), which costs cents a month and
-  buys months. It can't be shrunk again.
-- More memory for the machine (512 MB or 1 GB), a few dollars a month,
-  for the I/O pressure. It restarts the database for a moment.
-- Then the design: a narrow table for the poller's queue, so a check
-  stops rewriting the `posts` row; and pruning `bridge_authors` rows with
-  no posts and `labels` for subjects no longer held.
+Left to build: a narrow table for the poller's queue, so a check stops
+rewriting the `posts` row; and pruning `bridge_authors` rows with no
+posts and `labels` for subjects no longer held. It belongs with
+follow-up 1's retry time per post: both change the poller's queue.
 
 ### 3. Watch the bridge in production (ongoing, small)
 
@@ -180,8 +177,12 @@ The post that couldn't be stored, 2026-11-22 to 24:
   12 minutes that had aged out with the event (12:18 to 12:30 on the
   22nd) are lost.
 - The smoke check failed all 139 runs in that stretch with `bridge is
-  stalled`. Nothing acted on it: the alert is an email to the repository
-  owner, and no session was running.
+  stalled`. Nothing acted on it: the alert was an email to the repository
+  owner, and no session was running. Since 2026-11-24 a failing check
+  opens one issue labelled `smoke-failure`, and that starts a Claude Code
+  scheduled task ("tortok production watch", in the owner's claude.ai
+  account) which looks into it and comments on the issue. The same task
+  runs daily at 07:00 UTC. It has no access to Fly.
 - PR #58 fixed it on the 24th.
 
 What to look at, and what isn't covered yet:
@@ -261,9 +262,9 @@ Decision 0026, and add the build to the Phase 3 plan. When it is built
 
 - Follow-up 1 → `backend.md` has it under Deferred, with why deleting
   was dropped; the design wants a plan entry in the Phase 3 plan.
-- Follow-up 2 → `backend.md` (Constraints and Deferred) has the facts.
-  The design part wants a plan entry, or a decision if the queue moves
-  to its own table.
+- Follow-up 2 → `backend.md` (Constraints and Deferred) has the facts
+  and the resize. The design part wants a plan entry, or a decision if
+  the queue moves to its own table.
 - Follow-up 3 → both incidents and their fixes are in `backend.md` and
   the CHANGELOG; the counts are a snapshot and go with the handoff.
 - Follow-up 4 → the spike record and Decision 0026 hold it; once the
