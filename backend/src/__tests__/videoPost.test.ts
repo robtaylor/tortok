@@ -42,6 +42,8 @@ describe('parseVideoPost', () => {
     ['a zero duration', validRecord({ durationMs: 0 }), /durationMs/],
     ['an over-long video', validRecord({ durationMs: 600_001 }), /durationMs/],
     ['a fractional width', validRecord({ aspectRatio: { width: 1.5, height: 2 } }), /aspectRatio.width/],
+    ['a height past what the index holds', validRecord({ aspectRatio: { width: 1, height: 2 ** 31 } }), /aspectRatio.height/],
+    ['a createdAt before any date the index holds', validRecord({ createdAt: '-010000-01-01T00:00:00.000Z' }), /createdAt/],
     ['a long caption', validRecord({ caption: 'x'.repeat(301) }), /graphemes/],
     ['a GIF thumbnail', validRecord({ thumbnailBlob: { $type: 'blob', ref: { $link: 'c' }, mimeType: 'image/gif', size: 1 } }), /MIME/],
     ['an oversized torrent', validRecord({ torrentBlob: { $type: 'blob', ref: { $link: 'c' }, mimeType: 'application/x-bittorrent', size: 1_000_001 } }), /size/],

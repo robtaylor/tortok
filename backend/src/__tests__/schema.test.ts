@@ -29,6 +29,12 @@ test('a query that gets no answer in time fails, and the pool carries on', async
   expect(await db.query('SELECT 1 AS one')).toEqual([{ one: 1 }]);
 });
 
+test('a NUL in a parameter, which Postgres text cannot hold, is dropped on the way in', async () => {
+  expect(await db.query('SELECT $1::text AS s, $2::text[] AS a, $3::int AS n, $4::text AS none',
+    ['a\u0000 clip\u0000', ['#do\u0000gs', '#cats'], 5, null]))
+    .toEqual([{ s: 'a clip', a: ['#dogs', '#cats'], n: 5, none: null }]);
+});
+
 test('drops legacy tables and keeps a new table that reuses a legacy name', async () => {
   // The legacy shapes, cut down to the columns the guard checks, with the
   // foreign keys that force children to go first.

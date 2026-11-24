@@ -12,6 +12,13 @@
 // subscription resyncs: it drops the queued events and reconnects, with
 // backoff, from the last event handled.
 //
+// An event can also be the cause: one the handler fails on every time. Tried
+// again for ever, it holds the stream until Jetstream no longer has it (a NUL
+// in one Bluesky post's text did, for 36 hours from 2026-11-22). So an event
+// that fails several times running, while the database still takes a write,
+// is logged and skipped. That is told by repetition, not by the kind of
+// error: the next such event won't fail the way the last one did.
+//
 // Two things keep it moving when the other end misbehaves:
 // - Jetstream replays a cursor far faster than events are handled here, so
 //   the socket is paused while events are queued and read again once they
@@ -28,6 +35,7 @@ import WebSocket from 'ws';
 import { query as defaultQuery } from '../db';
 import type { QueryFn } from '../db';
 import { isDid } from '../atproto/identity';
+import { parseJson } from '../atproto/json';
 
 /** The subset of the `ws` WebSocket API used here (tests fake it). */
 export interface WebSocketLike {
@@ -58,8 +66,8 @@ export interface JetstreamEvent {
 }
 
 export const DEFAULT_JETSTREAM_URL = 'wss://jetstream2.us-east.bsky.network/subscribe';
-/** A valid record key (atproto record-key syntax). */
-export const RKEY_RE = /^[A-Za-z0-9._:~-]{1,512}$/;
+/** A valid record key (atproto record-key syntax, which rules out `.` and `..`). */
+export const RKEY_RE = /^(?!\.{1,2}$)[A-Za-z0-9._:~-]{1,512}$/;
 
 /** A commit event for one collection, with its identifiers checked. */
 export type Commit = { did: string; rkey: string; uri: string } & (
@@ -86,6 +94,14 @@ const CURSOR_REWIND_US = 5_000_000;
 const RECONNECT_INITIAL_MS = 1_000;
 const RECONNECT_MAX_MS = 60_000;
 /**
+ * A socket was working if it stayed open this long and the cursor moved on
+ * it; only then is the next reconnect prompt. Any other is retried more and
+ * more slowly: on 2026-11-22 each socket opened, failed on its first event
+ * and was replaced within two seconds, 83,615 times. Staying open isn't
+ * enough by itself: a query that hangs holds a socket for QUERY_TIMEOUT_MS.
+ */
+const STABLE_MS = 30_000;
+/**
  * Queued events at which the socket is paused, and at which it is read again.
  * A paused socket isn't read at all, and a server may drop a reader that
  * stops for long, so it is read again well before the queue is empty.
@@ -94,6 +110,16 @@ const PAUSE_AT = 1_000;
 const RESUME_AT = 500;
 /** Queued events past which the subscription resyncs instead of buffering more. */
 const MAX_QUEUED = 5_000;
+/** Times running one event may fail before it is taken for the cause. */
+const SKIP_AFTER_FAILURES = 3;
+/**
+ * Events skipped in an hour before skipping stops. Such an event is rare (one
+ * in the bridge's first 50 million); a run of them means the fault is in this
+ * service, and skipping would throw the stream away quietly. With the
+ * allowance spent the subscription stops at the next one and reports itself
+ * stalled.
+ */
+const MAX_SKIPS_PER_HOUR = 20;
 /** A socket that delivers nothing for this long is dropped. Jetstream's streams are never this quiet. */
 const SILENCE_MS = 60_000;
 /** With the cursor unmoved for this long, the subscription reports itself stalled. */
@@ -106,11 +132,24 @@ export interface JetstreamOptions {
   /** The `ingest_cursor` row this subscription resumes from. */
   cursorKey: string;
   onEvent: (event: JetstreamEvent) => Promise<void>;
+  /**
+   * Called for an event that is skipped because it kept failing: drop what
+   * is held of its record, as for an edit that made it invalid.
+   */
+  onSkip?: (event: JetstreamEvent) => Promise<void>;
   db?: QueryFn;
   wsFactory?: (url: string) => WebSocketLike;
   /** Jetstream subscribe endpoint, without query string. */
   url?: string;
   cursorFlushMs?: number;
+}
+
+/** An event as a log line names it. */
+function describe(event: JetstreamEvent): string {
+  const { did, commit } = event;
+  return commit
+    ? `${commit.operation} at://${did}/${commit.collection}/${commit.rkey}`
+    : `a ${event.kind} event for ${did}`;
 }
 
 export class JetstreamSubscription {
@@ -132,6 +171,12 @@ export class JetstreamSubscription {
   private heard = false;
   /** When the cursor last moved. Replayed events don't count: a socket can deliver its rewind and nothing else. */
   private lastProgressAt = Date.now();
+  /** The new event that last failed, and how many times running. */
+  private failed: { timeUs: number; times: number } | null = null;
+  /** When events were skipped, over the last hour or so. */
+  private skippedAt: number[] = [];
+  /** When the current socket opened, and where the cursor was; null until it has. */
+  private opened: { at: number; cursor: number | null } | null = null;
 
   constructor(opts: JetstreamOptions) {
     if (opts.collections.length === 0) throw new Error(`[${opts.tag}] no collections to subscribe to`);
@@ -139,6 +184,7 @@ export class JetstreamSubscription {
     // spread alone would keep an explicit undefined.
     this.opts = {
       ...opts,
+      onSkip: opts.onSkip ?? (async () => {}),
       db: opts.db ?? defaultQuery,
       wsFactory: opts.wsFactory ?? ((url) => new WebSocket(url)),
       url: opts.url ?? DEFAULT_JETSTREAM_URL,
@@ -173,9 +219,17 @@ export class JetstreamSubscription {
     await this.flushCursor();
   }
 
-  /** Whether the cursor hasn't moved for STALLED_MS: the stream, or what handles it, is stuck. */
+  /**
+   * Whether the stream, or what handles it, is stuck: the cursor hasn't moved
+   * for STALLED_MS, or so many events have been skipped that no more will be.
+   */
   stalled(): boolean {
-    return Date.now() - this.lastProgressAt > STALLED_MS;
+    return Date.now() - this.lastProgressAt > STALLED_MS || this.skipsThisHour() >= MAX_SKIPS_PER_HOUR;
+  }
+
+  private skipsThisHour(): number {
+    const hourAgo = Date.now() - 3_600_000;
+    return this.skippedAt.filter((t) => t > hourAgo).length;
   }
 
   private subscribeUrl(): string {
@@ -199,10 +253,11 @@ export class JetstreamSubscription {
       return;
     }
     this.ws = ws;
+    this.opened = null;
     // A new socket gets a full interval to deliver something.
     this.heard = true;
     ws.on('open', () => {
-      this.reconnectDelayMs = RECONNECT_INITIAL_MS;
+      if (this.ws === ws) this.opened = { at: Date.now(), cursor: this.cursor };
       console.log(`[${tag}] Jetstream connected`);
     });
     ws.on('message', (data) => {
@@ -210,9 +265,14 @@ export class JetstreamSubscription {
       this.heard = true;
       let event: JetstreamEvent;
       try {
-        event = JSON.parse(data.toString());
+        event = parseJson(data.toString()) as JetstreamEvent;
       } catch {
         console.warn(`[${tag}] dropped a non-JSON Jetstream message`);
+        return;
+      }
+      // Valid JSON that isn't an event (`null`, a number) would throw wherever it was read.
+      if (typeof event !== 'object' || event === null) {
+        console.warn(`[${tag}] dropped a Jetstream message that isn't an object`);
         return;
       }
       this.enqueue(ws, event);
@@ -230,6 +290,11 @@ export class JetstreamSubscription {
 
   private scheduleReconnect(): void {
     if (this.stopped || this.reconnectTimer) return;
+    // `opened` is the socket that just ended, if it ever opened: connect() clears it for each new one.
+    const { opened } = this;
+    if (opened && Date.now() - opened.at >= STABLE_MS && this.cursor !== opened.cursor) {
+      this.reconnectDelayMs = RECONNECT_INITIAL_MS;
+    }
     const delay = this.reconnectDelayMs;
     this.reconnectDelayMs = Math.min(delay * 2, RECONNECT_MAX_MS);
     this.reconnectTimer = setTimeout(() => {
@@ -247,29 +312,86 @@ export class JetstreamSubscription {
     const generation = this.generation;
     this.queued++;
     if (this.queued >= PAUSE_AT && !ws.isPaused) ws.pause();
-    this.queue = this.queue.then(async () => {
-      this.queued--;
-      if (this.queued <= RESUME_AT && this.ws?.isPaused) this.ws.resume();
-      if (generation !== this.generation) return;
-      try {
-        await this.opts.onEvent(event);
-      } catch (err) {
-        console.error(`[${this.opts.tag}] event failed:`, err);
+    this.queue = this.queue.then(() => this.handle(event, generation)).catch((err) => {
+      // Nothing in handle() should throw. If something does, the chain must
+      // outlive it: every later event is queued behind this promise.
+      console.error(`[${this.opts.tag}] handling an event went wrong:`, err);
+      this.resync('an internal error');
+    });
+  }
+
+  /** Handle one queued event, and move the cursor past it. */
+  private async handle(event: JetstreamEvent, generation: number): Promise<void> {
+    this.queued--;
+    if (this.queued <= RESUME_AT && this.ws?.isPaused) this.ws.resume();
+    if (generation !== this.generation) return;
+    try {
+      await this.opts.onEvent(event);
+    } catch (err) {
+      if (!(await this.passOver(event, err))) {
         this.resync('an event failed');
         return;
       }
-      if (typeof event.time_us === 'number' && (this.cursor === null || event.time_us > this.cursor)) {
-        this.cursor = event.time_us;
-        this.lastProgressAt = Date.now();
-      }
-    });
+    }
+    if (typeof event.time_us === 'number' && (this.cursor === null || event.time_us > this.cursor)) {
+      this.cursor = event.time_us;
+      this.lastProgressAt = Date.now();
+    }
+  }
+
+  /**
+   * Whether to go on past an event whose handler failed, and not try it again.
+   * Usually no: the database is down, and the event waits for it. Yes for an
+   * event that has failed SKIP_AFTER_FAILURES times running, each time with
+   * the database taking a write straight afterwards, up to MAX_SKIPS_PER_HOUR.
+   */
+  private async passOver(event: JetstreamEvent, err: unknown): Promise<boolean> {
+    const { tag } = this.opts;
+    const timeUs = event.time_us;
+    // A replay from before the cursor: handled, or skipped, the first time
+    // (Jetstream delivers in time_us order, as the cursor itself assumes).
+    // Trying it again would count it against the allowance at every reconnect.
+    if (typeof timeUs === 'number' && this.cursor !== null && timeUs <= this.cursor) {
+      console.warn(`[${tag}] a replayed event failed and was passed over: ${describe(event)}`);
+      return true;
+    }
+    console.error(`[${tag}] event failed:`, err);
+    // A failure with the database down says nothing about the event, and
+    // neither do the ones before it.
+    if (typeof timeUs !== 'number' || !(await this.databaseTakesWrites())) {
+      this.failed = null;
+      return false;
+    }
+    const times = this.failed?.timeUs === timeUs ? this.failed.times + 1 : 1;
+    this.failed = { timeUs, times };
+    if (times < SKIP_AFTER_FAILURES) return false;
+    if (this.skipsThisHour() >= MAX_SKIPS_PER_HOUR) {
+      console.error(`[${tag}] not skipping ${describe(event)}: ${MAX_SKIPS_PER_HOUR} events were skipped in the last hour`);
+      return false;
+    }
+    const hourAgo = Date.now() - 3_600_000;
+    this.skippedAt = [...this.skippedAt.filter((t) => t > hourAgo), Date.now()];
+    console.error(`[${tag}] skipped ${describe(event)}: it failed ${times} times running with the database up`);
+    await this.opts.onSkip(event).catch((e) => console.error(`[${tag}] clearing up after the skipped event failed:`, e));
+    return true;
+  }
+
+  /** Whether the database takes a write just now: what tells an event that can't be handled from a database that can't. */
+  private async databaseTakesWrites(): Promise<boolean> {
+    try {
+      await this.opts.db('UPDATE ingest_cursor SET updated_at = NOW() WHERE key = $1', [this.opts.cursorKey]);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /** Drop a socket that has delivered nothing since the last check. */
   private checkSilence(): void {
     if (this.stalled()) {
       const minutes = Math.round((Date.now() - this.lastProgressAt) / 60_000);
-      console.error(`[${this.opts.tag}] stalled: the cursor hasn't moved for ${minutes} min (${this.queued} queued)`);
+      console.error(`[${this.opts.tag}] stalled: the cursor last moved ${minutes} min ago; `
+        + `${this.skipsThisHour()} events skipped in the last hour, ${this.queued} queued`);
     }
     // Between sockets the reconnect timer is running. A paused socket is quiet
     // by our doing, and keeps `heard` from the message that paused it.

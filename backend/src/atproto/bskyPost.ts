@@ -10,7 +10,8 @@
 // the CID must be a plain base32 CIDv1.
 
 import { bridgeVideoBase } from '../config';
-import { isObject } from './videoPost';
+import { timestamp } from './json';
+import { isObject, MAX_DIMENSION } from './videoPost';
 
 export const BSKY_POST_NSID = 'app.bsky.feed.post';
 
@@ -40,7 +41,8 @@ const videoBase = (did: string, videoCid: string) =>
 export const hlsUrl = (did: string, videoCid: string) => `${videoBase(did, videoCid)}/playlist.m3u8`;
 export const thumbnailUrl = (did: string, videoCid: string) => `${videoBase(did, videoCid)}/thumbnail.jpg`;
 
-const positiveInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v > 0;
+const dimension = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isInteger(v) && v > 0 && v <= MAX_DIMENSION;
 
 /** Tags from the record's `tags` and its facets' #tag features, '#'-prefixed, deduplicated. */
 function hashtags(record: Record<string, unknown>): string[] {
@@ -76,15 +78,15 @@ export function parseBskyVideoPost(
   if (!isObject(embed) || embed.$type !== 'app.bsky.embed.video') return 'no-video';
 
   const ar = embed.aspectRatio;
-  if (!isObject(ar) || !positiveInt(ar.width) || !positiveInt(ar.height)) return 'no-aspect-ratio';
+  if (!isObject(ar) || !dimension(ar.width) || !dimension(ar.height)) return 'no-aspect-ratio';
   if (ar.height / ar.width < aspectMin) return 'too-wide';
 
   const video = embed.video;
   const cid = isObject(video) && isObject(video.ref) ? video.ref.$link : undefined;
   if (typeof cid !== 'string' || !CID_RE.test(cid)) return 'bad-video-blob';
 
-  const createdAt = typeof record.createdAt === 'string' ? new Date(record.createdAt) : null;
-  if (!createdAt || Number.isNaN(createdAt.getTime())) return 'bad-created-at';
+  const createdAt = timestamp(record.createdAt);
+  if (!createdAt) return 'bad-created-at';
 
   const text = typeof record.text === 'string' && record.text.length > 0
     ? record.text.slice(0, MAX_TEXT) : null;

@@ -262,6 +262,25 @@ test('an author the AppView does not return counts as read, and keeps what is st
   expect(again.calls.map((c) => c.method)).toEqual(['app.bsky.feed.getPosts']);
 });
 
+// The oldest-due posts are taken first, so a batch that fails every time is
+// never got past: one profile Postgres refused would stop every check.
+test('a NUL in what the AppView returns does not fail the batch', async () => {
+  await bridged(ALICE, 'one');
+  const profile = profileUri(ALICE);
+  const { poller } = makePoller({
+    posts: [postView(uri(ALICE, 'one'))],
+    // Two self-labels that are one once the NUL is gone: stored as given, they
+    // would be one key twice in a statement, which Postgres refuses.
+    profiles: [profileView(ALICE, {
+      displayName: 'Al\u0000ice', followersCount: 5000,
+      labels: [lbl(profile, 'x', ALICE), lbl(profile, 'x\u0000', ALICE)],
+    })],
+  });
+  expect(await poller.runOnce()).toEqual({ checked: 1, qualified: 1, dropped: 0 });
+  expect(await db.query('SELECT display_name FROM bridge_authors WHERE did = $1', [ALICE])).toEqual([{ display_name: 'Alice' }]);
+  expect(await db.query('SELECT val FROM labels WHERE subject = $1', [profile])).toEqual([{ val: 'x' }]);
+});
+
 test('an AppView error throws and leaves the batch due', async () => {
   await bridged(ALICE, 'a');
   const { poller } = makePoller({ posts: [], profiles: [], status: 429 });

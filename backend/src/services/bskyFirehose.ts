@@ -74,7 +74,8 @@ export class BskyFirehose {
     this.now = opts.now ?? (() => new Date());
     this.jetstream = new JetstreamSubscription({
       tag: 'bridge', collections: [BSKY_POST_NSID], cursorKey: CURSOR_KEY,
-      onEvent: (e) => this.handleEvent(e), db: this.db, wsFactory: opts.wsFactory,
+      onEvent: (e) => this.handleEvent(e), onSkip: (e) => this.dropSkipped(e),
+      db: this.db, wsFactory: opts.wsFactory,
       url: opts.jetstreamUrl, cursorFlushMs: opts.cursorFlushMs,
     });
   }
@@ -99,6 +100,16 @@ export class BskyFirehose {
 
   private logStats(): void {
     console.log(`[bridge] ${Object.entries(this.stats).map(([k, v]) => `${k}=${v}`).join(' ')}`);
+  }
+
+  /**
+   * An event the subscription gave up on: if it was an edit, the version
+   * indexed before it goes, as for an edit that is no longer a candidate.
+   * What the edit changed (a label, say) is unknown, so the old row isn't served on.
+   */
+  private async dropSkipped(event: JetstreamEvent): Promise<void> {
+    const c = parseCommit(event, BSKY_POST_NSID);
+    if (c && c.operation !== 'delete') await deleteBridged(this.db, c.uri);
   }
 
   /** Handle one Jetstream event. Public so tests can drive it directly. */

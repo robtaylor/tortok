@@ -36,12 +36,16 @@ describe('parseBskyVideoPost', () => {
     expect(parseBskyVideoPost(ALICE, videoRecord({ embed: { $type: 'app.bsky.embed.images' } }), 1, NOW)).toBe('no-video');
     expect(parseBskyVideoPost(ALICE, videoRecord({}, null), 1, NOW)).toBe('no-aspect-ratio');
     expect(parseBskyVideoPost(ALICE, videoRecord({}, { width: 0, height: 16 }), 1, NOW)).toBe('no-aspect-ratio');
+    // Past what the index's integer columns hold.
+    expect(parseBskyVideoPost(ALICE, videoRecord({}, { width: 1, height: 2 ** 31 }), 1, NOW)).toBe('no-aspect-ratio');
     expect(parseBskyVideoPost(ALICE, videoRecord({}, { width: 16, height: 9 }), 1, NOW)).toBe('too-wide');
     expect(parseBskyVideoPost(ALICE, videoRecord({}, { width: 16, height: 9 }), 0.5, NOW)).toMatchObject({ width: 16 });
     const badCid = videoRecord();
     (badCid.embed.video.ref as { $link: string }).$link = '../../etc';
     expect(parseBskyVideoPost(ALICE, badCid, 1, NOW)).toBe('bad-video-blob');
     expect(parseBskyVideoPost(ALICE, videoRecord({ createdAt: 'soon' }), 1, NOW)).toBe('bad-created-at');
+    // JavaScript reads this date; Postgres has no timestamp that early.
+    expect(parseBskyVideoPost(ALICE, videoRecord({ createdAt: '-010000-01-01T00:00:00.000Z' }), 1, NOW)).toBe('bad-created-at');
   });
 
   test('clamps a future createdAt to now', () => {
@@ -103,6 +107,57 @@ describe('BskyFirehose', () => {
       bridge_checked_at: null, bridge_qualified_at: null,
     });
     expect(bridge.stats.indexed).toBe(1);
+  });
+
+  test('a NUL anywhere in a post, which Postgres cannot store, is dropped before the post is read', async () => {
+    const { bridge, sockets } = make();
+    await bridge.start();
+    // Dropped only on the way into the database, the two tags would be stored
+    // as one twice, and the two labels would fail the statement that stores them.
+    const record = videoRecord({ text: 'a\u0000 clip', tags: ['do\u0000gs', 'dogs'], facets: [], labels: selfLabelsField('x', 'x\u0000') });
+    sockets[0].deliver({ ...event('create', record), time_us: 20_000_000 });
+    await bridge.stop();
+    expect(sockets[0].terminated).toBe(false);
+    expect(await posts()).toMatchObject([{ text: 'a clip', hashtags: ['#dogs'] }]);
+    expect(await labelVals()).toEqual(['x']);
+  });
+
+  test('an edit that keeps failing with the database up is skipped, and the version indexed before it goes', async () => {
+    // The insert of one version of one post fails, as it did for the NUL of
+    // 2026-11-22. Everything else, the subscription's own write included, works.
+    const refusing = ((sql: string, params?: any[]) =>
+      (sql.includes('INSERT INTO posts') && params?.[4] === 'bafyedit'
+        ? Promise.reject(new Error('refused'))
+        : db.query(sql, params))) as typeof db.query;
+    const until = async (done: () => boolean) => {
+      for (let i = 0; i < 10_000 && !done(); i++) await new Promise((r) => setImmediate(r));
+      expect(done()).toBe(true);
+    };
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    try {
+      const { bridge, sockets } = make({ db: refusing });
+      await bridge.start();
+      sockets[0].deliver({ ...event('create', videoRecord(), '3kbad'), time_us: 20_000_000 });
+      const edit = { ...event('update', videoRecord({ text: 'edited' }), '3kbad', 'bafyedit'), time_us: 21_000_000 };
+      for (const i of [0, 1]) {
+        sockets[i].deliver(edit);
+        await until(() => sockets[i].terminated);
+        expect(await posts()).toHaveLength(1);
+        jest.advanceTimersByTime(2_000);
+        expect(sockets).toHaveLength(i + 2);
+      }
+      sockets[2].deliver(edit);
+      sockets[2].deliver({ ...event('create', videoRecord(), '3kgood'), time_us: 22_000_000 });
+      await bridge.stop();
+      expect(sockets).toHaveLength(3);
+      expect(sockets[2].terminated).toBe(false);
+      // What the edit changed can't be known, so the old version isn't served on.
+      expect((await posts()).map((p) => p.rkey)).toEqual(['3kgood']);
+      expect(await db.query(`SELECT cursor FROM ingest_cursor WHERE key = 'jetstream-bsky-posts'`))
+        .toEqual([{ cursor: '22000000' }]);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test('ignores non-video posts, other collections and bad identifiers', async () => {

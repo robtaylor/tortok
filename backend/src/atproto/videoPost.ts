@@ -5,6 +5,8 @@
 // Hand-written for this one record type rather than pulling in
 // @atproto/lexicon; keep it in step with the Lexicon file.
 
+import { timestamp } from './json';
+
 export const VIDEO_POST_NSID = 'app.tortok.video.post';
 
 /** The parts of a valid record that the index stores. */
@@ -55,6 +57,12 @@ function str(v: unknown, field: string, maxLength: number, maxGraphemes?: number
   return v;
 }
 
+/**
+ * The largest width or height indexed: what an INTEGER column holds. The
+ * Lexicons set no maximum, and Postgres refuses a larger one.
+ */
+export const MAX_DIMENSION = 2_147_483_647;
+
 function int(v: unknown, field: string, min: number, max?: number): number {
   if (typeof v !== 'number' || !Number.isInteger(v)) fail(`${field} must be an integer`);
   if (v < min || (max !== undefined && v > max)) fail(`${field} is out of range`);
@@ -99,8 +107,8 @@ export function parseVideoPost(record: unknown): VideoPost {
   let height: number | null = null;
   if (record.aspectRatio !== undefined) {
     if (!isObject(record.aspectRatio)) fail('aspectRatio must be an object');
-    width = int(record.aspectRatio.width, 'aspectRatio.width', 1);
-    height = int(record.aspectRatio.height, 'aspectRatio.height', 1);
+    width = int(record.aspectRatio.width, 'aspectRatio.width', 1, MAX_DIMENSION);
+    height = int(record.aspectRatio.height, 'aspectRatio.height', 1, MAX_DIMENSION);
   }
 
   const caption = record.caption === undefined ? null : str(record.caption, 'caption', 1200, 300);
@@ -123,9 +131,8 @@ export function parseVideoPost(record: unknown): VideoPost {
     });
   }
 
-  const createdAtRaw = str(record.createdAt, 'createdAt', 64);
-  const createdAt = new Date(createdAtRaw);
-  if (Number.isNaN(createdAt.getTime())) fail('createdAt is not a datetime');
+  const createdAt = timestamp(str(record.createdAt, 'createdAt', 64));
+  if (!createdAt) fail('createdAt is not a datetime the index can hold');
 
   return {
     magnetUri, infoHash, durationMs, width, height, caption,

@@ -112,6 +112,12 @@ describe('AtprotoIngest: Jetstream events', () => {
     expect(await posts()).toEqual([]);
   });
 
+  it('indexes a record whose caption has a NUL, which Postgres cannot store, without it', async () => {
+    const { ingest } = makeIngest();
+    await ingest.handleEvent(commit(ALICE, '3kabc', 'create', validRecord({ caption: 'Big\u0000 Buck Bunny' })));
+    expect(await posts()).toMatchObject([{ text: 'Big Buck Bunny' }]);
+  });
+
   it('ignores other collections and malformed identifiers', async () => {
     const { ingest } = makeIngest();
     await ingest.handleEvent({ ...commit(ALICE, '3kabc', 'create', validRecord()), commit: {
