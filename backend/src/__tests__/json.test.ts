@@ -1,6 +1,6 @@
 // Network values as the index can store them (atproto/json.ts).
 
-import { parseJson, timestamp } from '../atproto/json';
+import { integer, MAX_INTEGER, parseJson, timestamp } from '../atproto/json';
 
 test('parseJson drops U+0000 from strings at any depth, and nothing else', () => {
   const value = { text: 'a\u0000b', tags: ['c\u0000', 'd'], n: 5, nested: { ok: true, s: '\u0000' } };
@@ -17,4 +17,11 @@ test('timestamp reads a datetime, and refuses what Postgres has no timestamp for
   expect(timestamp('-010000-01-01T00:00:00.000Z')).toBeNull();
   expect(timestamp('soon')).toBeNull();
   expect(timestamp(1_700_000_000)).toBeNull();
+});
+
+test('integer takes a whole number an INTEGER column holds, from the minimum up', () => {
+  expect(integer(0)).toBe(0);
+  expect(integer(MAX_INTEGER)).toBe(MAX_INTEGER);
+  expect(integer(0, 1)).toBeNull();
+  for (const v of [MAX_INTEGER + 1, -1, 1.5, '5', null, NaN]) expect(integer(v)).toBeNull();
 });
