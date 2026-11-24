@@ -4,6 +4,7 @@
 // `app.bsky.actor.profile` record gives the display name and avatar.
 
 import { promises as dns } from 'dns';
+import { parseJson } from './json';
 
 export type FetchFn = typeof fetch;
 export type ResolveTxtFn = (hostname: string) => Promise<string[][]>;
@@ -61,7 +62,7 @@ export class IdentityResolver {
   private async getJson(url: string): Promise<unknown> {
     const res = await this.get(url);
     if (!res.ok) throw new Error(`${url} returned ${res.status}`);
-    return res.json();
+    return parseJson(await res.text());
   }
 
   async resolve(did: string): Promise<Identity> {

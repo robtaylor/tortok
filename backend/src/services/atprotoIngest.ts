@@ -18,6 +18,7 @@ import { query as defaultQuery } from '../db';
 import type { QueryFn } from '../db';
 import { IdentityResolver, isDid } from '../atproto/identity';
 import type { FetchFn, Profile } from '../atproto/identity';
+import { parseJson } from '../atproto/json';
 import { InvalidRecordError, parseVideoPost, VIDEO_POST_NSID } from '../atproto/videoPost';
 import { JetstreamSubscription, parseCommit, RKEY_RE } from './jetstream';
 import type { JetstreamEvent, WebSocketLike } from './jetstream';
@@ -87,7 +88,8 @@ export class AtprotoIngest {
     this.identity = opts.identity ?? new IdentityResolver({ fetch: this.fetch });
     this.jetstream = new JetstreamSubscription({
       tag: 'ingest', collections: [VIDEO_POST_NSID], cursorKey: CURSOR_KEY,
-      onEvent: (e) => this.handleEvent(e), db: this.db, wsFactory: opts.wsFactory,
+      onEvent: (e) => this.handleEvent(e), onSkip: (e) => this.dropSkipped(e),
+      db: this.db, wsFactory: opts.wsFactory,
       url: opts.jetstreamUrl, cursorFlushMs: opts.cursorFlushMs,
     });
     this.seedDids = opts.seedDids ?? [];
@@ -141,6 +143,15 @@ export class AtprotoIngest {
     } else if (event.kind === 'identity' && event.did && this.known.has(event.did)) {
       await this.refreshProfile(event.did, true);
     }
+  }
+
+  /**
+   * An event the subscription gave up on: if it was an edit, the version
+   * indexed before it goes, as for an edit that made the record invalid.
+   */
+  private async dropSkipped(event: JetstreamEvent): Promise<void> {
+    const c = parseCommit(event, VIDEO_POST_NSID);
+    if (c && c.operation !== 'delete') await this.db('DELETE FROM posts WHERE at_uri = $1', [c.uri]);
   }
 
   private async handleCommit(event: JetstreamEvent): Promise<void> {
@@ -260,7 +271,7 @@ export class AtprotoIngest {
       if (cursor) url.searchParams.set('cursor', cursor);
       const res = await this.fetch(url, { signal: AbortSignal.timeout(15_000) });
       if (!res.ok) throw new Error(`listRecords returned ${res.status}`);
-      const page = (await res.json()) as { cursor?: string; records?: { uri?: string; cid?: string; value?: unknown }[] };
+      const page = parseJson(await res.text()) as { cursor?: string; records?: { uri?: string; cid?: string; value?: unknown }[] };
       for (const r of page.records ?? []) {
         if (typeof r.uri !== 'string' || !r.uri.startsWith(prefix) || typeof r.cid !== 'string') continue;
         const rkey = r.uri.slice(prefix.length);

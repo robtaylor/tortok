@@ -5,6 +5,7 @@
 // over them, such as the NSFW set, lives in the callers.
 
 import type { QueryFn } from '../db';
+import { timestamp } from './json';
 import { isObject } from './videoPost';
 
 export interface Label {
@@ -41,12 +42,6 @@ const MAX_VAL = 128;
 const validVal = (v: unknown): v is string =>
   typeof v === 'string' && v.length > 0 && Buffer.byteLength(v) <= MAX_VAL;
 
-function date(v: unknown): Date | null {
-  if (typeof v !== 'string') return null;
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
 /**
  * The self-labels on a record or profile (its `labels` field, a
  * com.atproto.label.defs#selfLabels). Self-labels have no timestamp of
@@ -75,12 +70,12 @@ export function viewLabels(labels: unknown): Label[] {
   const out: Label[] = [];
   for (const l of labels) {
     if (!isObject(l) || typeof l.src !== 'string' || typeof l.uri !== 'string' || !validVal(l.val)) continue;
-    const cts = date(l.cts);
+    const cts = timestamp(l.cts);
     if (!cts) continue;
     const self = l.src === subjectDid(l.uri);
     out.push({
       subject: l.uri, src: l.src, val: l.val, neg: l.neg === true,
-      subjectCid: !self && typeof l.cid === 'string' ? l.cid : null, cts, exp: date(l.exp),
+      subjectCid: !self && typeof l.cid === 'string' ? l.cid : null, cts, exp: timestamp(l.exp),
     });
   }
   return out;

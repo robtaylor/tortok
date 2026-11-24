@@ -26,6 +26,7 @@ import { query as defaultQuery } from '../db';
 import type { QueryFn } from '../db';
 import type { FetchFn } from '../atproto/identity';
 import { BSKY_POST_NSID } from '../atproto/bskyPost';
+import { parseJson } from '../atproto/json';
 import { accountSubjects, replaceSelfLabels, upsertLabels, viewLabels } from '../atproto/labels';
 import { isObject } from '../atproto/videoPost';
 import {
@@ -279,7 +280,7 @@ export class BskyEngagementPoller {
     for (const v of values) url.searchParams.append(param, v);
     const res = await this.fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!res.ok) throw new AppViewError(method, res.status);
-    const body: unknown = await res.json();
+    const body = parseJson(await res.text());
     const list = isObject(body) ? body[key] : undefined;
     if (!Array.isArray(list)) throw new AppViewError(method, res.status, `returned no ${key} list`);
     return list.filter(isObject);

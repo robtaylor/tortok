@@ -51,13 +51,25 @@ pool.on('error', (err) => {
 const QUERY_TIMEOUT_MS = 30_000;
 
 /**
+ * A parameter as Postgres can store it. Its text can't hold U+0000, and one in
+ * a parameter fails the whole statement, every time it is tried. Network JSON
+ * has them dropped where it is parsed (atproto/json.ts); this is the backstop
+ * for a string that came some other way, such as a request's path.
+ */
+function storable(value: unknown): unknown {
+  if (typeof value === 'string') return value.replaceAll('\u0000', '');
+  return Array.isArray(value) ? value.map(storable) : value;
+}
+
+/**
  * Execute a query. It rejects if no answer comes within `timeoutMs`; the
  * schema bootstrap doesn't go through here, so it stays unbounded.
  */
 export async function query<T = any>(text: string, params?: any[], timeoutMs = QUERY_TIMEOUT_MS): Promise<T[]> {
   const start = Date.now();
   // node-postgres reads query_timeout off a query's config; its types only list it for the pool.
-  const config: QueryConfig & { query_timeout: number } = { text, values: params, query_timeout: timeoutMs };
+  const config: QueryConfig & { query_timeout: number } =
+    { text, values: params?.map(storable), query_timeout: timeoutMs };
   const result = await pool.query(config);
   const duration = Date.now() - start;
 
