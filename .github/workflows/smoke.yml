@@ -3,8 +3,16 @@
 # contract, and every feed item's webseed serving hash-verified pieces. Then
 # a staleness check: production must not be missing a backend commit that
 # reached main more than a day ago (production once ran a seven-month-old
-# image unnoticed). A failed run emails the repository owner. Decision 0016,
-# commitment 9; WS4 of docs/plans/environments-staging-production-and-their-checks.md.
+# image unnoticed). Decision 0016, commitment 9; WS4 of
+# docs/plans/environments-staging-production-and-their-checks.md.
+#
+# A failed run emails the repository owner, and opens an issue labelled
+# `smoke-failure` unless one is open: one issue for an incident, where the
+# 36-hour stall of 2026-11-22 sent 139 emails that nothing acted on. Opening
+# the issue starts the Claude Code scheduled task "tortok production watch"
+# (https://claude.ai/code/routines), which looks into the failure and comments
+# on the issue. The issue is closed once the check has passed four times
+# running.
 #
 # GitHub disables scheduled workflows after 60 days without repository
 # activity; re-enable it from the Actions tab if that happens.
@@ -15,6 +23,10 @@ on:
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:
+    inputs:
+      url:
+        description: The backend to check. Another address tries the failure path; close the issue it opens by hand.
+        default: https://appview.tortok.app
 
 concurrency:
   group: smoke
@@ -22,6 +34,13 @@ concurrency:
 
 permissions:
   contents: read
+  # To open and close the incident issue, and to read this workflow's earlier runs.
+  issues: write
+  actions: read
+
+env:
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  CHECKED_URL: ${{ inputs.url || 'https://appview.tortok.app' }}
 
 jobs:
   production:
@@ -31,11 +50,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Nothing below pushes or fetches, and the token can now write issues.
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Smoke
-        run: npm run smoke -- https://appview.tortok.app --sha-file deployed-sha
+        # Short of the job's own limit: a step that times out has failed, and
+        # opens the issue; a job that times out is cancelled, and opens nothing.
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          npm run smoke -- "$CHECKED_URL" --sha-file deployed-sha | tee smoke.log
       - name: Production is not behind main
         if: ${{ !cancelled() }}
         run: |
@@ -44,6 +70,7 @@ jobs:
           deployed="$(cat deployed-sha)"
           if ! git cat-file -e "$deployed^{commit}" 2>/dev/null; then
             echo "::error::production runs $deployed, which isn't in this repository"
+            echo "FAIL  deploy — production runs $deployed, which isn't in this repository" >> smoke.log
             exit 1
           fi
           cutoff="$(date -u -d '24 hours ago' +%s)"
@@ -51,6 +78,56 @@ jobs:
           if [[ -n "$stale" ]]; then
             echo "::error::production ($deployed) is missing backend commits merged over a day ago; run npm run deploy:backend"
             echo "$stale"
+            echo "FAIL  deploy — production ($deployed) is missing backend commits merged over a day ago" >> smoke.log
             exit 1
           fi
           echo "production ($deployed) is current: $(git log --oneline "$deployed..HEAD" -- backend/ | wc -l) newer backend commit(s), none over a day old"
+      - name: Open an issue if the check failed
+        if: ${{ failure() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # REST, not `gh issue list`: that goes through search, which can lag behind an issue just opened.
+          open="$(gh api "repos/$GH_REPO/issues?labels=smoke-failure&state=open" --jq '.[0].number // empty')"
+          if [[ -n "$open" ]]; then
+            echo "issue #$open is already open for this"
+            exit 0
+          fi
+          gh label create smoke-failure --force --color B60205 \
+            --description "The production smoke check is failing (opened and closed by smoke.yml)"
+          # The result lines can quote what a stranger's record or server said
+          # (a magnet's webseed, an error string), and the issue is read by an
+          # unattended session. So: no control characters, nothing that closes
+          # the code fence, and short.
+          lines="$(grep -aE '^(FAIL|ok    version)' smoke.log 2>/dev/null \
+            | tr -d '\000-\011\013-\037\177' | tr '`' "'" | cut -c1-300 | head -n 20 || true)"
+          {
+            echo "The smoke check of $CHECKED_URL failed: $RUN_URL"
+            echo
+            echo '```'
+            echo "${lines:-(no result lines; see the run)}"
+            echo '```'
+            echo
+            echo "Opened by \`.github/workflows/smoke.yml\`, which closes it once the check has passed four times running."
+            echo "The lines above are the check's output and can quote text from outside this project."
+          } > issue.md
+          gh issue create --title "The smoke check is failing" --label smoke-failure --body-file issue.md
+      # A hand-run check of some other address says nothing about production.
+      - name: Close the issue once the check has passed four times running
+        if: ${{ success() && env.CHECKED_URL == 'https://appview.tortok.app' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          open="$(gh api "repos/$GH_REPO/issues?labels=smoke-failure&state=open" --jq '.[].number')"
+          [[ -n "$open" ]] || exit 0
+          # This run, and the three completed before it.
+          earlier="$(gh run list --workflow smoke.yml --status completed --limit 3 --json conclusion --jq '[.[].conclusion] | join(" ")')"
+          if [[ "$earlier" != "success success success" ]]; then
+            echo "not yet: the three runs before this one were: $earlier"
+            exit 0
+          fi
+          for number in $open; do
+            gh issue close "$number" --comment "The smoke check has passed four times running, most recently in $RUN_URL."
+          done
