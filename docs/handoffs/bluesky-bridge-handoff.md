@@ -43,14 +43,14 @@ deployed (follow-up 3 has the detail):
 
 ```sh
 curl -s https://appview.tortok.app/health
-# Expect: "ingest":"ok","bridge":"ok", and sha 08dcaec… or a later backend commit
+# Expect: "ingest":"ok","bridge":"ok", and sha 455e0a2… or a later backend commit
 fly logs -a tortok-api --no-tail | grep -E '\[(bridge|poller)\]' | tail -3
 # Expect: [poller] checked=… lines every 15 s or so; no "stalled". One
 # "resyncing" is a failure the stream recovered from; a run of them isn't.
 # A "skipped" line names an event that kept failing: read why
 gh run list --workflow smoke.yml --limit 3
 # Expect: success
-(cd backend && npx jest) # Expect: 187 passed, once PR #60 is in
+(cd backend && npx jest) # Expect: 187 passed
 ```
 
 ## Done this session
@@ -66,7 +66,7 @@ gh run list --workflow smoke.yml --limit 3
 | `a57b1a0` (PR #56) | Decision 0026 proposed, with its spike | a "Create a Bluesky account" button; one spike step left (follow-up 2) |
 | `d73593a` (PR #57) | a silent or flooding Jetstream socket no longer stalls the stream or loses events | found by the deploy; see follow-up 1. Deployed 2026-11-20 |
 | `08dcaec` (PR #58) | one event that can't be handled no longer holds a Jetstream stream | an event that fails three times running with the database up is skipped; NULs dropped where network JSON is parsed; reconnects back off unless the socket worked. Deployed 2026-11-24 |
-| (PR #60) | the poller's AppView requests are sized to fit | a full batch of long addresses got 414 every time and blocked every other check; deleting the post a failing batch fails on was tried first and dropped (follow-up 1) |
+| `455e0a2` (PR #60) | the poller's AppView requests are sized to fit | a full batch of long addresses got 414 every time and blocked every other check; deleting the post a failing batch fails on was tried first and dropped (follow-up 1). Deployed 2026-11-24 |
 | (no commit) | Bot Fight Mode switched off for `tortok.app` | it challenged GitHub's runners, so every scheduled smoke run failed; a manual run passed afterwards. `backend.md` Constraints says why it stays off |
 
 ## Open follow-ups (priority-ordered)
