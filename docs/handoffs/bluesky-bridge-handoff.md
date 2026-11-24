@@ -29,8 +29,8 @@ deployed (follow-up 3 has the detail):
 
 **Next session should pick up:**
 
-1. **The poller's batch that always fails** (follow-up 1): the same
-   weakness as the second stall, not yet fixed.
+1. **The poller, where one failure still fails a whole batch**
+   (follow-up 1): the one cause found is fixed; the shape wants a design.
 2. **The database's size** (follow-up 2): a small spend to agree, then a
    design change. The volume fills around mid-December at today's rate.
 3. **Watch the bridge** (follow-up 3).
@@ -50,7 +50,7 @@ fly logs -a tortok-api --no-tail | grep -E '\[(bridge|poller)\]' | tail -3
 # A "skipped" line names an event that kept failing: read why
 gh run list --workflow smoke.yml --limit 3
 # Expect: success
-(cd backend && npx jest) # Expect: 183 passed
+(cd backend && npx jest) # Expect: 187 passed, once PR #60 is in
 ```
 
 ## Done this session
@@ -66,11 +66,12 @@ gh run list --workflow smoke.yml --limit 3
 | `a57b1a0` (PR #56) | Decision 0026 proposed, with its spike | a "Create a Bluesky account" button; one spike step left (follow-up 2) |
 | `d73593a` (PR #57) | a silent or flooding Jetstream socket no longer stalls the stream or loses events | found by the deploy; see follow-up 1. Deployed 2026-11-20 |
 | `08dcaec` (PR #58) | one event that can't be handled no longer holds a Jetstream stream | an event that fails three times running with the database up is skipped; NULs dropped where network JSON is parsed; reconnects back off unless the socket worked. Deployed 2026-11-24 |
+| (PR #60) | the poller's AppView requests are sized to fit | a full batch of long addresses got 414 every time and blocked every other check; deleting the post a failing batch fails on was tried first and dropped (follow-up 1) |
 | (no commit) | Bot Fight Mode switched off for `tortok.app` | it challenged GitHub's runners, so every scheduled smoke run failed; a manual run passed afterwards. `backend.md` Constraints says why it stays off |
 
 ## Open follow-ups (priority-ordered)
 
-### 1. The poller: a batch that always fails (next change, medium)
+### 1. The poller: one failure still fails a whole batch (a design, medium)
 
 The poller takes the 25 longest-due posts, and a batch that throws stays
 due. One that fails every time is retried for ever, and no post behind it
@@ -78,32 +79,45 @@ is checked again. `/health` says `stalled` after four failures and the
 feed drops the unchecked posts within two days, but unlike the stream's
 case nothing ages the cause out (`backend.md`, Deferred).
 
-What can cause it, as far as checked on 2026-11-24:
+The one cause found is fixed in PR #60: Bluesky's AppView answers 414 to
+a request URL past about 8,000 characters, and 25 posts with
+512-character record keys make one of 14,780. The requests are now sized
+to fit. No such post was in production.
 
-- Bluesky's AppView answers 414 to a `getPosts` request for 25 posts
-  with 512-character record keys. Every key in production is 13
-  characters today, so this takes someone meaning to do it.
-- It answered 400 to a request naming a key of `..`. PR #58 stopped such
-  keys being indexed.
-- A reply only a broken AppView would send: a `followersCount` that
-  isn't an integer in range, for one.
+What is left is the shape, not a known trigger:
 
-A sketch, not built:
+- A failed `getProfiles`, or one author's row the database refuses, fails
+  the whole batch.
+- No post has a retry time of its own, so whatever fails stays at the
+  head of the queue.
 
-- When a batch has failed several times running, run it again in halves,
-  down to single posts. A post that fails alone while its siblings pass
-  is the cause: delete it, as the poller does a post the AppView no
-  longer returns, under a small hourly cap.
-- The AppView's own failures mustn't be taken for this. It answered 504
-  to 14 batches on 2026-11-24. So only after repeated failure, and only
-  when another half passed in the same go.
-- Don't move `bridge_next_check_at` for a post whose check failed: the
-  feed reads it as proof of a check (Decision 0025).
+Tried on 2026-11-24 and dropped: checking a failing batch in halves and
+deleting the post that fails alone. Review ran it, and it deletes good
+posts:
 
-Two smaller things of the same kind: native ingest's backfill stops at a
-record whose insert fails, so that account's backfill stops there at
-every boot; and a subscription with no saved cursor doesn't retry a
-failed event, because it reconnects at the live end.
+- With `getProfiles` failing and `getPosts` working, the posts of authors
+  due a re-read fail alone, and go.
+- Against an AppView failing 30% of its requests it deleted seven good
+  posts in twelve simulated hours, with `/health` saying ok.
+- A deleted post doesn't come back. Decision 0025 turned down deleting
+  unread posts for the same reason.
+
+The direction that review pointed to, not built:
+
+- A retry time per post, in its own column, that orders the queue and
+  doubles with each failure. `bridge_next_check_at` stays as it is, so
+  the feed's rule (Decision 0025) still holds, and a post is only ever
+  deleted by age.
+- `refreshAuthors` taking a failure per author: those authors stay
+  unread and their posts unchecked this round, and everyone else is
+  checked.
+
+It changes the queue's order and adds a column, so it wants a plan entry
+before code. Two smaller things of the same kind: native ingest's
+backfill stops at a record whose insert fails, so that account's
+backfill stops there at every boot; and a subscription with no saved
+cursor doesn't retry a failed event, because it reconnects at the live
+end.
 
 ### 2. The database is small for the bridge (a spend to agree, then a design)
 
@@ -245,8 +259,8 @@ Decision 0026, and add the build to the Phase 3 plan. When it is built
 
 ## Migration note
 
-- Follow-up 1 → `backend.md` has it under Deferred; the fix changes
-  that row and the poller section, and the sketch goes with the handoff.
+- Follow-up 1 → `backend.md` has it under Deferred, with why deleting
+  was dropped; the design wants a plan entry in the Phase 3 plan.
 - Follow-up 2 → `backend.md` (Constraints and Deferred) has the facts.
   The design part wants a plan entry, or a decision if the queue moves
   to its own table.
