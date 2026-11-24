@@ -1,4 +1,4 @@
-# Handoff — Bluesky bridge (Unit 2.5 done; Decisions 0024 and 0025 deployed; a stall fixed)
+# Handoff — Bluesky bridge (Unit 2.5 done; two stalls fixed; the poller and the database next)
 
 **Created:** 2026-11-13
 **Working tree:** clean (untracked `.DS_Store`, `.idea/`, `backend/.expo/` are not ours to touch)
@@ -19,30 +19,38 @@ switch-on, do step 22 of [plan 2.5D](../plans/phase-3-atproto.md), the
 integration tests, and finish 2.5E. All done: Unit 2.5 is closed, and the
 Decision 0024 and 0025 builds are deployed (2026-11-20).
 
-The deploy found the bridge's firehose stalled: Jetstream had left its
-connection open and silent since 2026-11-19 16:10 UTC, and nothing had
-noticed. PR #57 fixed the client and made a stall visible; it is deployed
-too, and the missed stretch was replayed (follow-up 1).
+Production then stopped the bridge twice, and both causes are fixed and
+deployed (follow-up 3 has the detail):
+
+- From 2026-11-19 Jetstream left the bridge's connection open and silent
+  for 26 hours. PR #57.
+- From 2026-11-22 one Bluesky post with a NUL in its text held the stream
+  for 36 hours. PR #58.
 
 **Next session should pick up:**
 
-1. **Watch the bridge** for a few days (follow-up 1).
-2. **The sign-up button**: one real sign-up, then Decision 0026
-   (follow-up 2).
-3. **Unit 3**. The plan lists what to settle before the first real
+1. **The poller's batch that always fails** (follow-up 1): the same
+   weakness as the second stall, not yet fixed.
+2. **The database's size** (follow-up 2): a small spend to agree, then a
+   design change. The volume fills around mid-December at today's rate.
+3. **Watch the bridge** (follow-up 3).
+4. **The sign-up button**: one real sign-up, then Decision 0026
+   (follow-up 4).
+5. **Unit 3**. The plan lists what to settle before the first real
    record.
 
 **Verification command:**
 
 ```sh
 curl -s https://appview.tortok.app/health
-# Expect: "ingest":"ok","bridge":"ok", and sha d73593a… or a later backend commit
+# Expect: "ingest":"ok","bridge":"ok", and sha 08dcaec… or a later backend commit
 fly logs -a tortok-api --no-tail | grep -E '\[(bridge|poller)\]' | tail -3
 # Expect: [poller] checked=… lines every 15 s or so; no "stalled". One
-# "resyncing" is a failure the stream recovered from; a run of them isn't
+# "resyncing" is a failure the stream recovered from; a run of them isn't.
+# A "skipped" line names an event that kept failing: read why
 gh run list --workflow smoke.yml --limit 3
 # Expect: success
-(cd backend && npx jest) # Expect: 165 passed
+(cd backend && npx jest) # Expect: 183 passed
 ```
 
 ## Done this session
@@ -57,14 +65,79 @@ gh run list --workflow smoke.yml --limit 3
 | `a211f48` (PR #55) | Decision 0025: the feed leaves out a bridged post whose check is overdue | a post is served only while its check is under a day late, so a stopped poller or the off switch empties the feed of bridged posts within two days. Deployed 2026-11-20 |
 | `a57b1a0` (PR #56) | Decision 0026 proposed, with its spike | a "Create a Bluesky account" button; one spike step left (follow-up 2) |
 | `d73593a` (PR #57) | a silent or flooding Jetstream socket no longer stalls the stream or loses events | found by the deploy; see follow-up 1. Deployed 2026-11-20 |
+| `08dcaec` (PR #58) | one event that can't be handled no longer holds a Jetstream stream | an event that fails three times running with the database up is skipped; NULs dropped where network JSON is parsed; reconnects back off unless the socket worked. Deployed 2026-11-24 |
 | (no commit) | Bot Fight Mode switched off for `tortok.app` | it challenged GitHub's runners, so every scheduled smoke run failed; a manual run passed afterwards. `backend.md` Constraints says why it stays off |
 
 ## Open follow-ups (priority-ordered)
 
-### 1. Watch the bridge in production (ongoing, small)
+### 1. The poller: a batch that always fails (next change, medium)
 
-What happened on 2026-11-19 and 20. `backend.md` (atproto ingest) and the
-CHANGELOG hold what lasts of it:
+The poller takes the 25 longest-due posts, and a batch that throws stays
+due. One that fails every time is retried for ever, and no post behind it
+is checked again. `/health` says `stalled` after four failures and the
+feed drops the unchecked posts within two days, but unlike the stream's
+case nothing ages the cause out (`backend.md`, Deferred).
+
+What can cause it, as far as checked on 2026-11-24:
+
+- Bluesky's AppView answers 414 to a `getPosts` request for 25 posts
+  with 512-character record keys. Every key in production is 13
+  characters today, so this takes someone meaning to do it.
+- It answered 400 to a request naming a key of `..`. PR #58 stopped such
+  keys being indexed.
+- A reply only a broken AppView would send: a `followersCount` that
+  isn't an integer in range, for one.
+
+A sketch, not built:
+
+- When a batch has failed several times running, run it again in halves,
+  down to single posts. A post that fails alone while its siblings pass
+  is the cause: delete it, as the poller does a post the AppView no
+  longer returns, under a small hourly cap.
+- The AppView's own failures mustn't be taken for this. It answered 504
+  to 14 batches on 2026-11-24. So only after repeated failure, and only
+  when another half passed in the same go.
+- Don't move `bridge_next_check_at` for a post whose check failed: the
+  feed reads it as proof of a check (Decision 0025).
+
+Two smaller things of the same kind: native ingest's backfill stops at a
+record whose insert fails, so that account's backfill stops there at
+every boot; and a subscription with no saved cursor doesn't retry a
+failed event, because it reconnects at the live end.
+
+### 2. The database is small for the bridge (a spend to agree, then a design)
+
+`backend.md` (Constraints) has the facts. In short:
+
+- `tortok-db` is one `shared-cpu-1x` machine with 256 MB and a 1 GB
+  volume, sized before the bridge. The database is bigger than its
+  memory, and Fly's health check for it fails on I/O wait a few times an
+  hour.
+- 388 MB of the volume was used on 2026-11-21 and 461 MB on 2026-11-24:
+  about 20 MB a day. Fly Postgres turns read-only at 90%, which that
+  rate reaches around mid-December. `posts` levels off 30 days after
+  switch-on (2026-12-13); `bridge_authors` and `labels` never do.
+- The cause of most of the writing: every check rewrites the whole
+  `posts` row and an entry in each of its indexes, because
+  `bridge_next_check_at` is indexed. 2.8 million such updates in eight
+  days.
+
+To decide:
+
+- A bigger volume (`fly volumes extend`), which costs cents a month and
+  buys months. It can't be shrunk again.
+- More memory for the machine (512 MB or 1 GB), a few dollars a month,
+  for the I/O pressure. It restarts the database for a moment.
+- Then the design: a narrow table for the poller's queue, so a check
+  stops rewriting the `posts` row; and pruning `bridge_authors` rows with
+  no posts and `labels` for subjects no longer held.
+
+### 3. Watch the bridge in production (ongoing, small)
+
+What happened, in order. `backend.md` (atproto ingest) and the CHANGELOG
+hold what lasts of it.
+
+The silent connection, 2026-11-19 and 20:
 
 - Jetstream closed the bridge's socket at 16:10 UTC on the 19th. The
   client reconnected, got its 5-second rewind, and then nothing: the
@@ -75,45 +148,55 @@ CHANGELOG hold what lasts of it:
   of the events it replayed, so the bridge was switched off on the
   machine for an hour (`fly machine update --env BRIDGE_ENABLED=false`).
 - With PR #57 deployed, the cursor was put back to the stall point and
-  the gap replayed again: 29 hours of posts in 2 hours 7 minutes
-  (19:34 to 21:40 UTC), one connection at a time, with no queue overflow.
-  The hours that had been missing now hold what the same hours held on
-  the three days before (17:00 on the 19th: 1,784, against 1,562, 1,847
-  and 1,735; the first replay had left 1,026).
-- The replay was interrupted about 40 times and resumed from its cursor
-  within 2 s each time. All but one were Jetstream closing the connection
-  (code 1006), which it does to a subscriber that reads slowly
-  (`backend.md`, Cursor). The other was a `Query read timeout` at
-  20:46:37 UTC: one `SELECT` on `labels` got no answer for 30 s while the
-  poller's queries on the same pool were answered. Its cause wasn't
-  found.
-- The replay left 35,000 posts waiting for their first check. The poller
-  worked through them by 23:48 UTC, two hours after the replay ended, and
-  the feed's newest Bluesky post was under a minute old again. Until then
-  the feed ran hours behind: a post is served only after its first check,
-  and the checks are taken oldest first.
+  the gap replayed again: 29 hours of posts in 2 hours 7 minutes, with
+  no queue overflow. The hours that had been missing now hold what the
+  same hours held on the three days before (17:00 on the 19th: 1,784,
+  against 1,562, 1,847 and 1,735; the first replay had left 1,026).
+- The replay left 35,000 posts waiting for their first check, and the
+  feed ran hours behind until the poller had worked through them, two
+  hours after the replay ended.
+
+The post that couldn't be stored, 2026-11-22 to 24:
+
+- At 12:18 UTC on the 22nd a Bluesky post with a NUL in its text made
+  Postgres refuse the insert. The bridge tried that one event 83,615
+  times, a connection every second and a half, and indexed nothing.
+- At 00:30 UTC on the 24th Jetstream no longer held the event, and the
+  bridge went on by itself. It replayed the 36 hours in 47 minutes. The
+  12 minutes that had aged out with the event (12:18 to 12:30 on the
+  22nd) are lost.
+- The smoke check failed all 139 runs in that stretch with `bridge is
+  stalled`. Nothing acted on it: the alert is an email to the repository
+  owner, and no session was running.
+- PR #58 fixed it on the 24th.
 
 What to look at, and what isn't covered yet:
 
+- **Old logs.** `fly logs` shows only the last 100 lines. Fly's Grafana
+  (`fly-metrics.net`, Explore, the VictoriaLogs source) keeps days of
+  them, searchable; that is where the NUL was found.
+- A `skipped` line in the log names an event the stream gave up on after
+  three failures. More than 20 in an hour and the stream stops and says
+  `stalled`: then the fault is in the service.
 - `/health` reports `ingest` and `bridge`, and the smoke check fails when
   either is `stalled`. It passes `bridge: off`: nothing compares the
   machine's `BRIDGE_ENABLED` with `fly.toml`. A deploy resets it from
   `fly.toml`.
-- Jetstream held about 36 hours of events on 2026-11-20. A stall left
-  longer than that loses Bluesky posts for good.
-- A `Query read timeout` in the log at the live rate. One during a replay
-  costs 2 s. If they come when the machine is idle, look at the database
-  (`tortok-db`) and the pool before anything else.
-- About an hour after switch-on (2026-11-13) the bridge held 795 rows,
-  73 of them served, with about 170 qualifying an hour. On 2026-11-20 it
-  held about 160,000 rows, 23,000 of them served, and indexed about 1,500
-  candidates an hour.
+- Jetstream holds about 36 hours of events (36.3 measured on 2026-11-20;
+  the second stall outlasted it by 12 minutes). A stall left longer
+  loses posts for good.
+- A `Query read timeout` or `connection timeout` in the log. One query
+  timed out during the first replay and four connection attempts in the
+  35 hours after it; each cost the stream about 2 s. They go with the
+  database's I/O pressure (follow-up 2).
+- On 2026-11-24 the bridge held 224,740 posts, 41,000 of them served,
+  and about 26,000 from each day.
 - Off switch: `BRIDGE_ENABLED = "false"` in `backend/fly.toml`, then
   deploy.
 
 Drop this item once the bridge has run cleanly for a while.
 
-### 2. A "Create a Bluesky account" button (a spike step, then a decision)
+### 4. A "Create a Bluesky account" button (a spike step, then a decision)
 
 [Decision 0026](../architecture/decisions/0026-the-sign-in-screen-offers-to-create-a-bluesky-account.md)
 is Proposed: the login screen opens Bluesky's sign-up inside the OAuth
@@ -162,9 +245,14 @@ Decision 0026, and add the build to the Phase 3 plan. When it is built
 
 ## Migration note
 
-- Follow-up 1 → the incident and the fix are in `backend.md` and the
-  CHANGELOG; the row counts are a snapshot and go with the handoff.
-- Follow-up 2 → the spike record and Decision 0026 hold it; once the
+- Follow-up 1 → `backend.md` has it under Deferred; the fix changes
+  that row and the poller section, and the sketch goes with the handoff.
+- Follow-up 2 → `backend.md` (Constraints and Deferred) has the facts.
+  The design part wants a plan entry, or a decision if the queue moves
+  to its own table.
+- Follow-up 3 → both incidents and their fixes are in `backend.md` and
+  the CHANGELOG; the counts are a snapshot and go with the handoff.
+- Follow-up 4 → the spike record and Decision 0026 hold it; once the
   decision is accepted, the Phase 3 plan gets the build as a unit.
 - Critical context: the two iOS notes go when prebuild is run; the test
   notes are already in code comments.
