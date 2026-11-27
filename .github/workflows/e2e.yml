@@ -211,6 +211,11 @@ jobs:
         run: |
           npx expo prebuild --platform android
           npm run e2e:build:android
+          # patches/expo-video+*.patch only takes effect when expo-video is
+          # compiled from source (package.json, expo.autolinking). The emulator
+          # has no proxy, so no test would notice the patch missing.
+          grep -rqa isOnThisDevice node_modules/expo-video/android/build/tmp/kotlin-classes \
+            || { echo "::error::the expo-video patch is not in the Android build"; exit 1; }
       - name: Detox on the emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:

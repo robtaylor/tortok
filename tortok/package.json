@@ -16,6 +16,15 @@
     "test": "jest",
     "postinstall": "patch-package"
   },
+  "expo": {
+    "autolinking": {
+      "android": {
+        "buildFromSource": [
+          "expo-video"
+        ]
+      }
+    }
+  },
   "dependencies": {
     "@atproto/api": "^0.19.11",
     "@atproto/oauth-client-expo": "^0.0.10",

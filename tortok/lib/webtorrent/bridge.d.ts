@@ -9,5 +9,11 @@ export function registerTorrent(torrent: Torrent): Promise<string>;
 /** Remove a torrent's files from the bridge server. */
 export function unregisterTorrent(infoHash: string): void;
 
+/**
+ * Read and discard the first `bytes` of the file a bridge URL names, so
+ * WebTorrent downloads them. Resolves with the bytes read.
+ */
+export function readAhead(bridgeUrl: string, bytes: number, signal: AbortSignal): Promise<number>;
+
 /** Tear down the bridge server entirely. */
 export function destroyBridge(): void;

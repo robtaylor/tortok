@@ -11,4 +11,8 @@ export function registerTorrent(_torrent: Torrent): Promise<string> {
 
 export function unregisterTorrent(_infoHash: string): void {}
 
+export function readAhead(_bridgeUrl: string, _bytes: number, _signal: AbortSignal): Promise<number> {
+  return Promise.reject(new Error('bridge: web stub — nothing to read ahead'));
+}
+
 export function destroyBridge(): void {}

@@ -17,6 +17,25 @@ does no P2P. `client.ts` holds the shared refcounted torrent manager and
 `types.ts` the shared surface. Playback URLs are
 resolved through `useP2PUrl.ts`, and `usePrefetch.ts` warms upcoming feed items.
 
+The bridge listens on `127.0.0.1` at a port the system picks and serves
+`/<infoHash>/<filePath>`, with byte ranges. It logs its port and one line for
+each request and its answer; the player reports a failed load as a status
+code alone, so that log is the only record of what the bridge was asked.
+Only the player fetches from it. Prefetch reads the torrent's file directly
+(`readAhead`), because the app's own `fetch` of a loopback URL goes to a proxy
+when the phone has one.
+
+Android sends requests for loopback addresses to a proxy like any other, when
+the network or a VPN sets one, and a proxy can't reach an address on the
+phone. So `patches/expo-video+3.0.16.patch` gives `expo-video` an HTTP
+client with no proxy for a source at `127.0.0.1` or `localhost`, and leaves
+every other source to the system's proxy. Expo ships that module prebuilt,
+and a patch to its Kotlin only takes effect when it is compiled, so
+`package.json` lists it under `expo.autolinking.android.buildFromSource`.
+Found on rented phones, whose traffic goes through the rental's proxy
+([the playback spike](decisions/spikes/does-the-feed-start-quickly-and-play-smoothly-on-real-android-phones.md)).
+iOS hasn't been checked.
+
 Each torrent is added from its `.torrent` (fetched from the AppView's blob
 route, Decision 0020) when it loads, else from its magnet, and with the
 feed item's extra `sources` (Decision 0022): `client.add(torrent, { urlList,
