@@ -11,7 +11,8 @@
 //            (the given one, with --expect-sha). With --sha-file <path>, the
 //            reported SHA is also written there, for callers that compare it
 //            with main.
-//   contract /videos/feed returns items whose torrent playback has a magnet,
+//   contract /videos/feed (its 50 newest) returns items with an author DID,
+//            whose torrent playback has a magnet,
 //            a .torrent URL and sources listing at least one tracker
 //            (Decision 0022), or, for bridged Bluesky posts, an HLS playback
 //            with an http(s) URL (Decision 0010); /turn/credentials includes a
@@ -24,8 +25,13 @@
 //            that can't start without a peer fails here.
 //   hls      for each HLS item (up to --max-items): its poster loads as an
 //            image and its playlist is an HLS playlist. Bluesky serves these,
-//            so one item failing is a warning; every checked item failing
-//            (a broken URL scheme, or Bluesky refusing us) fails the run.
+//            and anyone can post a video it doesn't serve, so an item failing
+//            is a warning; every checked item failing (a broken URL scheme,
+//            or Bluesky refusing us) fails the run.
+//
+// Of each kind, the items checked are every author's first, then every
+// author's second, and so on, up to --max-items. So one account's posts are
+// all of them only when the 50 hold no other author's.
 //
 // Prints one line per check and exits non-zero if any failed. No dependencies,
 // so CI can run it without an install.
@@ -136,7 +142,8 @@ async function checkVersion({ base, expectSha, shaFile }) {
 }
 
 async function checkFeed({ base }) {
-  const { status, json } = await getJson(`${base}/videos/feed`);
+  // The most the route serves: the more items, the more authors to check.
+  const { status, json } = await getJson(`${base}/videos/feed?limit=50`);
   if (status !== 200) throw new SmokeError(`/videos/feed: HTTP ${status}`);
   const items = Array.isArray(json) ? json : json.videos;
   if (!Array.isArray(items)) throw new SmokeError('/videos/feed: no videos array');
@@ -144,6 +151,7 @@ async function checkFeed({ base }) {
   for (const v of items) {
     const p = v.playback;
     if (!v.id) throw new SmokeError('/videos/feed: an item has no id');
+    if (typeof v.author?.did !== 'string') throw new SmokeError(`/videos/feed: item ${v.id} has no author DID`);
     if (p?.kind === 'hls') {
       if (typeof p.url !== 'string' || !/^https?:\/\//.test(p.url)) {
         throw new SmokeError(`/videos/feed: item ${v.id} has an HLS playback without an http(s) URL`);
@@ -246,6 +254,21 @@ async function checkWebseed(item) {
 
 // --- runner -----------------------------------------------------------------
 
+const authorOf = (item) => item.author.did;
+
+/** The items with every author's first ahead of anyone's second, and so on. */
+function acrossAuthors(items) {
+  const rounds = [];
+  const seen = new Map();
+  for (const item of items) {
+    const author = authorOf(item);
+    const nth = seen.get(author) ?? 0;
+    seen.set(author, nth + 1);
+    (rounds[nth] ??= []).push(item);
+  }
+  return rounds.flat();
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   let failed = 0;
@@ -275,14 +298,15 @@ async function main() {
   // failing is a warning, all of them failing is a failure.
   for (const [kind, check, soft] of [['torrent', checkWebseed, false], ['hls', checkHls, true]]) {
     const list = items.filter((v) => v.playback.kind === kind);
-    const checked = list.slice(0, opts.maxItems);
+    const checked = acrossAuthors(list).slice(0, opts.maxItems);
     let passed = 0;
     for (const item of checked) {
       if (await run(`${kind === 'torrent' ? 'webseed' : kind}: ${item.id}`, () => check(item), { soft })) passed++;
     }
     if (soft && checked.length > 0 && passed === 0) {
       failed++;
-      console.log(`FAIL  ${kind}: none of the ${checked.length} checked item(s) passed`);
+      const authors = new Set(checked.map(authorOf)).size;
+      console.log(`FAIL  ${kind}: none of the ${checked.length} checked item(s), from ${authors} author(s), passed`);
     }
     if (list.length > opts.maxItems) console.log(`(checked ${opts.maxItems} of ${list.length} ${kind} items)`);
   }
