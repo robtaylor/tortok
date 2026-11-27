@@ -98,7 +98,7 @@ export default function ProfileScreen() {
       </View>
 
       <Text style={styles.handle} testID="username">
-        {handle ? `@${handle}` : 'Signed in'}
+        {!did ? 'Not signed in' : handle ? `@${handle}` : 'Signed in'}
       </Text>
       {did ? <Text style={styles.did} testID="did" selectable>{did}</Text> : null}
 

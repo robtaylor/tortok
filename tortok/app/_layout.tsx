@@ -6,6 +6,7 @@ import { useFonts } from 'expo-font';
 import { Redirect, Stack, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
+import { PERF_BUILD } from '@/lib/perfBuild';
 import { useAuthStore } from '@/stores/auth';
 
 export { ErrorBoundary } from 'expo-router';
@@ -68,7 +69,8 @@ function RootLayoutNav() {
   // flicker / re-entry from imperative router.replace() in an effect.
   if (isLoading) return null;
   const inAuth = rootSegment === '(auth)';
-  if (!did && !inAuth) return <Redirect href="/(auth)/login" />;
+  // A perf build shows the feed, which is public, with nobody signed in.
+  if (!did && !inAuth && !PERF_BUILD) return <Redirect href="/(auth)/login" />;
   if (did && inAuth) return <Redirect href="/(tabs)" />;
 
   return (

@@ -19,6 +19,10 @@ layout redirects to `/(auth)/login` whenever there's no DID
 feed: `GET /videos/feed` takes no auth at all
 (`backend/src/routes/videos.ts`).
 
+A perf build (`EXPO_PUBLIC_PERF=1`; [Client, Testing](../client.md#testing))
+skips that redirect so playback can be measured on phones nobody can sign in
+on. It is a test build's switch and decides nothing here.
+
 Letting people watch before signing in, as TikTok does, has three pulls:
 
 - **New users.** Someone can see what tortok is before creating or linking an

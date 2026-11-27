@@ -9,6 +9,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  AppState,
   Linking,
   ViewToken,
 } from 'react-native';
@@ -17,6 +18,8 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { useQuery } from '@tanstack/react-query';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { authorLabel, blueskyPostUrl, getFeed, type Video } from '@/lib/api';
+import { PERF_BUILD, perfFeed } from '@/lib/perfBuild';
+import { PLAYBACK_TAG, type PlaybackRecord, PlaybackTrace, TICK_MS } from '@/lib/playbackTrace';
 import { usePlaybackUrl } from '@/lib/usePlaybackUrl';
 import { recordView, WatchSession } from '@/lib/watchHistory';
 import { useAppViewStore } from '@/stores/appview';
@@ -28,9 +31,8 @@ const PHONE_ASPECT = 9 / 16; // width / height
 function configurePlayer(p: { loop: boolean; muted: boolean; timeUpdateEventInterval: number }) {
   p.loop = true;
   p.muted = false;
-  // 100ms, for accurate first-frame detection and for the watch history's
-  // time accounting (lib/watchHistory.ts), which listens while the item is
-  // active.
+  // 100ms, for the watch history's time accounting (lib/watchHistory.ts),
+  // which listens while the item is active.
   p.timeUpdateEventInterval = 0.1;
 }
 
@@ -75,27 +77,9 @@ const VideoItem = memo(function VideoItem({
   const isActiveRef = useRef(isActive);
   isActiveRef.current = isActive;
 
-  // --- Profiling timeline (all Date.now(), no bridge lag) ---
-  const tl = useRef<Record<string, number>>({});
-  const stamp = useCallback((label: string) => { tl.current[label] = Date.now(); }, []);
-  const dumpTimeline = useCallback(() => {
-    const t = tl.current;
-    if (!t.activate) return;
-    const d = (a: string, b: string) => {
-      const va = t[a], vb = t[b];
-      return va && vb ? `${b}-${a}=${vb - va}ms` : `${b}=?`;
-    };
-    console.log(
-      `${preRef.current} TIMELINE: total=${Date.now() - t.activate}ms | ` +
-      [
-        d('activate', 'replaceAsync'),
-        d('replaceAsync', 'replaceResolved'),
-        d('replaceResolved', 'readyToPlay'),
-        d('readyToPlay', 'playingChange'),
-        d('playingChange', 'renderPlaying'),
-      ].join(' | '),
-    );
-  }, []);
+  // What this stint as the active item measures about playback
+  // (lib/playbackTrace.ts); null while the item isn't active.
+  const trace = useRef<PlaybackTrace | null>(null);
 
   // --- Display state ---
   const [displayState, setDisplayState] = useState<DisplayState>('idle');
@@ -108,34 +92,56 @@ const VideoItem = memo(function VideoItem({
   // Avoids 500-750ms native player construction cost on every scroll.
   const player = useVideoPlayer(null, configurePlayer);
 
-  // Log display state transitions.
+  // Log display state transitions; the first to `playing` is the poster
+  // giving way.
   useEffect(() => {
     console.log(`${pre} → ${displayState}`);
-    if (displayState === 'playing') {
-      stamp('renderPlaying');
-      dumpTimeline();
-    }
+    if (displayState === 'playing') trace.current?.mark('shown', Date.now());
   }, [displayState]);
 
-  // --- Watch history: one session per stint as the active item, kept on the
-  // device only (lib/watchHistory.ts) ---
+  // --- One stint as the active item: a watch-history session, kept on the
+  // device only (lib/watchHistory.ts), and a playback trace, logged as one
+  // line when it ends. Declared before the effect that swaps the source: an
+  // HLS item has its URL in the render that makes it active, so that effect
+  // marks the trace in the same commit. ---
+  const { kind } = video.playback;
+  // Read when the stint ends, so new hashtags on the same post don't restart it.
+  const hashtags = useRef(video.hashtags);
+  hashtags.current = video.hashtags;
   useEffect(() => {
     if (!isActive) return;
     const session = new WatchSession();
+    const stint = new PlaybackTrace(Date.now());
+    trace.current = stint;
     const sub = player.addListener('timeUpdate', ({ currentTime }) => session.onTime(currentTime, player.duration));
+    const ticker = setInterval(() => stint.tick(Date.now()), TICK_MS);
+    // The trace ends when the item is left or the app leaves the foreground,
+    // whichever comes first: timers stop in the background, and the time
+    // away isn't playback.
+    const endTrace = () => {
+      if (trace.current !== stint) return;
+      trace.current = null;
+      clearInterval(ticker);
+      const view = session.end();
+      const record: PlaybackRecord = {
+        v: 1, post: video.id, kind, ...stint.end(Date.now()), playedMs: view.watchedMs, loops: view.loops,
+      };
+      console.log(`${PLAYBACK_TAG} ${JSON.stringify(record)}`);
+    };
+    const app = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') endTrace();
+    });
     return () => {
       sub.remove();
-      recordView(video.id, video.hashtags, session.end());
+      app.remove();
+      endTrace();
+      recordView(video.id, hashtags.current, session.end());
     };
-  }, [isActive, player, video.id, video.hashtags]);
+  }, [isActive, player, video.id, kind]);
 
   // --- When isActive changes ---
   useEffect(() => {
     console.log(`${pre} ${isActive ? 'ACTIVATE' : 'DEACTIVATE'}`);
-    if (isActive) {
-      tl.current = {};
-      stamp('activate');
-    }
     if (!isActive) {
       setDisplayState((s) =>
         s === 'playing' || s === 'paused' || s === 'loading' || s === 'error'
@@ -149,11 +155,10 @@ const VideoItem = memo(function VideoItem({
   // --- When URL resolves/drops: swap source on the stable player ---
   useEffect(() => {
     if (sourceUrl) {
-      stamp('replaceAsync');
+      trace.current?.mark('url', Date.now());
       console.log(`${pre} replaceAsync`);
       setDisplayState((s) => (s === 'idle' ? 'loading' : s));
       player.replaceAsync(sourceUrl).then(() => {
-        stamp('replaceResolved');
         console.log(`${pre} replaceAsync resolved`);
       });
     } else {
@@ -169,13 +174,13 @@ const VideoItem = memo(function VideoItem({
 
     const statusSub = player.addListener('statusChange', (payload) => {
       console.log(`${preRef.current} statusChange: ${payload.status}${payload.error ? ` — ${payload.error.message}` : ''}`);
+      trace.current?.status(payload.status, Date.now(), payload.error?.message);
       if (payload.status === 'error') {
         setDisplayState((s) =>
           s === 'loading' || s === 'playing' ? 'error' : s,
         );
       }
       if (payload.status === 'readyToPlay') {
-        stamp('readyToPlay');
         if (isActiveRef.current) {
           player.play();
         } else {
@@ -192,7 +197,6 @@ const VideoItem = memo(function VideoItem({
           player.pause();
           return;
         }
-        stamp('playingChange');
         setDisplayState((s) => (s === 'loading' ? 'playing' : s));
       }
     });
@@ -202,22 +206,6 @@ const VideoItem = memo(function VideoItem({
       playingSub.remove();
     };
   }, [player]);
-
-  // First-frame detector — diagnostic only. Measures actual decode latency.
-  useEffect(() => {
-    if (!player || !sourceUrl) return;
-    let removed = false;
-    const timeSub = player.addListener('timeUpdate', (payload) => {
-      if (!removed && payload.currentTime > 0) {
-        removed = true;
-        console.log(`${preRef.current} FIRST_FRAME at ${payload.currentTime.toFixed(3)}s`);
-        timeSub.remove();
-      }
-    });
-    return () => {
-      if (!removed) timeSub.remove();
-    };
-  }, [player, sourceUrl]);
 
   // --- Drive player from state ---
   useEffect(() => {
@@ -288,6 +276,7 @@ const VideoItem = memo(function VideoItem({
             style={[styles.video, !showVideo && styles.invisible]}
             contentFit="cover"
             nativeControls={false}
+            onFirstFrameRender={() => trace.current?.mark('frame', Date.now())}
           />
         ) : null}
       </Pressable>
@@ -373,8 +362,13 @@ export default function FeedScreen() {
   const appViewUrl = useAppViewStore((s) => s.url);
   const { data, isLoading, error } = useQuery({
     queryKey: ['feed', appViewUrl],
-    queryFn: () => getFeed(appViewUrl),
+    queryFn: () => (PERF_BUILD ? perfFeed(appViewUrl) : getFeed(appViewUrl)),
   });
+
+  // The screen only says the feed failed; the log says why.
+  useEffect(() => {
+    if (error) console.warn(`[feed] failed to load from ${appViewUrl}: ${error.name}: ${error.message}`);
+  }, [error, appViewUrl]);
 
   const videos = useMemo(() => data?.videos ?? [], [data]);
 

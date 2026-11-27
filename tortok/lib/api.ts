@@ -96,11 +96,16 @@ export type FeedResponse = {
   hasMore: boolean;
 };
 
-export function getFeed(appView: string, cursor?: string) {
+export function getFeed(appView: string, cursor?: string, limit = 10) {
   const params = new URLSearchParams();
-  params.set('limit', '10');
+  params.set('limit', String(limit));
   if (cursor) params.set('offset', cursor);
   return request<FeedResponse>(appView, `/videos/feed?${params}`);
+}
+
+/** One indexed post by its AT-URI. */
+export function getVideo(appView: string, uri: string) {
+  return request<Video>(appView, `/videos/${encodeURIComponent(uri)}`);
 }
 
 /** The post's torrent, or null if it doesn't play over WebTorrent. */
