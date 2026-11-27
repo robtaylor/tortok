@@ -1,0 +1,60 @@
+# Builds the Android app for measuring playback on a real phone
+# (scripts/perf-apk.sh; docs/architecture/client.md, Testing) and keeps the
+# APK as an artifact. Run by hand: the build is for a measurement, not for
+# every push.
+
+name: perf-apk
+
+on:
+  workflow_dispatch:
+    inputs:
+      pins:
+        description: AT-URIs to mix into the feed, comma-separated (default, production's five test clips)
+        required: false
+      appview:
+        description: The AppView the build reads (default, production's)
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tortok/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      # Reads main's Gradle cache; only main's e2e runs write it.
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+      - name: Install
+        working-directory: tortok
+        run: npm ci
+      - name: Build
+        env:
+          PINS: ${{ inputs.pins }}
+          PERF_APPVIEW: ${{ inputs.appview }}
+        run: |
+          # An unset PERF_PINS means the script's default; an empty one means none.
+          if [ -n "$PINS" ]; then export PERF_PINS="$PINS"; fi
+          set -o pipefail
+          bash scripts/perf-apk.sh | tee build.log
+          cp "$(tail -n 1 build.log)" "tortok-perf-${GITHUB_SHA::7}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tortok-perf-apk
+          path: tortok-perf-*.apk
+          if-no-files-found: error
+          retention-days: 14

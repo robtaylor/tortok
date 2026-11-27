@@ -36,8 +36,11 @@ deployed (follow-up 3 has the detail):
 3. **Watch the bridge** (follow-up 3).
 4. **The sign-up button**: one real sign-up, then Decision 0026
    (follow-up 4).
-5. **Unit 3**. The plan lists what to settle before the first real
-   record.
+5. **Unit 3**, after the
+   [playback spike](../architecture/decisions/spikes/does-the-feed-start-quickly-and-play-smoothly-on-real-android-phones.md)
+   on rented Android phones (open since 2026-11-27; the build and the
+   report are done, the sessions aren't). The plan lists what to settle
+   before the first real record.
 
 **Verification command:**
 

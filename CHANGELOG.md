@@ -19,6 +19,8 @@ deciding whether to upgrade.
 
 ### Added
 
+- The app logs one `[playback]` record for each video watched: how long it took to start, each stall and its length, and the longest the app was held up. `npm run playback:report -- <device log>` turns a phone's log into start times and stall figures for bridged and native posts. Nothing is sent anywhere.
+- `npm run perf:apk` builds the Android app for measuring playback on a real phone: it opens the feed without sign-in and mixes production's five test clips into the newest posts, so both kinds of playback are measured. Workflow `perf-apk` builds the same APK on demand. User builds are unchanged.
 - The backend runs the Bluesky bridge's firehose and engagement poller when `BRIDGE_ENABLED=true`. It is off by default, and setting it back to `false` switches the bridge off without a code change. Production runs it, so the feed starts to include bridged Bluesky posts (Phase 3 Unit 2.5D).
 - The app plays bridged Bluesky posts: straight from Bluesky's HLS stream, with a "via Bluesky" badge that opens the post on bsky.app. It also keeps a private watch history on your phone (time watched, completions, loops, skips), which never leaves it, so a future feed can adapt to you (Phase 3 Unit 2.5D).
 - The feed serves bridged Bluesky posts the engagement poller has let in, interleaved with native posts by date, as a new HLS playback kind with Bluesky's thumbnail and the author's Bluesky handle and avatar. None appear until the bridge is switched on (Phase 3 Unit 2.5D).
@@ -42,6 +44,7 @@ deciding whether to upgrade.
 
 ### Changed
 
+- When the feed fails to load, the app's log now says why. The screen still says only that it failed.
 - A failing production smoke check now opens one GitHub issue for the incident, labelled `smoke-failure`, and closes it when the check has passed four times running. Before, each failed run only sent an email: 139 of them in the 36-hour stall of 2026-11-22, and nothing acted on them. Opening the issue starts a Claude Code scheduled task that looks into the failure and comments on the issue; the same task checks production once a day (`.github/workflows/smoke.yml`).
 - The Bluesky bridge keeps a bridged post for 30 days (`BRIDGE_RECHECK_DAYS`), re-checks it at least daily until then, and then deletes it. Before, a served post stayed in the feed unchecked once it was 30 days old, so an opt-out or label added later never reached it (Decision 0024).
 - The bridge counts a post's age from when it indexed the record, not from the date the record carries, so a backdated post gets the same checks as any other.

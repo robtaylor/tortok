@@ -57,7 +57,9 @@ Routes live in `tortok/app/`:
 - `_layout.tsx` is the root. It loads fonts, calls the auth store's
   `hydrate()`, provides a TanStack `QueryClient`, and gates on the stored DID:
   while hydrating it renders nothing; with no DID outside `(auth)` it redirects
-  to `/(auth)/login`; with a DID inside `(auth)` it redirects to `/(tabs)`. The
+  to `/(auth)/login`; with a DID inside `(auth)` it redirects to `/(tabs)`. A
+  perf build ([Testing](#testing)) skips the first redirect and shows the tabs
+  with nobody signed in. The
   gate uses `<Redirect>` so the redirect resolves before the stack mounts. In
   dev it also prefixes console output with elapsed time and drops `rn-webrtc:`
   debug lines.
@@ -132,7 +134,7 @@ one item up or down.
 
 The feed query is `useQuery(['feed'], () => getFeed())`: the feed is public
 and needs no session. It loads the first page only; there is no pagination
-in the UI.
+in the UI. When the load fails the screen says so and the log says why.
 
 Each `VideoItem` runs a small display state machine: `idle` (poster shown),
 `loading` (poster shown, player buffering), `playing`, `paused`, `error` (with
@@ -169,9 +171,20 @@ without finishing) and per-post totals are derived from it (`statsFor`). It
 is a log rather than totals because ranking's modes and explanations need
 each view's time ([`feed-ranking.md`](open-problems/feed-ranking.md)). It is
 kept in MMKV on the device, capped at 20,000 events (each new one past that
-drops the oldest), and never sent anywhere; nothing reads it yet. The item logs a per-video timing line
-(activate → `replaceAsync` → ready → playing) and the first-frame time, for
-playback profiling.
+drops the oldest), and never sent anywhere; nothing reads it yet.
+
+**Playback record** (`lib/playbackTrace.ts`). Each stint as the active item
+also ends with one log line, `[playback]` and a JSON record: the post, its
+playback kind, and the time from becoming active to a playback URL, to the
+player being ready, to the poster giving way and to the first frame
+(`onFirstFrameRender`); then how long it was active, the media time played,
+each stall (the player buffering once the video was showing) and its length,
+the longest the app was held up (how late a 250 ms timer fired, which the
+JavaScript thread or the main thread can cause), and the player's error if
+it failed. The record ends when the item is left or the app leaves the
+foreground, whichever comes first. Every build logs it, and nothing is sent
+anywhere. `scripts/playback-report.mjs` reads the records
+from a device log ([Testing](#testing)).
 
 ## Profile
 
@@ -193,9 +206,11 @@ built.
 
 ## Testing
 
-`stores/auth.test.ts`, `stores/appview.test.ts` and
-`lib/watchHistory.test.ts` hold Jest unit tests for the auth and AppView
-stores and the watch history (MMKV is replaced by `__mocks__/react-native-mmkv.ts`), run with
+`stores/auth.test.ts`, `stores/appview.test.ts`,
+`lib/watchHistory.test.ts`, `lib/playbackTrace.test.ts` and
+`lib/perfBuild.test.ts` hold Jest unit tests for the auth and AppView
+stores, the watch history, the playback record and the perf build's feed
+(MMKV is replaced by `__mocks__/react-native-mmkv.ts`), run with
 `npm test` from `tortok/`, which runs every `*.test.ts(x)` outside `e2e/`
 (`jest.config.js`). CI runs them with
 the app's typecheck (`.github/workflows/ci.yml`, job `client`).
@@ -241,6 +256,38 @@ relaunch, and sign-out.
   `e2e/helpers.ts` resends it, and CI logs say `tapping again` when it does.
   A release build's JS logs are in Detox's `device.log` artifact under
   `com.facebook.react.log`, kept for failing tests only.
+
+**Playback on real phones** is measured by hand with a perf build, on phones
+rented by the session ([the spike](decisions/spikes/does-the-feed-start-quickly-and-play-smoothly-on-real-android-phones.md)
+holds the method and the results):
+
+- **The build:** `npm run perf:apk` (`scripts/perf-apk.sh`) makes an arm64
+  release APK bundled with `EXPO_PUBLIC_PERF=1` (`lib/perfBuild.ts`). Nobody
+  can sign in on a rented phone, so the build opens the feed signed out;
+  Profile then reads "Not signed in". Its feed is the 30 newest posts with
+  the posts named in `EXPO_PUBLIC_PERF_PINS` mixed in, one after every second
+  post, each fetched by `GET /videos/:id`; a pin the AppView doesn't have
+  fails the load. The script pins production's five test clips, because the
+  newest posts there are all bridged, and reads production's AppView unless
+  `PERF_APPVIEW` names another. It sets every `EXPO_PUBLIC_*` value it
+  depends on, since Expo also reads a developer's `tortok/.env.local` when it
+  bundles, and it makes the bundle afresh from its own Metro cache, since
+  neither Gradle nor Metro treats those values as an input. User builds never
+  set the flag. `.github/workflows/perf-apk.yml` runs the same script on
+  demand and keeps the APK as an artifact.
+- **The figures:** `npm run playback:report -- <device log>...`
+  (`scripts/playback-report.mjs`) reads the `[playback]` records out of
+  `adb logcat` output or a rental's log download. For each log and playback
+  kind it prints how many videos started, the median, 90th-percentile and
+  longest start, how many stalled and what share of playing time the stalls
+  took, the share of the time after starting in which the video's position
+  didn't advance (a check on the stalls the player reports, which also
+  counts pauses), how many were given up on (left unstarted after 5 seconds
+  or more), errors, and the longest hold-up; `--each` lists every video. A
+  start is the later of the poster giving way and the first frame. Its tests
+  (`scripts/playback-report.test.mjs`) run in CI with the smoke check's.
+- **What it can't show:** dropped video frames, which the player doesn't
+  report, and peers on home networks.
 
 ## Implementation status
 

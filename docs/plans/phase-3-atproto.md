@@ -795,6 +795,10 @@ from the app (Unit 3), web cookie auth (Unit 7).
   receives it from Jetstream and inserts it into `posts`.
 - Upload the `.torrent` as `torrentBlob` alongside the thumbnail
   (Decision 0020).
+- Before starting: the
+  [playback spike](../architecture/decisions/spikes/does-the-feed-start-quickly-and-play-smoothly-on-real-android-phones.md)
+  says whether torrent playback on real Android phones is good enough to
+  build on (opened 2026-11-27).
 - Before the first real record: settle the piece size and content key
   layout for real uploads, both listed under the constraints in
   [`cross-deployment-transport.md`](../architecture/open-problems/cross-deployment-transport.md),

@@ -7,7 +7,9 @@
     "seed:fixtures": "node scripts/seed-fixtures.mjs",
     "deploy:backend": "bash scripts/deploy-backend.sh",
     "smoke": "node scripts/smoke.mjs",
-    "test:scripts": "node --test scripts/smoke.test.mjs"
+    "perf:apk": "bash scripts/perf-apk.sh",
+    "playback:report": "node scripts/playback-report.mjs",
+    "test:scripts": "node --test scripts/smoke.test.mjs scripts/playback-report.test.mjs"
   },
   "dependencies": {
     "@atproto/api": "^0.13.0",
