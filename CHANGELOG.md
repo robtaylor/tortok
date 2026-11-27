@@ -45,6 +45,7 @@ deciding whether to upgrade.
 ### Changed
 
 - When the feed fails to load, the app's log now says why. The screen still says only that it failed.
+- The app's local video server logs the port it listens on and each request with its answer.
 - A failing production smoke check now opens one GitHub issue for the incident, labelled `smoke-failure`, and closes it when the check has passed four times running. Before, each failed run only sent an email: 139 of them in the 36-hour stall of 2026-11-22, and nothing acted on them. Opening the issue starts a Claude Code scheduled task that looks into the failure and comments on the issue; the same task checks production once a day (`.github/workflows/smoke.yml`).
 - The Bluesky bridge keeps a bridged post for 30 days (`BRIDGE_RECHECK_DAYS`), re-checks it at least daily until then, and then deletes it. Before, a served post stayed in the feed unchecked once it was 30 days old, so an opt-out or label added later never reached it (Decision 0024).
 - The bridge counts a post's age from when it indexed the record, not from the date the record carries, so a backdated post gets the same checks as any other.
@@ -75,6 +76,7 @@ deciding whether to upgrade.
 
 ### Fixed
 
+- Native posts play on an Android phone whose network or VPN sets a proxy. Android sends requests for the phone's own address to the proxy too, so the player's request for the app's local video server never arrived and the post showed "Failed to load video". The player now connects to the phone directly, and prefetch reads the torrent without a network request.
 - A full batch of Bluesky posts with very long addresses no longer stops the bridge's checks. Bluesky's AppView refuses a request URL past about 8,000 characters, and 25 posts with 512-character record keys make one of 14,780. The poller asked for the same batch again for ever, and checked nothing behind it. It now splits a batch into requests that fit (`backend/src/services/bskyEngagementPoller.ts`).
 - A follower count from Bluesky that isn't a whole number the database can hold is stored as unknown. Before, the database refused it and the batch failed.
 - One event the backend can't handle no longer stops a Jetstream subscription. On 2026-11-22 a Bluesky post with a NUL character in its text made its insert fail every time. The bridge retried that one event every second and a half for 36 hours, indexing nothing, until Bluesky's Jetstream no longer had it; about 12 minutes of posts were lost. An event that fails three times running while the database is up is now logged and skipped, whatever the error, at most 20 an hour; past that the subscription stops and `/health` reports it stalled. If the skipped event was an edit, the version indexed before it is removed. Native ingest had the same weakness (`backend/src/services/jetstream.ts`).

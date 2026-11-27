@@ -1,0 +1,30 @@
+diff --git a/node_modules/expo-video/android/src/main/java/expo/modules/video/utils/DataSourceUtils.kt b/node_modules/expo-video/android/src/main/java/expo/modules/video/utils/DataSourceUtils.kt
+index 7e213f7..d027580 100644
+--- a/node_modules/expo-video/android/src/main/java/expo/modules/video/utils/DataSourceUtils.kt
++++ b/node_modules/expo-video/android/src/main/java/expo/modules/video/utils/DataSourceUtils.kt
+@@ -13,6 +13,14 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+ import androidx.media3.exoplayer.source.MediaSource
+ import expo.modules.video.records.VideoSource
+ import okhttp3.OkHttpClient
++import java.net.Proxy
++
++// tortok patch: a source on this device is fetched straight from it, whatever
++// proxy the network or a VPN has set. Android sends loopback requests to a
++// proxy too, and a proxy can't reach an address on the phone, so a source
++// served from the app itself (tortok's torrent bridge on 127.0.0.1) never
++// loaded on such a phone. Every other source takes the system's proxy as before.
++private fun isOnThisDevice(host: String?): Boolean = host == "127.0.0.1" || host == "localhost"
+ 
+ @OptIn(UnstableApi::class)
+ fun buildBaseDataSourceFactory(context: Context, videoSource: VideoSource): DataSource.Factory {
+@@ -25,7 +33,9 @@ fun buildBaseDataSourceFactory(context: Context, videoSource: VideoSource): Data
+ 
+ @OptIn(UnstableApi::class)
+ fun buildOkHttpDataSourceFactory(context: Context, videoSource: VideoSource): OkHttpDataSource.Factory {
+-  val client = OkHttpClient.Builder().build()
++  val client = OkHttpClient.Builder()
++    .apply { if (isOnThisDevice(videoSource.uri?.host)) proxy(Proxy.NO_PROXY) }
++    .build()
+ 
+   // If the application name has ANY non-ASCII characters, we need to strip them out. This is because using non-ASCII characters
+   // in the User-Agent header can cause issues with getting the media to play.

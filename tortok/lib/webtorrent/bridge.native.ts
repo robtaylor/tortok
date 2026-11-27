@@ -8,6 +8,10 @@
 // The infoHash prefix routes to the correct torrent; the remainder resolves
 // a file within that torrent. Root path (`/<infoHash>` or `/<infoHash>/`)
 // resolves to the entry file (prefer .m3u8, else largest).
+//
+// It logs the port it listens on and one line for each request with its
+// answer. The player reports a failed load as a status code and nothing else,
+// so this is the only record of what the bridge was asked and what it said.
 
 import TcpSocket from 'react-native-tcp-socket';
 import type { BridgeServer, Readable, Torrent, TorrentFile } from './types';
@@ -88,6 +92,17 @@ let server: BridgeServer | null = g.__webtorrentBridge?.server ?? null;
 let serverPort: number | null = g.__webtorrentBridge?.port ?? null;
 let serverReady: Promise<void> | null = g.__webtorrentBridge?.ready ?? null;
 
+/** The registered file a URL path (`/<infoHash>/<filePath>`) names, if any, and a short name for the log. */
+function fileAt(path: string): { name: string; file: TorrentFile | null } {
+  const [infoHash = '', ...rest] = decodeURIComponent(path).replace(/^\//, '').split('/');
+  const filePath = rest.join('/');
+  const torrent = registry.get(infoHash);
+  return {
+    name: `${infoHash.slice(0, 8)}/${filePath}`,
+    file: torrent ? (torrent.byPath.get(filePath) ?? (filePath === '' ? torrent.entry : null)) : null,
+  };
+}
+
 function ensureServer(): Promise<void> {
   if (serverReady) return serverReady;
 
@@ -128,23 +143,10 @@ function ensureServer(): Promise<void> {
           headers[line.slice(0, i).toLowerCase().trim()] = line.slice(i + 1).trim();
         }
 
-        // URL: /<infoHash>/<filePath>
-        const urlPath = decodeURIComponent((rawUrl ?? '/').split('?')[0]);
-        const segments = urlPath.replace(/^\//, '').split('/');
-        const infoHash = segments[0] ?? '';
-        const filePath = segments.slice(1).join('/');
-
-        const torrentEntry = registry.get(infoHash);
-        if (!torrentEntry) {
-          sock.write('HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n');
-          sock.end();
-          return;
-        }
-
-        const file =
-          torrentEntry.byPath.get(filePath) ??
-          (filePath === '' ? torrentEntry.entry : null);
+        const { name, file } = fileAt((rawUrl ?? '/').split('?')[0]);
+        const asked = `[bridge] ${method} ${name} ${headers.range ?? 'no range'}`;
         if (!file) {
+          console.log(`${asked} → 404, nothing registered there`);
           sock.write('HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n');
           sock.end();
           return;
@@ -164,6 +166,7 @@ function ensureServer(): Promise<void> {
           (range ? `Content-Range: bytes ${start}-${endByte}/${file.length}\r\n` : '') +
           'Connection: close\r\n' +
           '\r\n';
+        console.log(`${asked} → ${status}, ${len} bytes`);
         sock.write(resHead);
 
         if (method === 'HEAD') {
@@ -179,7 +182,8 @@ function ensureServer(): Promise<void> {
         stream.on('end', () => {
           sock.end();
         });
-        stream.on('error', () => {
+        stream.on('error', (e: unknown) => {
+          console.log(`${asked} → stream failed: ${e instanceof Error ? e.message : String(e)}`);
           sock.destroy();
         });
       });
@@ -190,6 +194,7 @@ function ensureServer(): Promise<void> {
       if (!addr) return reject(new Error('bridge: no address after listen'));
       server = srv;
       serverPort = addr.port;
+      console.log(`[bridge] listening on 127.0.0.1:${addr.port}`);
       g.__webtorrentBridge = { server: srv, port: addr.port, ready: serverReady!, registry };
       resolve();
     });
@@ -218,6 +223,34 @@ export async function registerTorrent(torrent: Torrent): Promise<string> {
 
 export function unregisterTorrent(infoHash: string): void {
   registry.delete(infoHash);
+}
+
+/**
+ * It reads the torrent itself: the app's own `fetch` of a bridge URL goes to
+ * a proxy when the phone has one, and never arrives.
+ */
+export function readAhead(bridgeUrl: string, bytes: number, signal: AbortSignal): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const { file } = fileAt(new URL(bridgeUrl).pathname);
+    if (!file) return reject(new Error('bridge: nothing registered at that URL'));
+    if (signal.aborted) return reject(new Error('aborted'));
+    if (file.length === 0 || bytes <= 0) return resolve(0);
+    const stream = file.createReadStream({ start: 0, end: Math.min(bytes, file.length) - 1 });
+    let read = 0;
+    let failure: Error | null = null;
+    const abort = () => stream.destroy();
+    signal.addEventListener('abort', abort);
+    stream.on('data', (buf) => { read += (buf as { length: number }).length; });
+    stream.on('error', (e) => { failure = e instanceof Error ? e : new Error(String(e)); });
+    // Every ending closes the stream: the last byte, an error, an abort, and
+    // the torrent being removed, which destroys it with no error.
+    stream.on('close', () => {
+      signal.removeEventListener('abort', abort);
+      if (failure) reject(failure);
+      else if (signal.aborted) reject(new Error('aborted'));
+      else resolve(read);
+    });
+  });
 }
 
 export function destroyBridge(): void {

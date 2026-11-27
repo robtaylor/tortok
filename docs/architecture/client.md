@@ -37,10 +37,17 @@ first runs `adb:ports`, which reverses ports 8080 and 8090 to the host), `web`,
 the Detox scripts `e2e:build:ios`, `e2e:test:ios`, `e2e:build:android` and
 `e2e:test:android`, and `postinstall`, which runs `patch-package`.
 
-`patches/` holds one patch: `bittorrent-tracker`'s check for `ws://` trackers
+`patches/` holds two patches. `bittorrent-tracker`'s check for `ws://` trackers
 read `window.location.protocol`, and React Native has no `window.location`
-outside development builds, so any `ws://` tracker crashed a release build.
-The patch reads it with optional chaining. `plugins/withDetoxAndroid.js` is a
+outside development builds, so any `ws://` tracker crashed a release build;
+the patch reads it with optional chaining. `expo-video`'s Android HTTP client
+is patched to reach loopback addresses without a proxy, and `package.json`'s
+`expo.autolinking.android.buildFromSource` makes the build compile that
+module so the patch applies ([p2p-torrent](p2p-torrent.md#torrent-engine));
+the Android e2e job fails if the compiled module lacks it. Compiling leaves
+build output inside `node_modules/expo-video`, so remake the patch with
+`npx patch-package expo-video --exclude '^(package\.json|android/build/.*)$'`.
+`plugins/withDetoxAndroid.js` is a
 local config plugin that adds Detox's Android test runner at `expo prebuild`.
 `plugins/withQuietDependencyWarnings.js` silences compiler warnings from
 dependencies' native code: `inhibit_all_warnings!` for every pod, and
@@ -153,8 +160,8 @@ native player construction on every scroll. Players loop, unmuted; tapping the
 video toggles pause; leaving the item pauses it and returns it to `idle`.
 
 Around the active item, `usePrefetch(videos, activeIndex)` holds the torrents
-of the items directly before and after it and fetches their first 512 KB
-through the bridge, `useSeedPolicy(activeVideo)` applies the client seeding
+of the items directly before and after it and reads their first 512 KB
+from the torrent, `useSeedPolicy(activeVideo)` applies the client seeding
 policy, and posters for items −2 to +2 are prefetched into `expo-image`'s
 memory-and-disk cache. On web the bridge is a stub that rejects, so prefetch
 yields no URL there.
@@ -207,9 +214,10 @@ built.
 ## Testing
 
 `stores/auth.test.ts`, `stores/appview.test.ts`,
-`lib/watchHistory.test.ts`, `lib/playbackTrace.test.ts` and
-`lib/perfBuild.test.ts` hold Jest unit tests for the auth and AppView
-stores, the watch history, the playback record and the perf build's feed
+`lib/watchHistory.test.ts`, `lib/playbackTrace.test.ts`,
+`lib/perfBuild.test.ts` and `lib/webtorrent/bridge.native.test.ts` hold Jest
+unit tests for the auth and AppView stores, the watch history, the playback
+record, the perf build's feed and the bridge's read-ahead
 (MMKV is replaced by `__mocks__/react-native-mmkv.ts`), run with
 `npm test` from `tortok/`, which runs every `*.test.ts(x)` outside `e2e/`
 (`jest.config.js`). CI runs them with
