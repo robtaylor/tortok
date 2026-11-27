@@ -88,6 +88,16 @@ const VideoItem = memo(function VideoItem({
   const sourceUrl = usePlaybackUrl(video, isActive, tag);
   const bskyUrl = blueskyPostUrl(video);
 
+  const { kind } = video.playback;
+  // On Android the player caches a native post's source. It loops and
+  // buffers well ahead, so with no cache it fetches a short clip from the
+  // bridge several times over, and each fetch costs this thread seconds on a
+  // slow phone (docs/architecture/p2p-torrent.md). iOS loops by seeking and
+  // its cache loads differently; neither has been measured.
+  const source = sourceUrl && kind === 'torrent' && Platform.OS === 'android'
+    ? { uri: sourceUrl, useCaching: true }
+    : sourceUrl;
+
   // Stable player — created once at mount, source swapped via replaceAsync.
   // Avoids 500-750ms native player construction cost on every scroll.
   const player = useVideoPlayer(null, configurePlayer);
@@ -104,7 +114,6 @@ const VideoItem = memo(function VideoItem({
   // line when it ends. Declared before the effect that swaps the source: an
   // HLS item has its URL in the render that makes it active, so that effect
   // marks the trace in the same commit. ---
-  const { kind } = video.playback;
   // Read when the stint ends, so new hashtags on the same post don't restart it.
   const hashtags = useRef(video.hashtags);
   hashtags.current = video.hashtags;
@@ -158,7 +167,7 @@ const VideoItem = memo(function VideoItem({
       trace.current?.mark('url', Date.now());
       console.log(`${pre} replaceAsync`);
       setDisplayState((s) => (s === 'idle' ? 'loading' : s));
-      player.replaceAsync(sourceUrl).then(() => {
+      player.replaceAsync(source).then(() => {
         console.log(`${pre} replaceAsync resolved`);
       });
     } else {
@@ -225,8 +234,8 @@ const VideoItem = memo(function VideoItem({
   };
 
   const handleRetry = () => {
-    if (!player || !sourceUrl) return;
-    player.replaceAsync(sourceUrl);
+    if (!player || !source) return;
+    player.replaceAsync(source);
     setDisplayState('loading');
   };
 

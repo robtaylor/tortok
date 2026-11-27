@@ -9,9 +9,10 @@
 // a file within that torrent. Root path (`/<infoHash>` or `/<infoHash>/`)
 // resolves to the entry file (prefer .m3u8, else largest).
 //
-// It logs the port it listens on and one line for each request with its
-// answer. The player reports a failed load as a status code and nothing else,
-// so this is the only record of what the bridge was asked and what it said.
+// It logs the port it listens on, each request with its answer, and what
+// serving it cost when it ends. The player reports a failed load as a status
+// code and nothing else, so this is the only record of what the bridge was
+// asked and what it said.
 
 import TcpSocket from 'react-native-tcp-socket';
 import type { BridgeServer, Readable, Torrent, TorrentFile } from './types';
@@ -176,8 +177,28 @@ function ensureServer(): Promise<void> {
 
         const stream = file.createReadStream({ start, end: endByte });
         readStream = stream;
+        // What serving this request cost: every byte goes through this
+        // thread, so the time spent writing is time nothing else ran.
+        const began = Date.now();
+        let sent = 0;
+        let chunks = 0;
+        let writingMs = 0;
+        let firstMs: number | null = null;
         stream.on('data', (buf: unknown) => {
+          const t = Date.now();
           sock.write(buf as Buffer);
+          const now = Date.now();
+          writingMs += now - t;
+          sent += (buf as Buffer).length;
+          chunks++;
+          firstMs ??= now - began;
+        });
+        // However it ends: the last byte, an error, or the player hanging up.
+        stream.on('close', () => {
+          console.log(
+            `${asked} → sent ${sent} of ${len} bytes in ${chunks} chunks: ` +
+            `first after ${firstMs} ms, ${writingMs} ms writing, ${Date.now() - began} ms in all`,
+          );
         });
         stream.on('end', () => {
           sock.end();

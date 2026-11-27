@@ -5,7 +5,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { Redirect, Stack, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { clearVideoCacheAsync } from 'expo-video';
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { PERF_BUILD } from '@/lib/perfBuild';
 import { useAuthStore } from '@/stores/auth';
 
@@ -28,6 +30,14 @@ if (__DEV__ && !(globalThis as unknown as { __consolePatched?: boolean }).__cons
 }
 
 SplashScreen.preventAutoHideAsync();
+
+// On Android the player caches native posts (app/(tabs)/index.tsx) under the
+// bridge's URL, whose port changes with every launch, so nothing left in the
+// cache can be used again. It can only be cleared while no player exists:
+// here. The web build has no such function.
+if (Platform.OS === 'android') {
+  clearVideoCacheAsync().catch((e: Error) => console.warn(`[feed] the video cache wasn't cleared: ${e.message}`));
+}
 
 const queryClient = new QueryClient();
 
