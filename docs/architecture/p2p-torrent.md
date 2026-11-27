@@ -18,9 +18,19 @@ does no P2P. `client.ts` holds the shared refcounted torrent manager and
 resolved through `useP2PUrl.ts`, and `usePrefetch.ts` warms upcoming feed items.
 
 The bridge listens on `127.0.0.1` at a port the system picks and serves
-`/<infoHash>/<filePath>`, with byte ranges. It logs its port and one line for
-each request and its answer; the player reports a failed load as a status
-code alone, so that log is the only record of what the bridge was asked.
+`/<infoHash>/<filePath>`, with byte ranges. It logs its port, one line for
+each request and its answer, and one when the request ends: the bytes sent,
+when the first byte went, the time spent writing, and the time in all. The
+player reports a failed load as a status code alone, so
+that log is the only record of what the bridge was asked.
+
+Serving is slow and holds the JavaScript thread. Every chunk is
+base64-encoded there and handed to `react-native-tcp-socket`, and the bridge
+doesn't wait for the socket to drain. On a Moto G22 a 2.9 MB clip took
+3.2 s of that thread, about 0.9 MB a second, in one run that timers couldn't
+interrupt ([the playback spike](decisions/spikes/does-the-feed-start-quickly-and-play-smoothly-on-real-android-phones.md)).
+On Android the player caches what it fetched, so a clip is served once
+([client](client.md#feed-and-player)).
 Only the player fetches from it. Prefetch reads the torrent's file directly
 (`readAhead`), because the app's own `fetch` of a loopback URL goes to a proxy
 when the phone has one.

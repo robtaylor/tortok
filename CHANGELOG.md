@@ -45,7 +45,8 @@ deciding whether to upgrade.
 ### Changed
 
 - When the feed fails to load, the app's log now says why. The screen still says only that it failed.
-- The app's local video server logs the port it listens on and each request with its answer.
+- The app's local video server logs the port it listens on and each request with its answer, and what serving it cost: bytes sent, time to the first byte, and time spent writing.
+- On Android a native post is fetched from the app's local video server once. The player used to fetch a 20-second clip four times before its first loop ended and once for each loop after, and on a slow phone each fetch held the app up for about 3 seconds. The player now caches it; the cache is cleared at each launch.
 - A failing production smoke check now opens one GitHub issue for the incident, labelled `smoke-failure`, and closes it when the check has passed four times running. Before, each failed run only sent an email: 139 of them in the 36-hour stall of 2026-11-22, and nothing acted on them. Opening the issue starts a Claude Code scheduled task that looks into the failure and comments on the issue; the same task checks production once a day (`.github/workflows/smoke.yml`).
 - The Bluesky bridge keeps a bridged post for 30 days (`BRIDGE_RECHECK_DAYS`), re-checks it at least daily until then, and then deletes it. Before, a served post stayed in the feed unchecked once it was 30 days old, so an opt-out or label added later never reached it (Decision 0024).
 - The bridge counts a post's age from when it indexed the record, not from the date the record carries, so a backdated post gets the same checks as any other.

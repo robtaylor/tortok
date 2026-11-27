@@ -159,6 +159,16 @@ extra webseed, so web playback is plain HTTP with no P2P. Each item creates one
 native player construction on every scroll. Players loop, unmuted; tapping the
 video toggles pause; leaving the item pauses it and returns it to `idle`.
 
+On Android a native post's source is given to the player with `useCaching`.
+The player buffers 50 s ahead and loops, and with no cache it fetched a 20 s
+clip from the bridge four times before the first loop ended and once for each
+loop after; with the cache it fetches it once. Each fetch passes through the
+JavaScript thread ([p2p-torrent](p2p-torrent.md#torrent-engine)). The cache
+is keyed by the bridge's URL, whose port changes with every launch, so the
+root layout clears it at launch, before any player exists. iOS, whose player
+loops by seeking and whose cache loads differently, hasn't been measured and
+doesn't cache.
+
 Around the active item, `usePrefetch(videos, activeIndex)` holds the torrents
 of the items directly before and after it and reads their first 512 KB
 from the torrent, `useSeedPolicy(activeVideo)` applies the client seeding
