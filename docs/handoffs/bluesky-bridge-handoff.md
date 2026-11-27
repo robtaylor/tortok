@@ -119,6 +119,14 @@ backfill stops there at every boot; and a subscription with no saved
 cursor doesn't retry a failed event, because it reconnects at the live
 end.
 
+One more for the same design, found on 2026-11-27: the bridge qualifies
+posts whose video Bluesky doesn't serve, because the AppView returns
+them like any other. One account had 134 qualified posts and none of
+that day's sampled ones played (`backend.md`, Deferred). The poller
+already visits every post, so fetching the playlist there, or before a
+post qualifies, is where a check would go. It is a request to
+`video.bsky.app` per post, so it wants the same plan entry.
+
 ### 2. The database grows with the bridge (resized; a design left)
 
 `backend.md` (Constraints) has the facts. In short:

@@ -35,6 +35,7 @@ const defaults = () => ({
   turn: { iceServers: [{ urls: 'stun:x:3478' }, { urls: 'turn:x:3478', username: 'u', credential: 'c' }] },
   // Bridged items (Decision 0010): none by default; `b` is the stub's base URL.
   hls: () => [],
+  author: { did: 'did:plc:v1' },
   playlist: '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\n360p/video.m3u8\n',
 });
 
@@ -45,10 +46,11 @@ const server = createServer((req, res) => {
   };
   if (req.url === '/health') return json(200, state.health);
   if (req.url === '/turn/credentials') return json(200, state.turn);
-  if (req.url === '/videos/feed') {
+  if (req.url === '/videos/feed?limit=50') {
     return json(200, {
       videos: [{
         id: 'v1',
+        author: state.author,
         posterURL: `${base}/files/poster.jpg`,
         playback: { kind: 'torrent', magnetLink: state.magnet(base), torrentFileUrl: state.torrentFileUrl(base), sources: state.sources(base) },
       }, ...state.hls(base)],
@@ -102,7 +104,7 @@ test('passes against a correctly populated backend', async () => {
   assert.match(out, /all checks passed/);
 });
 
-const hlsItem = (url, id = 'b1') => ({ id, playback: { kind: 'hls', url } });
+const hlsItem = (url, id = 'b1', did = `did:plc:${id}`) => ({ id, author: { did }, playback: { kind: 'hls', url } });
 
 test('checks a bridged HLS item alongside torrent items', async () => {
   state = { ...defaults(), hls: (b) => [hlsItem(`${b}/hls/playlist.m3u8`)] };
@@ -122,16 +124,46 @@ test("only warns when one of Bluesky's playlists doesn't load", async () => {
   assert.match(out, /all checks passed/);
 });
 
-test('fails when no HLS item loads', async () => {
-  state = { ...defaults(), hls: (b) => [hlsItem(`${b}/hls/missing.m3u8`), hlsItem(`${b}/hls/playlist.m3u8`, 'b2')], playlist: 'not a playlist' };
+test("fails when no author's HLS item loads", async () => {
+  state = {
+    ...defaults(),
+    hls: (b) => [['b1', 'did:plc:a'], ['b2', 'did:plc:a'], ['b3', 'did:plc:b']]
+      .map(([id, did]) => hlsItem(`${b}/hls/playlist.m3u8`, id, did)),
+    playlist: 'not a playlist',
+  };
   const { code, out } = await smoke();
   assert.equal(code, 1, out);
-  assert.match(out, /WARN  hls: b2 — playlist is not an HLS playlist/);
-  assert.match(out, /FAIL  hls: none of the 2 checked item\(s\) passed/);
+  assert.match(out, /WARN  hls: b3 — playlist is not an HLS playlist/);
+  assert.match(out, /FAIL  hls: none of the 3 checked item\(s\), from 2 author\(s\), passed/);
+});
+
+// 2026-11-27: one Bluesky account posted runs of videos Bluesky didn't serve,
+// and they were the first five items of the feed at two checks.
+test("only warns when one author's run of dead videos fills the top of the feed", async () => {
+  state = {
+    ...defaults(),
+    hls: (b) => [
+      ...[1, 2, 3, 4, 5].map((n) => hlsItem(`${b}/hls/missing.m3u8`, `dead${n}`, 'did:plc:a')),
+      hlsItem(`${b}/hls/playlist.m3u8`, 'live', 'did:plc:b'),
+    ],
+  };
+  const { code, out } = await smoke();
+  assert.equal(code, 0, out);
+  assert.match(out, /WARN  hls: dead1 — playlist: HTTP 404\nok {4}hls: live — playlist ok/);
+  assert.doesNotMatch(out, /hls: dead5/);
+  assert.match(out, /\(checked 5 of 6 hls items\)/);
+  assert.match(out, /all checks passed/);
+});
+
+test('fails a feed item that names no author', async () => {
+  state = { ...defaults(), author: { handle: 'someone.test' } };
+  const { code, out } = await smoke();
+  assert.equal(code, 1, out);
+  assert.match(out, /FAIL  contract: feed — \/videos\/feed: item v1 has no author DID/);
 });
 
 test('fails an HLS item without a URL', async () => {
-  state = { ...defaults(), hls: () => [{ id: 'b1', playback: { kind: 'hls' } }] };
+  state = { ...defaults(), hls: () => [{ ...hlsItem(), playback: { kind: 'hls' } }] };
   const { code, out } = await smoke();
   assert.equal(code, 1);
   assert.match(out, /FAIL  contract: feed — \/videos\/feed: item b1 has an HLS playback without an http\(s\) URL/);
